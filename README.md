@@ -60,11 +60,11 @@ opencommons-mcp --store ~/.opencommons/store.json
 - **`find`**: Queries verified concepts by intent, type signature, and optional live `io_examples`, returning topological dependency bundles in the requested modality (`dual_card_with_pitfalls`, `dual_card`, `pseudocode`, or `raw_code`).
 - **`record`**: Ingests a newly synthesized Python function through the $O(1)$ `sid` deduplicator and 5-gate peer-review harness (with `teleological_intent` and `dimensional_units`), **or** triggers the Monotonic Counterexample Ratchet when `failing_block_id` and `counterexample_args` are supplied.
 
-### 4. Integration with `agy-local` (Local & Open-Weight Agent Swarms)
-When running local or open-weight coding agents (`Gemma 4`, `Qwen`, `GLM-4`, `vLLM`, `Ollama`) via `agy-local`, pass `--with-opencommons` to attach the shared Concept Commons automatically:
+### 4. Integration with `kardashev-cli` (`kardashev` / `ksh` Local & Open-Weight Agent Swarms)
+When running local or open-weight coding agents (`Gemma 4`, `Qwen`, `GLM-4`, `vLLM`, `Ollama`) via [`kardashev-cli`](https://github.com/kardashevproject/kardashev-cli), pass `--with-opencommons` to attach the shared Concept Commons automatically:
 ```bash
-agy-local chat --preset gemma4-26b --with-opencommons
-agy-local exec "Implement a compensated 1D heat diffusion step" --with-opencommons
+kardashev chat --preset gemma4-26b --with-opencommons
+kardashev exec "Implement a compensated 1D heat diffusion step" --with-opencommons
 ```
 
 ---

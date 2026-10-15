@@ -1,6 +1,6 @@
 """Persistent Disk Serialization & Multi-Node CRDT Gossip Synchronization for OpenCommons.
 
-Enables large-scale multi-agent swarms and `agy-local` local harnesses to persist
+Enables large-scale multi-agent swarms and `kardashev-cli` local harnesses to persist
 their shared Concept Commons to `~/.opencommons/store.json` (or any project path)
 and merge distributed replica files via the join-semilattice CRDT operator `⊔`
 (Theorem 1) with atomic file-lock safety.

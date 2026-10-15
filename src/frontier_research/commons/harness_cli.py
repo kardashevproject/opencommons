@@ -1,7 +1,7 @@
 """Large-Scale OpenCommons Swarm Harness & CLI (`opencommons`).
 
 Provides the production CLI and multi-agent swarm orchestrator for scaling
-OpenCommons across local models (`agy-local`, LiteRT, vLLM, Ollama, Qwen, Gemma)
+OpenCommons across local models (`kardashev-cli`, LiteRT, vLLM, Ollama, Qwen, Gemma)
 and distributed workspaces:
   - `opencommons seed`: Seed the persistent store with verified scientific building blocks
   - `opencommons find <query>`: Sub-10ms live I/O-probe retrieval from CLI
