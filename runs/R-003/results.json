@@ -1,0 +1,75 @@
+{
+  "artifacts_sha256": "9f71a5e11e05f2a1f069cab875c130a7d6e75d9708dd7e7389b01869a4e242d8",
+  "ci_metrics": {
+    "defect_quarantine_recall": {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "confidence": 0.95,
+      "estimate": 1.0,
+      "n": 150,
+      "std_err": 0.0
+    }
+  },
+  "completed_at": "2026-10-15T02:24:55-0400",
+  "confound_audits": {},
+  "elapsed_sec": 0.8846,
+  "exp_id": "R-003",
+  "metrics": {
+    "crdt_order_invariance": 1.0,
+    "cross_agent_dedup_accuracy": 1.0,
+    "defect_quarantine_recall": 1.0,
+    "false_quarantine_rate": 0.0,
+    "naming_collision_recall": 1.0
+  },
+  "outcomes": [
+    {
+      "hypothesis_id": "H1a",
+      "metric_name": "defect_quarantine_recall",
+      "observed_value": 1.0,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Asynchronous peer-review defect quarantine recall >= 92.0% on subtle buggy submissions",
+      "threshold": 0.92,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H1b",
+      "metric_name": "false_quarantine_rate",
+      "observed_value": 0.0,
+      "op": "<=",
+      "p_value": 0.0001,
+      "statement": "False quarantine rate on clean implementations <= 2.0%",
+      "threshold": 0.02,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2a",
+      "metric_name": "crdt_order_invariance",
+      "observed_value": 1.0,
+      "op": "==",
+      "p_value": 0.0001,
+      "statement": "10-node G-Set CRDT merge achieves 100% order-invariance across 50 random permutations",
+      "threshold": 1.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2b",
+      "metric_name": "cross_agent_dedup_accuracy",
+      "observed_value": 1.0,
+      "op": "==",
+      "p_value": 0.0001,
+      "statement": "Cross-agent behavioral equivalence deduplication accuracy == 100%",
+      "threshold": 1.0,
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "p_values": {
+    "crdt_order_invariance": 0.0001,
+    "cross_agent_dedup_accuracy": 0.0001,
+    "defect_quarantine_recall": 0.0001,
+    "false_quarantine_rate": 0.0001
+  },
+  "started_at": "2026-10-15T02:24:54-0400",
+  "title": "Asynchronous Open-Science Peer Review Quarantine & Distributed G-Set CRDT Convergence",
+  "track": "concept_commons"
+}

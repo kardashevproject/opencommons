@@ -1,0 +1,16 @@
+% Auto-generated claim stress-testing and empirical boundary table for R-006
+\begin{tabular}{llrrrl}
+\toprule
+Module & Stress Parameter & Baseline & OpenCommons & Margin / $\Delta$ & Empirical Boundary \\
+\midrule
+1. Probe Sensitivity & $K \in \{1, 2, 4, 8, 12, 16, 24\}$ & 92.0\% & 0.0\% & $-$92.0\% & $K \ge 16$ required for 0\% collision \\
+2. Floating-Point ULP & Condition number $\kappa \in [10^0, 10^{12}]$ & 0.0\% & 100.0\% & $+$100.0\% & Stable for $\kappa \le 10^7$; cancels at $\kappa \ge 10^9$ \\
+3. 20-Node CRDT Fault & 50\% packet drop, 100 schedules & --- & 100.0\% & 22.0 rds & Monotonic quarantine absorption (100/100) \\
+4. LLM Bug Contagion & Unquarantined bug vs. Dual Card & 13.3\% & 83.3\% & $+$70.0\% & Unverified memory is epistemic contagion \\
+5. AST Constant Seeding & Threshold branch ($Re > 2300$) & 100.0\% & 0.0\% & $-$100.0\% & White-box seeds solve threshold branches \\
+6. Syntactic Copy-Bias & Compositional adaptation ($S_4$) & -0.382 & 0.412 & $+$0.794 & Pseudocode / Dual Card decouples syntax \\
+7. 17th-Input Blind Spot & Unprobed singularity ($x_{17}=1337$) & 100.0\% & 2.0\% & $-$98.0\% & Counterexample ratchet bounds contagion $\le 1$ \\
+8. Peer-Review Tax & 1,000 swarm ingests (50 concepts) & 4.42 ms & 0.10 ms & 20.0$\times$ & $\text{sid}$ dedup cuts verification tax $20\times$ \\
+9. Intent vs. Behavior & Cross-domain ODE isomorphism & 0.0\% & 100.0\% & $+$100.0\% & Extensional $\text{cid}$ + intensional Dual Card \\
+\bottomrule
+\end{tabular}

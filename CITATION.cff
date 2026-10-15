@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use OpenCommons or the Frontier Research Harness in your research or multi-agent systems, please cite it using the metadata below."
+title: "OpenCommons: A Distributed, Meaning-Indexed Concept Commons for Accelerating Scientific and Algorithmic Discovery in AI Agents"
+type: software
+authors:
+  - name: "The Kardashev Project"
+    email: "SI@kardashevproject.org"
+    website: "https://kardashevproject.org"
+version: 1.0.0
+doi: 10.5281/zenodo.23391160
+date-released: "2026-10-15"
+license: "Apache-2.0 AND CC-BY-4.0"
+url: "https://doi.org/10.5281/zenodo.23391160"
+repository-code: "https://github.com/kardashevproject/opencommons"
+keywords:
+  - "multi-agent systems"
+  - "program synthesis"
+  - "behavioral equivalence"
+  - "conflict-free replicated data types"
+  - "scientific discovery"
+  - "language model agents"
+preferred-citation:
+  type: article
+  title: "OpenCommons: A Distributed, Meaning-Indexed Concept Commons for Accelerating Scientific and Algorithmic Discovery in AI Agents"
+  authors:
+    - name: "The Kardashev Project"
+      email: "SI@kardashevproject.org"
+      website: "https://kardashevproject.org"
+  doi: 10.5281/zenodo.23391160
+  year: 2026
+  month: 10
+  url: "https://doi.org/10.5281/zenodo.23391160"

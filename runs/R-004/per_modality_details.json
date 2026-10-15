@@ -1,0 +1,1362 @@
+{
+  "isolated_zero_shot": [
+    {
+      "task_id": "S1_01",
+      "domain": "S1",
+      "name": "kahan_sum",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.3111952245235443,
+      "gen_preview": "    s = 0.0\n    c = 0.0\n    for x in xs:\n        t = x - c\n        s += t\n        c = (s - t) - x\n    return s\n\n# Task:"
+    },
+    {
+      "task_id": "S1_02",
+      "domain": "S1",
+      "name": "symplectic_euler_step",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": -0.03484702110290527,
+      "gen_preview": "    q_next = q + dt * p\n    p_next = p - dt * k * q\n    return q_next, p_next\n\n# Task:"
+    },
+    {
+      "task_id": "S1_03",
+      "domain": "S1",
+      "name": "stable_logsumexp",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.08458346128463745,
+      "gen_preview": "    if not xs:\n        raise ValueError(\"Input list must be non-empty.\")\n    max_x = max(xs)\n    if max_x >= 1000.0:\n        return math.log(max_x) + stable_logsumexp([x - max_x for x in xs])\n    else:\n        return math.log(sum(math.exp(x"
+    },
+    {
+      "task_id": "S1_04",
+      "domain": "S1",
+      "name": "richardson_derivative",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.35475441813468933,
+      "gen_preview": "    return (y_p2 - 8 * y_m1 + 8 * y_m2 - y_p1) / (6 * h)\n\n# Task:"
+    },
+    {
+      "task_id": "S1_05",
+      "domain": "S1",
+      "name": "welford_sample_variance",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.2903483510017395,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    m = 0.0\n    s2 = 0.0\n    for x in xs:\n        m += x\n        s2 += (x - m) * (x - m)\n    return s2 / (len(xs) - 1)\n\n# Task:"
+    },
+    {
+      "task_id": "S1_06",
+      "domain": "S1",
+      "name": "hypotenuse_stable",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.145879864692688,
+      "gen_preview": "    if a == 0.0 and b == 0.0:\n        return 0.0\n    if a == 0.0:\n        return abs(b)\n    if b == 0.0:\n        return abs(a)\n    if a > b:\n        return a * math.sqrt(1.0 + (b / a) ** 2)\n    return b * math.sqrt(1.0 + (a / b) ** 2)\n\n# Ta"
+    },
+    {
+      "task_id": "S2_01",
+      "domain": "S2",
+      "name": "gf256_mul",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 1.2010383009910583,
+      "gen_preview": "    # Convert to polynomial representation (coefficients of x^7..x^0)\n    a_poly = a & 0xFF\n    b_poly = b & 0xFF\n    # Multiply polynomials modulo x^8 + x^4 + x^3 + x + 1\n    result = 0\n    for i in range(8):\n        if a_poly & (1 << i):\n"
+    },
+    {
+      "task_id": "S2_02",
+      "domain": "S2",
+      "name": "crc8_ccitt",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.3558664470911026,
+      "gen_preview": "    crc = 0x00\n    for byte in data:\n        crc ^= byte\n        for _ in range(8):\n            if crc & 0x80:\n                crc = (crc << 1) ^ 0x07\n            else:\n                crc <<= 1\n    return crc\n\n# Task:"
+    },
+    {
+      "task_id": "S2_03",
+      "domain": "S2",
+      "name": "fnv1a_32",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.06022372841835022,
+      "gen_preview": "    hash_val = 0x811C9DC5\n    for byte in data:\n        hash_val ^= byte\n        hash_val *= 0x01000193\n    return hash_val\n\n# Task:"
+    },
+    {
+      "task_id": "S2_04",
+      "domain": "S2",
+      "name": "elias_gamma_bitlen",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.0003319382667541504,
+      "gen_preview": "    if n <= 0:\n        return 0\n    return math.ceil(math.log2(n))\n\n# Task:"
+    },
+    {
+      "task_id": "S2_05",
+      "domain": "S2",
+      "name": "binary_entropy_bits",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.14710374176502228,
+      "gen_preview": "    if p == 0.0:\n        return 0.0\n    if p == 1.0:\n        return 0.0\n    return -p * math.log2(p) - (1.0 - p) * math.log2(1.0 - p)\n\n# Task:"
+    },
+    {
+      "task_id": "S2_06",
+      "domain": "S2",
+      "name": "zigzag_encode_int",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.04656940698623657,
+      "gen_preview": "    if n == 0:\n        return 0\n    if n < 0:\n        return -1 - n\n    return 1 + n\n\n# Task:"
+    },
+    {
+      "task_id": "S3_01",
+      "domain": "S3",
+      "name": "hill_langmuir_occupancy",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.600638747215271,
+      "gen_preview": "    if ligand <= 0.0:\n        return 0.0\n    return ligand ** n / (kd ** n + ligand ** n)\n\n# Task:"
+    },
+    {
+      "task_id": "S3_02",
+      "domain": "S3",
+      "name": "competitive_michaelis_menten",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.21221745014190674,
+      "gen_preview": "    return (vmax * s) / (km + s + (inhibitor * km) / ki)\n\n# Task:"
+    },
+    {
+      "task_id": "S3_03",
+      "domain": "S3",
+      "name": "jukes_cantor_distance",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.35084033012390137,
+      "gen_preview": "    if p <= 0.0:\n        return 0.0\n    if p >= 0.75:\n        return -1.0\n    return -0.75 * math.log(1 - 4 * p / 3)\n\n# Task:"
+    },
+    {
+      "task_id": "S3_04",
+      "domain": "S3",
+      "name": "shannon_wiener_diversity",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.1641227900981903,
+      "gen_preview": "    total = sum(counts)\n    if total <= 0.0:\n        return 0.0\n    entropy = 0.0\n    for count in counts:\n        if count > 0.0:\n            p = count / total\n            entropy -= p * math.log(p)\n    return entropy\n\n# Task:"
+    },
+    {
+      "task_id": "S3_05",
+      "domain": "S3",
+      "name": "hardy_weinberg_chisq",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.1615990400314331,
+      "gen_preview": "    total = n_aa + n_ab + n_bb\n    if total == 0 or n_aa == 0 or n_ab == 0 or n_bb == 0:\n        return 0.0\n    p = n_aa / total\n    q = n_ab / total\n    expected_aa = n_aa * (p ** 2)\n    expected_ab = n_ab * (2 * p * q)\n    expected_bb = n"
+    },
+    {
+      "task_id": "S3_06",
+      "domain": "S3",
+      "name": "beer_lambert_transmittance",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.6473734974861145,
+      "gen_preview": "    return 10 ** (-epsilon * conc * path_cm)\n\n# Task:"
+    },
+    {
+      "task_id": "S4_01",
+      "domain": "S4",
+      "name": "weighted_kahan_dot",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.10419440269470215,
+      "gen_preview": "    n = len(xs)\n    if n == 0:\n        return 0.0\n    # Initialize accumulator and compensation terms\n    s = 0.0\n    c = 0.0\n    for xi, wi in zip(xs, ws):\n        # Compute the difference between xi and the previous xi\n        diff = xi -"
+    },
+    {
+      "task_id": "S4_02",
+      "domain": "S4",
+      "name": "damped_symplectic_step",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.09875324368476868,
+      "gen_preview": "    p_next = p - (k*q + gamma*p) * dt\n    q_next = q + p_next * dt\n    return q_next, p_next\n\n# Task:"
+    },
+    {
+      "task_id": "S4_03",
+      "domain": "S4",
+      "name": "stable_softmax_prob",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": -0.013520956039428711,
+      "gen_preview": "    max_val = max(xs)\n    if max_val >= 1000.0:\n        # Shift all values by -max_val to bring the maximum to zero\n        shifted_xs = [x - max_val for x in xs]\n        # Compute the sum of exponentials of shifted values\n        sum_exp ="
+    },
+    {
+      "task_id": "S4_04",
+      "domain": "S4",
+      "name": "welford_zscore_last",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.13046854734420776,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = sum(xs) / len(xs)\n    var = 0.0\n    for x in xs:\n        var += (x - mean) ** 2\n    std = math.sqrt(var / (len(xs) - 1))\n    return (xs[-1] - mean) / std\n\n# Task:"
+    },
+    {
+      "task_id": "S4_05",
+      "domain": "S4",
+      "name": "gf256_horner_eval",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": -0.3184019923210144,
+      "gen_preview": "    # Convert x to byte (0..255)\n    x = x & 0xFF\n    # Horner's rule: result = 0\n    result = 0\n    for coeff in reversed(coeffs):\n        result = (result << 1) ^ coeff\n        result &= 0xFF\n    return result\n\n# Task:"
+    },
+    {
+      "task_id": "S4_06",
+      "domain": "S4",
+      "name": "crc8_verify_frame",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 1.0407627820968628,
+      "gen_preview": "    if not frame:\n        return False\n    crc = 0x00\n    for b in frame[:-1]:\n        crc ^= b\n        for _ in range(8):\n            if crc & 0x80:\n                crc = (crc << 1) ^ 0x07\n            else:\n                crc <<= 1\n    re"
+    },
+    {
+      "task_id": "S4_07",
+      "domain": "S4",
+      "name": "fnv1a_32_hex_tagged",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": -0.10751980543136597,
+      "gen_preview": "    domain_tag &= 0xFF\n    offset_basis = 0x811C9DC5\n    prime = 0x01000193\n    hash = 0x811C9DC5\n    for byte in payload:\n        hash = (hash ^ byte) * prime\n    return hash ^ domain_tag\n\n# Task:"
+    },
+    {
+      "task_id": "S4_08",
+      "domain": "S4",
+      "name": "zigzag_elias_stream_bits",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.8722540140151978,
+      "gen_preview": "    total_bits = 0\n    for i in range(len(signed_ints)):\n        u = signed_ints[i]\n        if u >= 0:\n            total_bits += 2 * u\n        else:\n            total_bits += -2 * u - 1\n        total_bits += 2 * (u.bit_length() - 1) + 1\n   "
+    },
+    {
+      "task_id": "S4_09",
+      "domain": "S4",
+      "name": "cooperative_inhibited_flux",
+      "passed": 1.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.44896799325942993,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    kd_app = kd * (1 + inhibitor / ki)\n    return vmax * s ** n / (kd_app ** n + s ** n)\n\n# Task:"
+    },
+    {
+      "task_id": "S4_10",
+      "domain": "S4",
+      "name": "pielou_evenness_index",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.13179951906204224,
+      "gen_preview": "    if len(counts) <= 1:\n        return 0.0\n    H = 0.0\n    S = 0.0\n    for c in counts:\n        if c > 0.0:\n            H += -c * math.log(c)\n            S += 1.0\n    return H / math.log(S)\n\n# Task:"
+    },
+    {
+      "task_id": "S4_11",
+      "domain": "S4",
+      "name": "jc_coalescent_time",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.4396646320819855,
+      "gen_preview": "    if length <= 0.0 or mu <= 0.0 or mismatches <= 0.0:\n        return -1.0\n    p = mismatches / length\n    if p >= 0.75:\n        return -1.0\n    return p / (2.0 * mu)\n\n# Task:"
+    },
+    {
+      "task_id": "S4_12",
+      "domain": "S4",
+      "name": "norm3d_hypot",
+      "passed": 0.0,
+      "ctx_tokens": 0,
+      "logprob_margin": 0.14350315928459167,
+      "gen_preview": "    # Compute a^2, b^2, c^2 using logarithms to avoid overflow/underflow\n    log_a2 = 2.0 * math.log(abs(a))\n    log_b2 = 2.0 * math.log(abs(b))\n    log_c2 = 2.0 * math.log(abs(c))\n    log_sum = log_a2 + log_b2 + log_c2\n    # Compute the su"
+    }
+  ],
+  "distractor_bm25": [
+    {
+      "task_id": "S1_01",
+      "domain": "S1",
+      "name": "kahan_sum",
+      "passed": 0.0,
+      "ctx_tokens": 40,
+      "logprob_margin": 0.1157245934009552,
+      "gen_preview": "    # Fast compensated Kahan summation of float list xs\n    total = 0.0\n    for x in xs:\n        y = x - total\n        total = total + y - y / (1 + y)\n    return total\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S1_02",
+      "domain": "S1",
+      "name": "symplectic_euler_step",
+      "passed": 0.0,
+      "ctx_tokens": 56,
+      "logprob_margin": -0.059712499380111694,
+      "gen_preview": "    # Semi-implicit symplectic Euler step\n    q_next = q + dt * p\n    p_next = p - dt * k * q_next\n    return (q_next, p_next)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S1_03",
+      "domain": "S1",
+      "name": "stable_logsumexp",
+      "passed": 0.0,
+      "ctx_tokens": 31,
+      "logprob_margin": -0.05845138430595398,
+      "gen_preview": "    if not xs:\n        return 0.0\n    max_x = max(xs)\n    if max_x >= 1000.0:\n        return math.log(max_x) + stable_logsumexp([x - max_x for x in xs])\n    return math.log(sum(math.exp(x) for x in xs))\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S1_04",
+      "domain": "S1",
+      "name": "richardson_derivative",
+      "passed": 0.0,
+      "ctx_tokens": 44,
+      "logprob_margin": 0.05319669842720032,
+      "gen_preview": "    # Central finite difference derivative\n    d1 = (y_p1 - y_m1) / (2.0 * h)\n    d2 = (y_m2 - y_p1) / (2.0 * h)\n    # Richardson extrapolation\n    return (d1 - d2) / (3.0 * h)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S1_05",
+      "domain": "S1",
+      "name": "welford_sample_variance",
+      "passed": 0.0,
+      "ctx_tokens": 41,
+      "logprob_margin": 0.17727699875831604,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    m = 0.0\n    m2 = 0.0\n    for x in xs:\n        m += x\n        m2 += x * x\n    m = m / len(xs)\n    m2 = m2 / len(xs)\n    return m2 - m * m\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S1_06",
+      "domain": "S1",
+      "name": "hypotenuse_stable",
+      "passed": 0.0,
+      "ctx_tokens": 21,
+      "logprob_margin": 0.018938273191452026,
+      "gen_preview": "    # Use logarithms to avoid overflow/underflow\n    log_a = math.log(abs(a))\n    log_b = math.log(abs(b))\n    log_sum = log_a + log_b\n    if log_sum < 0:\n        return 0.0\n    return math.exp(log_sum)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_01",
+      "domain": "S2",
+      "name": "gf256_mul",
+      "passed": 0.0,
+      "ctx_tokens": 17,
+      "logprob_margin": -0.0451185405254364,
+      "gen_preview": "    return mod256_mul(a, b)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_02",
+      "domain": "S2",
+      "name": "crc8_ccitt",
+      "passed": 0.0,
+      "ctx_tokens": 30,
+      "logprob_margin": 0.003583759069442749,
+      "gen_preview": "    crc = 0x00\n    for b in data:\n        crc ^= b\n        for _ in range(8):\n            if crc & 0x80:\n                crc = (crc << 1) ^ 0x07\n            else:\n                crc <<= 1\n    return crc\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_03",
+      "domain": "S2",
+      "name": "fnv1a_32",
+      "passed": 0.0,
+      "ctx_tokens": 37,
+      "logprob_margin": -0.12393613904714584,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in data:\n        h = ((h * 0x01000193) ^ (b & 0xFF)) & 0xFFFFFFFF\n    return h\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_04",
+      "domain": "S2",
+      "name": "elias_gamma_bitlen",
+      "passed": 0.0,
+      "ctx_tokens": 24,
+      "logprob_margin": -0.15628445148468018,
+      "gen_preview": "    if n <= 0:\n        return 0\n    return n.bit_length()\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_05",
+      "domain": "S2",
+      "name": "binary_entropy_bits",
+      "passed": 1.0,
+      "ctx_tokens": 27,
+      "logprob_margin": 0.0687655508518219,
+      "gen_preview": "    if p == 0.0 or p == 1.0:\n        return 0.0\n    return -p * math.log2(p) - (1.0 - p) * math.log2(1.0 - p)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S2_06",
+      "domain": "S2",
+      "name": "zigzag_encode_int",
+      "passed": 0.0,
+      "ctx_tokens": 21,
+      "logprob_margin": 0.016363143920898438,
+      "gen_preview": "    return (n << 1) ^ (n >> 31) & 0xFFFFFFFF\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S3_01",
+      "domain": "S3",
+      "name": "hill_langmuir_occupancy",
+      "passed": 1.0,
+      "ctx_tokens": 29,
+      "logprob_margin": 0.2897471785545349,
+      "gen_preview": "    if ligand <= 0.0:\n        return 0.0\n    return (ligand ** n) / (kd ** n + (ligand ** n))\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S3_02",
+      "domain": "S3",
+      "name": "competitive_michaelis_menten",
+      "passed": 0.0,
+      "ctx_tokens": 40,
+      "logprob_margin": -0.347212016582489,
+      "gen_preview": "    return (vmax / (1.0 + inhibitor / ki)) * s / (km + s)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S3_03",
+      "domain": "S3",
+      "name": "jukes_cantor_distance",
+      "passed": 1.0,
+      "ctx_tokens": 23,
+      "logprob_margin": 0.19059976190328598,
+      "gen_preview": "    if p >= 0.75:\n        return -1.0\n    if p <= 0.0:\n        return 0.0\n    return -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S3_04",
+      "domain": "S3",
+      "name": "shannon_wiener_diversity",
+      "passed": 0.0,
+      "ctx_tokens": 35,
+      "logprob_margin": 0.029697686433792114,
+      "gen_preview": "    total = sum(counts)\n    if total <= 0.0:\n        return 0.0\n    return -sum((c / total) * math.log(c / total) for c in counts)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S3_05",
+      "domain": "S3",
+      "name": "hardy_weinberg_chisq",
+      "passed": 0.0,
+      "ctx_tokens": 64,
+      "logprob_margin": -0.06197219341993332,
+      "gen_preview": "    N = n_aa + n_ab + n_bb\n    if N == 0 or n_aa == 0 or n_ab == 0 or n_bb == 0:\n        return 0.0\n    p = (2.0 * n_aa + n_ab) / (2.0 * N)\n    q = 1.0 - p\n    return ((n_aa - n*p*p)**2)/(n*p*p) + ((n_ab - 2*n*p*q)**2)/(2*n*p*q) + ((n_bb - "
+    },
+    {
+      "task_id": "S3_06",
+      "domain": "S3",
+      "name": "beer_lambert_transmittance",
+      "passed": 1.0,
+      "ctx_tokens": 34,
+      "logprob_margin": 0.02588731050491333,
+      "gen_preview": "    return 10 ** (-epsilon * conc * path_cm)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_01",
+      "domain": "S4",
+      "name": "weighted_kahan_dot",
+      "passed": 0.0,
+      "ctx_tokens": 23,
+      "logprob_margin": -0.049329131841659546,
+      "gen_preview": "    n = len(xs)\n    if n == 0:\n        return 0.0\n    # Initialize accumulator and carry\n    acc = 0.0\n    carry = 0.0\n    for x, w in zip(xs, ws):\n        # Compute x * w\n        prod = x * w\n        # Compute y = acc + prod\n        y = ac"
+    },
+    {
+      "task_id": "S4_02",
+      "domain": "S4",
+      "name": "damped_symplectic_step",
+      "passed": 1.0,
+      "ctx_tokens": 36,
+      "logprob_margin": 0.11029762029647827,
+      "gen_preview": "    p_next = p - (k * q + gamma * p) * dt\n    q_next = q + p_next * dt\n    return q_next, p_next\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_03",
+      "domain": "S4",
+      "name": "stable_softmax_prob",
+      "passed": 0.0,
+      "ctx_tokens": 29,
+      "logprob_margin": -0.10436135530471802,
+      "gen_preview": "    max_val = max(xs)\n    if max_val >= 1000.0:\n        # Shift all values by -max_val to bring the maximum to zero\n        shifted = [x - max_val for x in xs]\n        # Compute the sum of exponentials of shifted values\n        sum_exp = su"
+    },
+    {
+      "task_id": "S4_04",
+      "domain": "S4",
+      "name": "welford_zscore_last",
+      "passed": 1.0,
+      "ctx_tokens": 39,
+      "logprob_margin": -0.08928754925727844,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    m = sum(xs) / len(xs)\n    s = math.sqrt(sum((x - m)**2 for x in xs) / (len(xs) - 1))\n    return (xs[-1] - m) / s\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_05",
+      "domain": "S4",
+      "name": "gf256_horner_eval",
+      "passed": 0.0,
+      "ctx_tokens": 33,
+      "logprob_margin": -0.5464272797107697,
+      "gen_preview": "    acc = 0\n    for c in coeffs:\n        acc = (acc * x + c) % 256\n    return acc\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_06",
+      "domain": "S4",
+      "name": "crc8_verify_frame",
+      "passed": 0.0,
+      "ctx_tokens": 22,
+      "logprob_margin": 0.31423184275627136,
+      "gen_preview": "    if not frame:\n        return False\n    crc = 0x00\n    for b in frame[:-1]:\n        crc ^= b\n        for _ in range(8):\n            if crc & 0x80:\n                crc = (crc << 1) ^ 0x07\n            else:\n                crc <<= 1\n    re"
+    },
+    {
+      "task_id": "S4_07",
+      "domain": "S4",
+      "name": "fnv1a_32_hex_tagged",
+      "passed": 0.0,
+      "ctx_tokens": 45,
+      "logprob_margin": 0.012723535299301147,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in [domain_tag & 0xFF, 0x00] + payload:\n        h = ((h * 0x01000193) ^ b) & 0xFFFFFFFF\n    return h\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_08",
+      "domain": "S4",
+      "name": "zigzag_elias_stream_bits",
+      "passed": 0.0,
+      "ctx_tokens": 27,
+      "logprob_margin": 0.38975149393081665,
+      "gen_preview": "    return sum(abs(x).bit_length() for x in signed_ints)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_09",
+      "domain": "S4",
+      "name": "cooperative_inhibited_flux",
+      "passed": 1.0,
+      "ctx_tokens": 47,
+      "logprob_margin": -0.19053909182548523,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    kd_app = kd * (1.0 + inhibitor / ki)\n    return vmax * (s ** n) / (kd_app ** n + s ** n)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_10",
+      "domain": "S4",
+      "name": "pielou_evenness_index",
+      "passed": 0.0,
+      "ctx_tokens": 46,
+      "logprob_margin": -0.09223975241184235,
+      "gen_preview": "    if len(counts) <= 1:\n        return 0.0\n    h = -sum((c / sum(counts)) * math.log(c / sum(counts)) for c in counts if c > 0)\n    return h / math.log(len(counts))\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_11",
+      "domain": "S4",
+      "name": "jc_coalescent_time",
+      "passed": 0.0,
+      "ctx_tokens": 31,
+      "logprob_margin": 0.14559105038642883,
+      "gen_preview": "    if length <= 0.0 or mu <= 0.0 or mismatches / length >= 0.75:\n        return -1.0\n    return jc_coalescent_time(mismatches, length, mu)\n\n# Retrieved Reference"
+    },
+    {
+      "task_id": "S4_12",
+      "domain": "S4",
+      "name": "norm3d_hypot",
+      "passed": 0.0,
+      "ctx_tokens": 26,
+      "logprob_margin": 0.01733231544494629,
+      "gen_preview": "    # Compute squared sum safely using logarithms to avoid overflow\n    s = math.log(a * a) + math.log(b * b) + math.log(c * c)\n    return math.exp(s)\n\n# Retrieved Reference"
+    }
+  ],
+  "pseudocode_building_block": [
+    {
+      "task_id": "S1_01",
+      "domain": "S1",
+      "name": "kahan_sum",
+      "passed": 1.0,
+      "ctx_tokens": 114,
+      "logprob_margin": 0.5946485847234726,
+      "gen_preview": "    total = 0.0\n    comp = 0.0\n    for x in xs:\n        y = x - comp\n        t = total + y\n        comp = (t - total) - y\n        total = t\n    return total\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_02",
+      "domain": "S1",
+      "name": "symplectic_euler_step",
+      "passed": 1.0,
+      "ctx_tokens": 135,
+      "logprob_margin": 0.11734364926815033,
+      "gen_preview": "    p_next = p - k * q * dt\n    q_next = q + p_next * dt\n    return q_next, p_next\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_03",
+      "domain": "S1",
+      "name": "stable_logsumexp",
+      "passed": 1.0,
+      "ctx_tokens": 101,
+      "logprob_margin": 0.6830486059188843,
+      "gen_preview": "    if not xs:\n        raise ValueError(\"Input list must be non-empty\")\n    m = max(xs)\n    s = sum(math.exp(x - m) for x in xs)\n    return m + math.log(s)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_04",
+      "domain": "S1",
+      "name": "richardson_derivative",
+      "passed": 1.0,
+      "ctx_tokens": 123,
+      "logprob_margin": 0.47020088136196136,
+      "gen_preview": "    D1 = (y_p1 - y_m1) / (2 * h)\n    D2 = (y_p2 - y_m2) / (4 * h)\n    return (4 * D1 - D2) / 3\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_05",
+      "domain": "S1",
+      "name": "welford_sample_variance",
+      "passed": 1.0,
+      "ctx_tokens": 147,
+      "logprob_margin": 0.28620438277721405,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    n = 0\n    for x in xs:\n        n += 1\n        delta = x - mean\n        mean += delta / n\n        m2 += delta * (x - mean)\n    return m2 / (n - 1)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_06",
+      "domain": "S1",
+      "name": "hypotenuse_stable",
+      "passed": 1.0,
+      "ctx_tokens": 107,
+      "logprob_margin": 0.5708496868610382,
+      "gen_preview": "    x = abs(a)\n    y = abs(b)\n    if x < y:\n        x, y = y, x\n    if x == 0.0:\n        return 0.0\n    r = y / x\n    return x * math.sqrt(1.0 + r * r)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_01",
+      "domain": "S2",
+      "name": "gf256_mul",
+      "passed": 1.0,
+      "ctx_tokens": 109,
+      "logprob_margin": 1.8534964844584465,
+      "gen_preview": "    p = 0\n    for _ in range(8):\n        if b & 1:\n            p ^= a\n        hi = a & 0x80\n        a = (a << 1) & 0xFF\n        if hi:\n            a ^= 0x1B\n        b >>= 1\n    return p\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_02",
+      "domain": "S2",
+      "name": "crc8_ccitt",
+      "passed": 1.0,
+      "ctx_tokens": 127,
+      "logprob_margin": 0.785328134894371,
+      "gen_preview": "    crc = 0x00\n    for byte in data:\n        crc ^= (byte & 0xFF)\n        for _ in range(8):\n            if (crc & 0x80):\n                crc = ((crc << 1) ^ 0x07) & 0xFF\n            else:\n                crc = (crc << 1) & 0xFF\n    return "
+    },
+    {
+      "task_id": "S2_03",
+      "domain": "S2",
+      "name": "fnv1a_32",
+      "passed": 1.0,
+      "ctx_tokens": 108,
+      "logprob_margin": 0.13550829887390137,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in data:\n        h ^= (b & 0xFF)\n        h = (h * 0x01000193) & 0xFFFFFFFF\n    return h\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_04",
+      "domain": "S2",
+      "name": "elias_gamma_bitlen",
+      "passed": 1.0,
+      "ctx_tokens": 107,
+      "logprob_margin": 0.3291507214307785,
+      "gen_preview": "    if n <= 0:\n        return 0\n    k = n.bit_length() - 1\n    return 2 * k + 1\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_05",
+      "domain": "S2",
+      "name": "binary_entropy_bits",
+      "passed": 1.0,
+      "ctx_tokens": 113,
+      "logprob_margin": 0.19287649542093277,
+      "gen_preview": "    if p <= 0.0 or p >= 1.0:\n        return 0.0\n    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_06",
+      "domain": "S2",
+      "name": "zigzag_encode_int",
+      "passed": 1.0,
+      "ctx_tokens": 101,
+      "logprob_margin": 0.31496211886405945,
+      "gen_preview": "    if n >= 0:\n        return 2 * n\n    else:\n        return -2 * n - 1\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_01",
+      "domain": "S3",
+      "name": "hill_langmuir_occupancy",
+      "passed": 1.0,
+      "ctx_tokens": 148,
+      "logprob_margin": 1.1662057489156723,
+      "gen_preview": "    if ligand <= 0.0:\n        return 0.0\n    ln = ligand ** n\n    kn = kd ** n\n    return ln / (kn + ln)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_02",
+      "domain": "S3",
+      "name": "competitive_michaelis_menten",
+      "passed": 1.0,
+      "ctx_tokens": 127,
+      "logprob_margin": 0.9744491875171661,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    alpha = 1.0 + inhibitor / ki\n    km_app = km * alpha\n    return (vmax * s) / (km_app + s)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_03",
+      "domain": "S3",
+      "name": "jukes_cantor_distance",
+      "passed": 1.0,
+      "ctx_tokens": 125,
+      "logprob_margin": 0.2306106686592102,
+      "gen_preview": "    if p <= 0.0:\n        return 0.0\n    if p >= 0.75:\n        return -1.0\n    return -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_04",
+      "domain": "S3",
+      "name": "shannon_wiener_diversity",
+      "passed": 1.0,
+      "ctx_tokens": 131,
+      "logprob_margin": 0.294331818819046,
+      "gen_preview": "    total = sum(c for c in counts if c > 0)\n    if total <= 0:\n        return 0.0\n    return -sum((c / total) * math.log(c / total) for c in counts if c > 0)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_05",
+      "domain": "S3",
+      "name": "hardy_weinberg_chisq",
+      "passed": 0.0,
+      "ctx_tokens": 173,
+      "logprob_margin": 0.2001342698931694,
+      "gen_preview": "    n = n_aa + n_ab + n_bb\n    if n <= 0:\n        return 0.0\n    p = (2 * n_aa + n_ab) / (2 * n)\n    q = 1.0 - p\n    if p <= 0.0 or q <= 0.0:\n        return 0.0\n    e_aa = n * p * p\n    e_ab = 2 * n * p * q\n    e_bb = n * q * q\n    return ("
+    },
+    {
+      "task_id": "S3_06",
+      "domain": "S3",
+      "name": "beer_lambert_transmittance",
+      "passed": 1.0,
+      "ctx_tokens": 122,
+      "logprob_margin": 0.8457845449447632,
+      "gen_preview": "    absorbance = epsilon * conc * path_cm\n    return 10.0 ** (-absorbance)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_01",
+      "domain": "S4",
+      "name": "weighted_kahan_dot",
+      "passed": 0.0,
+      "ctx_tokens": 114,
+      "logprob_margin": 0.36600637435913086,
+      "gen_preview": "    total = 0.0\n    comp = 0.0\n    for x, w in zip(xs, ws):\n        y = x - comp\n        t = total + y\n        comp = (t - total) - y\n        total = t\n    return total\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_02",
+      "domain": "S4",
+      "name": "damped_symplectic_step",
+      "passed": 1.0,
+      "ctx_tokens": 135,
+      "logprob_margin": 0.17108088731765747,
+      "gen_preview": "    p_next = p - (k * q + gamma * p) * dt\n    q_next = q + p_next * dt\n    return q_next, p_next\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_03",
+      "domain": "S4",
+      "name": "stable_softmax_prob",
+      "passed": 1.0,
+      "ctx_tokens": 101,
+      "logprob_margin": 0.074972003698349,
+      "gen_preview": "    m = max(xs)\n    s = sum(math.exp(x - m) for x in xs)\n    return math.exp(xs[idx] - m) / s\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_04",
+      "domain": "S4",
+      "name": "welford_zscore_last",
+      "passed": 1.0,
+      "ctx_tokens": 147,
+      "logprob_margin": 0.2206692099571228,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    n = 0\n    for x in xs:\n        n += 1\n        delta = x - mean\n        mean += delta / n\n        m2 += delta * (x - mean)\n    std = math.sqrt(m2 / (n - 1))\n    return (x"
+    },
+    {
+      "task_id": "S4_05",
+      "domain": "S4",
+      "name": "gf256_horner_eval",
+      "passed": 0.0,
+      "ctx_tokens": 109,
+      "logprob_margin": 0.16861793398857117,
+      "gen_preview": "    p = 0\n    for c in reversed(coeffs):\n        p ^= c * gf256_mul(x, p)\n    return p\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_06",
+      "domain": "S4",
+      "name": "crc8_verify_frame",
+      "passed": 1.0,
+      "ctx_tokens": 127,
+      "logprob_margin": 1.0352319031953812,
+      "gen_preview": "    if not frame:\n        return False\n    crc = 0x00\n    for byte in frame[:-1]:\n        crc ^= (byte & 0xFF)\n        for _ in range(8):\n            if crc & 0x80:\n                crc = ((crc << 1) ^ 0x07) & 0xFF\n            else:\n        "
+    },
+    {
+      "task_id": "S4_07",
+      "domain": "S4",
+      "name": "fnv1a_32_hex_tagged",
+      "passed": 0.0,
+      "ctx_tokens": 108,
+      "logprob_margin": -0.0762629508972168,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in payload:\n        h ^= (b & 0xFF)\n        h = (h * 0x01000193) & 0xFFFFFFFF\n    return h\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_08",
+      "domain": "S4",
+      "name": "zigzag_elias_stream_bits",
+      "passed": 0.0,
+      "ctx_tokens": 107,
+      "logprob_margin": 0.795372486114502,
+      "gen_preview": "    if not signed_ints:\n        return 0\n    total_bits = 0\n    for n in signed_ints:\n        if n <= 0:\n            u = -2*n - 1\n        else:\n            u = 2*n\n        total_bits += 2*(u.bit_length() - 1) + 1\n    return total_bits\n\n# Ve"
+    },
+    {
+      "task_id": "S4_09",
+      "domain": "S4",
+      "name": "cooperative_inhibited_flux",
+      "passed": 1.0,
+      "ctx_tokens": 148,
+      "logprob_margin": 0.6204942762851715,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    kd_app = kd * (1 + inhibitor / ki)\n    return vmax * (s ** n) / (kd_app ** n + s ** n)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_10",
+      "domain": "S4",
+      "name": "pielou_evenness_index",
+      "passed": 1.0,
+      "ctx_tokens": 131,
+      "logprob_margin": 0.2717842757701874,
+      "gen_preview": "    if not counts:\n        return 0.0\n    total = sum(c for c in counts if c > 0)\n    if total <= 0:\n        return 0.0\n    h_prime = -sum((c / total) * math.log(c / total) for c in counts if c > 0)\n    s = len([c for c in counts if c > 0])"
+    },
+    {
+      "task_id": "S4_11",
+      "domain": "S4",
+      "name": "jc_coalescent_time",
+      "passed": 1.0,
+      "ctx_tokens": 125,
+      "logprob_margin": 0.7775078415870667,
+      "gen_preview": "    if length <= 0.0 or mu <= 0.0:\n        return -1.0\n    p = mismatches / length\n    if p >= 0.75:\n        return -1.0\n    d = -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n    return d / (2.0 * mu)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_12",
+      "domain": "S4",
+      "name": "norm3d_hypot",
+      "passed": 0.0,
+      "ctx_tokens": 107,
+      "logprob_margin": 0.2568790316581726,
+      "gen_preview": "    # Step 1: Compute absolute values\n    x = abs(a)\n    y = abs(b)\n    z = abs(c)\n    # Step 2: Scale the largest coordinate to 1.0\n    if x > y and x > z:\n        r = y / x\n    elif y > z:\n        r = z / y\n    else:\n        r = c / z\n   "
+    }
+  ],
+  "raw_code_block": [
+    {
+      "task_id": "S1_01",
+      "domain": "S1",
+      "name": "kahan_sum",
+      "passed": 1.0,
+      "ctx_tokens": 100,
+      "logprob_margin": 0.19221995770931244,
+      "gen_preview": "    total = 0.0\n    comp = 0.0\n    for x in xs:\n        y = x - comp\n        t = total + y\n        comp = (t - total) - y\n        total = t\n    return total\n\n# Task:"
+    },
+    {
+      "task_id": "S1_02",
+      "domain": "S1",
+      "name": "symplectic_euler_step",
+      "passed": 1.0,
+      "ctx_tokens": 82,
+      "logprob_margin": 0.11868094652891159,
+      "gen_preview": "    p_next = p - k * q * dt\n    q_next = q + p_next * dt\n    return (q_next, p_next)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_03",
+      "domain": "S1",
+      "name": "stable_logsumexp",
+      "passed": 1.0,
+      "ctx_tokens": 71,
+      "logprob_margin": 0.4595869779586792,
+      "gen_preview": "    if not xs:\n        raise ValueError(\"Input list must be non-empty.\")\n    m = max(xs)\n    total = 0.0\n    for x in xs:\n        total += math.exp(x - m)\n    return m + math.log(total)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_04",
+      "domain": "S1",
+      "name": "richardson_derivative",
+      "passed": 0.0,
+      "ctx_tokens": 85,
+      "logprob_margin": 0.6876156479120255,
+      "gen_preview": "    return ref_richardson_diff(y_m2, y_m1, y_p1, y_p2, h)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_05",
+      "domain": "S1",
+      "name": "welford_sample_variance",
+      "passed": 1.0,
+      "ctx_tokens": 82,
+      "logprob_margin": 0.48306312039494514,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    for i, x in enumerate(xs, 1):\n        delta = x - mean\n        mean += delta / i\n        m2 += delta * (x - mean)\n    return m2 / (len(xs) - 1)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_06",
+      "domain": "S1",
+      "name": "hypotenuse_stable",
+      "passed": 0.0,
+      "ctx_tokens": 68,
+      "logprob_margin": 0.6222146302461624,
+      "gen_preview": "    return ref_hypot(a, b)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_01",
+      "domain": "S2",
+      "name": "gf256_mul",
+      "passed": 0.0,
+      "ctx_tokens": 77,
+      "logprob_margin": 1.8639752492308617,
+      "gen_preview": "    return ref_gf256_mul(a, b)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_02",
+      "domain": "S2",
+      "name": "crc8_ccitt",
+      "passed": 0.0,
+      "ctx_tokens": 85,
+      "logprob_margin": 0.550494983792305,
+      "gen_preview": "    return ref_crc8(data)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_03",
+      "domain": "S2",
+      "name": "fnv1a_32",
+      "passed": 1.0,
+      "ctx_tokens": 54,
+      "logprob_margin": 0.1562226191163063,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in data:\n        h ^= (b & 0xFF)\n        h = (h * 0x01000193) & 0xFFFFFFFF\n    return h\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_04",
+      "domain": "S2",
+      "name": "elias_gamma_bitlen",
+      "passed": 1.0,
+      "ctx_tokens": 47,
+      "logprob_margin": 0.3948309049010277,
+      "gen_preview": "    if n <= 0:\n        return 0\n    return 2 * (n.bit_length() - 1) + 1\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_05",
+      "domain": "S2",
+      "name": "binary_entropy_bits",
+      "passed": 0.0,
+      "ctx_tokens": 59,
+      "logprob_margin": 0.1485191062092781,
+      "gen_preview": "    return ref_binary_entropy(p)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_06",
+      "domain": "S2",
+      "name": "zigzag_encode_int",
+      "passed": 0.0,
+      "ctx_tokens": 34,
+      "logprob_margin": 0.34998825192451477,
+      "gen_preview": "    return zigzag_ref_zigzag(n)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_01",
+      "domain": "S3",
+      "name": "hill_langmuir_occupancy",
+      "passed": 1.0,
+      "ctx_tokens": 67,
+      "logprob_margin": 1.1635007336735725,
+      "gen_preview": "    if ligand <= 0.0:\n        return 0.0\n    ln = ligand ** n\n    kn = kd ** n\n    return ln / (kn + ln)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_02",
+      "domain": "S3",
+      "name": "competitive_michaelis_menten",
+      "passed": 0.0,
+      "ctx_tokens": 81,
+      "logprob_margin": 0.827570766210556,
+      "gen_preview": "    return ref_competitive_mm(vmax, s, km, inhibitor, ki)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_03",
+      "domain": "S3",
+      "name": "jukes_cantor_distance",
+      "passed": 1.0,
+      "ctx_tokens": 61,
+      "logprob_margin": 0.23694930225610733,
+      "gen_preview": "    if p <= 0.0:\n        return 0.0\n    if p >= 0.75:\n        return -1.0\n    return -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_04",
+      "domain": "S3",
+      "name": "shannon_wiener_diversity",
+      "passed": 0.0,
+      "ctx_tokens": 73,
+      "logprob_margin": 0.5110432058572769,
+      "gen_preview": "    return ref_shannon_wiener(counts)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_05",
+      "domain": "S3",
+      "name": "hardy_weinberg_chisq",
+      "passed": 0.0,
+      "ctx_tokens": 120,
+      "logprob_margin": 0.2738898955285549,
+      "gen_preview": "    return ref_hw_chisq(n_aa, n_ab, n_bb)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_06",
+      "domain": "S3",
+      "name": "beer_lambert_transmittance",
+      "passed": 1.0,
+      "ctx_tokens": 54,
+      "logprob_margin": 0.8037992715835571,
+      "gen_preview": "    return 10.0 ** (-epsilon * conc * path_cm)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_01",
+      "domain": "S4",
+      "name": "weighted_kahan_dot",
+      "passed": 1.0,
+      "ctx_tokens": 100,
+      "logprob_margin": 0.4208274930715561,
+      "gen_preview": "    # Adapted Kahan compensated summation for inner product\n    total = 0.0\n    comp = 0.0\n    for x, w in zip(xs, ws):\n        y = x - comp\n        t = total + y * w\n        comp = (t - total) - y * w\n        total = t\n    return total\n\n# "
+    },
+    {
+      "task_id": "S4_02",
+      "domain": "S4",
+      "name": "damped_symplectic_step",
+      "passed": 1.0,
+      "ctx_tokens": 82,
+      "logprob_margin": 0.19714663922786713,
+      "gen_preview": "    p_next = p - (k * q + gamma * p) * dt\n    q_next = q + p_next * dt\n    return (q_next, p_next)\n\n# Task:"
+    },
+    {
+      "task_id": "S4_03",
+      "domain": "S4",
+      "name": "stable_softmax_prob",
+      "passed": 1.0,
+      "ctx_tokens": 71,
+      "logprob_margin": 0.11098748445510864,
+      "gen_preview": "    m = max(xs)\n    total = 0.0\n    for x in xs:\n        total += math.exp(x - m)\n    return math.exp(xs[idx] - m) / total\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_04",
+      "domain": "S4",
+      "name": "welford_zscore_last",
+      "passed": 1.0,
+      "ctx_tokens": 82,
+      "logprob_margin": 0.3917892277240753,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    for i, x in enumerate(xs, 1):\n        delta = x - mean\n        mean += delta / i\n        m2 += delta * (x - mean)\n    std = math.sqrt(m2 / (len(xs) - 1))\n    return (xs["
+    },
+    {
+      "task_id": "S4_05",
+      "domain": "S4",
+      "name": "gf256_horner_eval",
+      "passed": 0.0,
+      "ctx_tokens": 77,
+      "logprob_margin": 0.14371734857559204,
+      "gen_preview": "    p = 0\n    for coeff in reversed(coeffs):\n        p = ref_gf256_mul(p, coeff)\n        p = ref_gf256_mul(p, x)\n    return p\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_06",
+      "domain": "S4",
+      "name": "crc8_verify_frame",
+      "passed": 1.0,
+      "ctx_tokens": 85,
+      "logprob_margin": 1.0720046907663345,
+      "gen_preview": "    if not frame:\n        return False\n    crc = 0x00\n    for b in frame[:-1]:\n        crc ^= (b & 0xFF)\n        for _ in range(8):\n            if crc & 0x80:\n                crc = ((crc << 1) ^ 0x07) & 0xFF\n            else:\n              "
+    },
+    {
+      "task_id": "S4_07",
+      "domain": "S4",
+      "name": "fnv1a_32_hex_tagged",
+      "passed": 0.0,
+      "ctx_tokens": 54,
+      "logprob_margin": -0.05975799262523651,
+      "gen_preview": "    return ref_fnv1a([domain_tag & 0xFF, 0x00] + payload)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_08",
+      "domain": "S4",
+      "name": "zigzag_elias_stream_bits",
+      "passed": 0.0,
+      "ctx_tokens": 47,
+      "logprob_margin": 0.7493796646595001,
+      "gen_preview": "    total_bits = 0\n    for i in range(len(signed_ints)):\n        u = signed_ints[i]\n        if u >= 0:\n            total_bits += ref_elias_gamma_len(u)\n        else:\n            total_bits += ref_elias_gamma_len(-2 * u - 1)\n    return total"
+    },
+    {
+      "task_id": "S4_09",
+      "domain": "S4",
+      "name": "cooperative_inhibited_flux",
+      "passed": 1.0,
+      "ctx_tokens": 67,
+      "logprob_margin": 0.5341424345970154,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    kd_app = kd * (1 + inhibitor / ki)\n    return vmax * (s ** n) / (kd_app ** n + s ** n)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_10",
+      "domain": "S4",
+      "name": "pielou_evenness_index",
+      "passed": 0.0,
+      "ctx_tokens": 73,
+      "logprob_margin": 0.26286402344703674,
+      "gen_preview": "    if len(counts) <= 1:\n        return 0.0\n    h_prime = ref_shannon_wiener(counts)\n    s = len([c for c in counts if c > 0])\n    return h_prime / math.log(s)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_11",
+      "domain": "S4",
+      "name": "jc_coalescent_time",
+      "passed": 0.0,
+      "ctx_tokens": 61,
+      "logprob_margin": 0.5345696061849594,
+      "gen_preview": "    if length <= 0.0 or mu <= 0.0:\n        return -1.0\n    p = mismatches / length\n    if p >= 0.75:\n        return -1.0\n    return (jc_coalescent_time(mismatches, length, mu) / (2.0 * mu))\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_12",
+      "domain": "S4",
+      "name": "norm3d_hypot",
+      "passed": 0.0,
+      "ctx_tokens": 68,
+      "logprob_margin": 0.21685102581977844,
+      "gen_preview": "    return ref_hypot(a, b) + ref_hypot(b, c)\n\n# Verified Concept"
+    }
+  ],
+  "opencommons_dual_card": [
+    {
+      "task_id": "S1_01",
+      "domain": "S1",
+      "name": "kahan_sum",
+      "passed": 1.0,
+      "ctx_tokens": 279,
+      "logprob_margin": 0.3433288112282753,
+      "gen_preview": "    total = 0.0\n    comp = 0.0\n    for x in xs:\n        y = x - comp\n        t = total + y\n        comp = (t - total) - y\n        total = t\n    return total\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_02",
+      "domain": "S1",
+      "name": "symplectic_euler_step",
+      "passed": 1.0,
+      "ctx_tokens": 279,
+      "logprob_margin": 0.16023146361112595,
+      "gen_preview": "    # Semi-implicit Euler integrator for Hamiltonian system\n    p_next = p - k * q * dt\n    q_next = q + p_next * dt\n    return (q_next, p_next)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_03",
+      "domain": "S1",
+      "name": "stable_logsumexp",
+      "passed": 1.0,
+      "ctx_tokens": 225,
+      "logprob_margin": 0.4666013717651367,
+      "gen_preview": "    if not xs:\n        raise ValueError(\"Input list must be non-empty\")\n    m = max(xs)\n    total = 0.0\n    for x in xs:\n        total += math.exp(x - m)\n    return m + math.log(total)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_04",
+      "domain": "S1",
+      "name": "richardson_derivative",
+      "passed": 1.0,
+      "ctx_tokens": 259,
+      "logprob_margin": 0.5022593513131142,
+      "gen_preview": "    return (y_m2 - 8.0 * y_m1 + 8.0 * y_p1 - y_p2) / (12.0 * h)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_05",
+      "domain": "S1",
+      "name": "welford_sample_variance",
+      "passed": 1.0,
+      "ctx_tokens": 301,
+      "logprob_margin": 0.4730292148888111,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    for i, x in enumerate(xs, 1):\n        delta = x - mean\n        mean += delta / i\n        m2 += delta * (x - mean)\n    return m2 / (len(xs) - 1)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S1_06",
+      "domain": "S1",
+      "name": "hypotenuse_stable",
+      "passed": 0.0,
+      "ctx_tokens": 227,
+      "logprob_margin": 0.5136261209845543,
+      "gen_preview": "    return ref_hypot(a, b)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_01",
+      "domain": "S2",
+      "name": "gf256_mul",
+      "passed": 1.0,
+      "ctx_tokens": 236,
+      "logprob_margin": 0.8858212530612946,
+      "gen_preview": "    p = 0\n    for _ in range(8):\n        if b & 1:\n            p ^= a\n        hi = a & 0x80\n        a = (a << 1) & 0xFF\n        if hi:\n            a ^= 0x1B\n        b >>= 1\n    return p\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_02",
+      "domain": "S2",
+      "name": "crc8_ccitt",
+      "passed": 1.0,
+      "ctx_tokens": 266,
+      "logprob_margin": 0.8237928599119186,
+      "gen_preview": "    crc = 0x00\n    for b in data:\n        crc ^= (b & 0xFF)\n        for _ in range(8):\n            if crc & 0x80:\n                crc = ((crc << 1) ^ 0x07) & 0xFF\n            else:\n                crc = (crc << 1) & 0xFF\n    return crc\n\n# V"
+    },
+    {
+      "task_id": "S2_03",
+      "domain": "S2",
+      "name": "fnv1a_32",
+      "passed": 1.0,
+      "ctx_tokens": 215,
+      "logprob_margin": 0.1291264444589615,
+      "gen_preview": "    h = 0x811C9DC5\n    for b in data:\n        h ^= (b & 0xFF)\n        h = (h * 0x01000193) & 0xFFFFFFFF\n    return h\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_04",
+      "domain": "S2",
+      "name": "elias_gamma_bitlen",
+      "passed": 1.0,
+      "ctx_tokens": 205,
+      "logprob_margin": 0.46050693839788437,
+      "gen_preview": "    if n <= 0:\n        return 0\n    return 2 * (n.bit_length() - 1) + 1\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_05",
+      "domain": "S2",
+      "name": "binary_entropy_bits",
+      "passed": 1.0,
+      "ctx_tokens": 236,
+      "logprob_margin": 0.15663066506385803,
+      "gen_preview": "    if p <= 0.0 or p >= 1.0:\n        return 0.0\n    return -(p * math.log2(p) + (1.0 - p) * math.log2(1.0 - p))\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S2_06",
+      "domain": "S2",
+      "name": "zigzag_encode_int",
+      "passed": 1.0,
+      "ctx_tokens": 202,
+      "logprob_margin": 0.3206990659236908,
+      "gen_preview": "    return 2 * n if n >= 0 else -2 * n - 1\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_01",
+      "domain": "S3",
+      "name": "hill_langmuir_occupancy",
+      "passed": 1.0,
+      "ctx_tokens": 271,
+      "logprob_margin": 1.0894574075937271,
+      "gen_preview": "    if ligand <= 0.0:\n        return 0.0\n    ln = ligand ** n\n    kn = kd ** n\n    return ln / (kn + ln)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_02",
+      "domain": "S3",
+      "name": "competitive_michaelis_menten",
+      "passed": 1.0,
+      "ctx_tokens": 260,
+      "logprob_margin": 0.8115945719182491,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    km_app = km * (1.0 + inhibitor / ki)\n    return (vmax * s) / (km_app + s)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_03",
+      "domain": "S3",
+      "name": "jukes_cantor_distance",
+      "passed": 1.0,
+      "ctx_tokens": 243,
+      "logprob_margin": 0.28218869864940643,
+      "gen_preview": "    if p <= 0.0:\n        return 0.0\n    if p >= 0.75:\n        return -1.0\n    return -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_04",
+      "domain": "S3",
+      "name": "shannon_wiener_diversity",
+      "passed": 1.0,
+      "ctx_tokens": 265,
+      "logprob_margin": 0.5066828355193138,
+      "gen_preview": "    pos = [c for c in counts if c > 0]\n    total = sum(pos)\n    if total <= 0:\n        return 0.0\n    return -sum((c / total) * math.log(c / total) for c in pos)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S3_05",
+      "domain": "S3",
+      "name": "hardy_weinberg_chisq",
+      "passed": 0.0,
+      "ctx_tokens": 361,
+      "logprob_margin": 0.198141660541296,
+      "gen_preview": "    n = n_aa + n_ab + n_bb\n    if n <= 0:\n        return 0.0\n    p = (2.0 * n_aa + n_ab) / (2.0 * n)\n    q = 1.0 - p\n    if p <= 0.0 or q <= 0.0:\n        return 0.0\n    e_aa, e_ab, e_bb = n * p * p, 2.0 * n * p * q, n * q * q\n    return ((n"
+    },
+    {
+      "task_id": "S3_06",
+      "domain": "S3",
+      "name": "beer_lambert_transmittance",
+      "passed": 1.0,
+      "ctx_tokens": 239,
+      "logprob_margin": 0.4195207357406616,
+      "gen_preview": "    return 10.0 ** (-(epsilon * conc * path_cm))\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_01",
+      "domain": "S4",
+      "name": "weighted_kahan_dot",
+      "passed": 1.0,
+      "ctx_tokens": 279,
+      "logprob_margin": 0.37742435932159424,
+      "gen_preview": "    # Adapted Kahan summation for weighted inner product\n    # Computes sum(x_i * w_i) with compensated summation to avoid floating-point drift\n    total = 0.0\n    comp = 0.0\n    for x, w in zip(xs, ws):\n        y = x * w - comp\n        t ="
+    },
+    {
+      "task_id": "S4_02",
+      "domain": "S4",
+      "name": "damped_symplectic_step",
+      "passed": 1.0,
+      "ctx_tokens": 279,
+      "logprob_margin": 0.23610850423574448,
+      "gen_preview": "    p_next = p - (k * q + gamma * p) * dt\n    q_next = q + p_next * dt\n    return (q_next, p_next)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_03",
+      "domain": "S4",
+      "name": "stable_softmax_prob",
+      "passed": 1.0,
+      "ctx_tokens": 225,
+      "logprob_margin": 0.04660075902938843,
+      "gen_preview": "    m = max(xs)\n    total = 0.0\n    for x in xs:\n        total += math.exp(x - m)\n    return math.exp(xs[idx] - m) / total\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_04",
+      "domain": "S4",
+      "name": "welford_zscore_last",
+      "passed": 1.0,
+      "ctx_tokens": 301,
+      "logprob_margin": 0.31828048825263977,
+      "gen_preview": "    if len(xs) < 2:\n        return 0.0\n    mean = 0.0\n    m2 = 0.0\n    for i, x in enumerate(xs, 1):\n        delta = x - mean\n        mean += delta / i\n        m2 += delta * (x - mean)\n    std = math.sqrt(m2 / (len(xs) - 1))\n    return (xs["
+    },
+    {
+      "task_id": "S4_05",
+      "domain": "S4",
+      "name": "gf256_horner_eval",
+      "passed": 0.0,
+      "ctx_tokens": 236,
+      "logprob_margin": 0.12988507747650146,
+      "gen_preview": "    p = 0\n    for coeff in reversed(coeffs):\n        p = gf256_mul(p, coeff)\n        p ^= x\n    return p\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_06",
+      "domain": "S4",
+      "name": "crc8_verify_frame",
+      "passed": 1.0,
+      "ctx_tokens": 266,
+      "logprob_margin": 1.0274617820978165,
+      "gen_preview": "    if not frame:\n        return False\n    crc = 0x00\n    for b in frame[:-1]:\n        crc ^= (b & 0xFF)\n        for _ in range(8):\n            if crc & 0x80:\n                crc = ((crc << 1) ^ 0x07) & 0xFF\n            else:\n              "
+    },
+    {
+      "task_id": "S4_07",
+      "domain": "S4",
+      "name": "fnv1a_32_hex_tagged",
+      "passed": 0.0,
+      "ctx_tokens": 215,
+      "logprob_margin": -0.03548493981361389,
+      "gen_preview": "    # 1. Build 32-bit unsigned integer:\n    #    - domain_tag & 0xFF (low 8 bits)\n    #    - 0x00 (high 24 bits)\n    #    - payload (as list of bytes)\n    # 2. Apply FNV-1a:\n    #    h = 0x811C9DC5\n    #    for b in [domain_tag & 0xFF, 0x00"
+    },
+    {
+      "task_id": "S4_08",
+      "domain": "S4",
+      "name": "zigzag_elias_stream_bits",
+      "passed": 0.0,
+      "ctx_tokens": 205,
+      "logprob_margin": 0.7388634830713272,
+      "gen_preview": "    total_bits = 0\n    for n in signed_ints:\n        u = n if n >= 0 else -2*n - 1\n        total_bits += 2 * (u.bit_length() - 1) + 1\n    return total_bits\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_09",
+      "domain": "S4",
+      "name": "cooperative_inhibited_flux",
+      "passed": 1.0,
+      "ctx_tokens": 271,
+      "logprob_margin": 0.5374439358711243,
+      "gen_preview": "    if s <= 0.0:\n        return 0.0\n    kd_app = kd * (1 + inhibitor / ki)\n    return vmax * (s ** n) / (kd_app ** n + s ** n)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_10",
+      "domain": "S4",
+      "name": "pielou_evenness_index",
+      "passed": 1.0,
+      "ctx_tokens": 265,
+      "logprob_margin": 0.385919913649559,
+      "gen_preview": "    pos = [c for c in counts if c > 0]\n    S = len(pos)\n    if S <= 1:\n        return 0.0\n    H = ref_shannon_wiener(counts)\n    return H / math.log(S)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_11",
+      "domain": "S4",
+      "name": "jc_coalescent_time",
+      "passed": 1.0,
+      "ctx_tokens": 243,
+      "logprob_margin": 0.6726395189762115,
+      "gen_preview": "    if length <= 0.0 or mu <= 0.0:\n        return -1.0\n    p = mismatches / length\n    if p >= 0.75:\n        return -1.0\n    d = -0.75 * math.log(1.0 - (4.0 / 3.0) * p)\n    return d / (2.0 * mu)\n\n# Verified Concept"
+    },
+    {
+      "task_id": "S4_12",
+      "domain": "S4",
+      "name": "norm3d_hypot",
+      "passed": 1.0,
+      "ctx_tokens": 227,
+      "logprob_margin": 0.045965224504470825,
+      "gen_preview": "    x, y, z = abs(a), abs(b), abs(c)\n    if x < y:\n        x, y = y, x\n    if x < z:\n        x, z = z, x\n    if y < z:\n        y, z = z, y\n    if x == 0.0:\n        return 0.0\n    r = y / x\n    return x * math.sqrt(1.0 + r * r + (z / x) ** 2"
+    }
+  ]
+}

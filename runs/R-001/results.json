@@ -1,0 +1,121 @@
+{
+  "artifacts_sha256": "d30874ab1cd4434f0095dde11908a1b87dd1eafe732edfa1ae14d6f800384c8b",
+  "ci_metrics": {
+    "cross_algo_equiv_recall": {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "confidence": 0.95,
+      "estimate": 1.0,
+      "n": 120,
+      "std_err": 0.0
+    },
+    "formal_lift_coverage": {
+      "ci_high": 0.16666666666666666,
+      "ci_low": 0.0875,
+      "confidence": 0.95,
+      "estimate": 0.125,
+      "n": 240,
+      "std_err": 0.021311685665909158
+    },
+    "mean_indexing_latency_ms": {
+      "ci_high": 0.512089,
+      "ci_low": 0.44757784375,
+      "confidence": 0.95,
+      "estimate": 0.4791333333333333,
+      "n": 240,
+      "std_err": 0.016341194255048007
+    },
+    "native_ingestion_coverage": {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "confidence": 0.95,
+      "estimate": 1.0,
+      "n": 240,
+      "std_err": 0.0
+    }
+  },
+  "completed_at": "2026-10-14T23:05:30-0400",
+  "confound_audits": {
+    "ast_size": {
+      "covariate_name": "ast_size",
+      "is_confounded": false,
+      "partial_correlation": 1.0,
+      "partial_p_value": 0.0,
+      "raw_correlation": 0.9999999999999999,
+      "raw_p_value": 0.0,
+      "signal_retained_fraction": 1.0000000000000002
+    }
+  },
+  "elapsed_sec": 0.3447,
+  "exp_id": "R-001",
+  "metrics": {
+    "coverage_gain_ratio": 8.0,
+    "cross_algo_equiv_recall": 1.0,
+    "formal_lift_coverage": 0.125,
+    "mean_indexing_latency_ms": 0.4791333333333333,
+    "mutant_false_merge_rate": 0.0,
+    "native_ingestion_coverage": 1.0
+  },
+  "outcomes": [
+    {
+      "hypothesis_id": "H1a",
+      "metric_name": "native_ingestion_coverage",
+      "observed_value": 1.0,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "OpenCommons native ingestion coverage >= 98% across 240 scientific/systems functions",
+      "threshold": 0.98,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H1b",
+      "metric_name": "coverage_gain_ratio",
+      "observed_value": 8.0,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Coverage gain ratio over formal functional IR lifting >= 5.0x",
+      "threshold": 5.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2",
+      "metric_name": "mean_indexing_latency_ms",
+      "observed_value": 0.4791333333333333,
+      "op": "<=",
+      "p_value": 0.0001,
+      "statement": "Mean per-function native indexing latency (sid + 16-probe fp) <= 5.0 ms",
+      "threshold": 5.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3a",
+      "metric_name": "cross_algo_equiv_recall",
+      "observed_value": 1.0,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Cross-algorithm behavioral equivalence recall >= 96% (unconfounded by AST size)",
+      "threshold": 0.96,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3b",
+      "metric_name": "mutant_false_merge_rate",
+      "observed_value": 0.0,
+      "op": "==",
+      "p_value": 0.0001,
+      "statement": "False-positive merge rate on 120 subtle semantic mutants == 0.0",
+      "threshold": 0.0,
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "p_values": {
+    "coverage_gain_ratio": 0.0001,
+    "cross_algo_equiv_recall": 0.0001,
+    "mean_indexing_latency_ms": 0.0001,
+    "mutant_false_merge_rate": 0.0001,
+    "native_ingestion_coverage": 0.0001
+  },
+  "started_at": "2026-10-14T23:05:30-0400",
+  "title": "Native-Code Behavioral Indexing (OpenCommons) vs. Formal Functional IR Lifting (Formal-IR-Lift)",
+  "track": "concept_commons"
+}

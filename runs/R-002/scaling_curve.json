@@ -1,0 +1,55 @@
+{
+  "scaling_curve": {
+    "120": {
+      "bm25_p1": 0.325,
+      "opencommons_meta_p1": 1.0,
+      "opencommons_probe_p1": 1.0,
+      "mean_latency_ms": 0.8954040022217669,
+      "coral_scan_tokens": 3240.0,
+      "opencommons_tokens": 95.0,
+      "token_search_reduction_ratio": 34.10526315789474
+    },
+    "500": {
+      "bm25_p1": 0.325,
+      "opencommons_meta_p1": 1.0,
+      "opencommons_probe_p1": 1.0,
+      "mean_latency_ms": 1.4042032693396322,
+      "coral_scan_tokens": 7800.0,
+      "opencommons_tokens": 95.0,
+      "token_search_reduction_ratio": 82.10526315789474
+    },
+    "1000": {
+      "bm25_p1": 0.325,
+      "opencommons_meta_p1": 1.0,
+      "opencommons_probe_p1": 1.0,
+      "mean_latency_ms": 2.0364317533676513,
+      "coral_scan_tokens": 13800.0,
+      "opencommons_tokens": 95.0,
+      "token_search_reduction_ratio": 145.26315789473685
+    },
+    "2500": {
+      "bm25_p1": 0.325,
+      "opencommons_meta_p1": 1.0,
+      "opencommons_probe_p1": 1.0,
+      "mean_latency_ms": 4.153539601247758,
+      "coral_scan_tokens": 31800.0,
+      "opencommons_tokens": 95.0,
+      "token_search_reduction_ratio": 334.7368421052632
+    },
+    "5000": {
+      "bm25_p1": 0.325,
+      "opencommons_meta_p1": 1.0,
+      "opencommons_probe_p1": 1.0,
+      "mean_latency_ms": 7.235181851137895,
+      "coral_scan_tokens": 61800.0,
+      "opencommons_tokens": 95.0,
+      "token_search_reduction_ratio": 650.5263157894736
+    }
+  },
+  "modality_tokens": {
+    "raw_code_mean": 203.325,
+    "pseudocode_mean": 76.325,
+    "dual_card_mean": 271.725,
+    "dual_card_with_pitfalls_mean": 341.0
+  }
+}

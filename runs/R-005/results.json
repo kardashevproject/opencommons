@@ -1,0 +1,95 @@
+{
+  "artifacts_sha256": "78e0141c0b3e55807a28d64ff66909d4e36f041a1ef582aa19e3d4f8ae979a20",
+  "ci_metrics": {
+    "convention_cost_to_pass_ratio": {
+      "ci_high": 0.46125019772879916,
+      "ci_low": 0.3780961539367904,
+      "confidence": 0.95,
+      "estimate": 0.419,
+      "n": 9,
+      "std_err": 0.021458596814466564
+    },
+    "minimal_mcp_empty_token_ratio": {
+      "ci_high": 0.954960435599884,
+      "ci_low": 0.8589516182356486,
+      "confidence": 0.95,
+      "estimate": 0.9070000000000001,
+      "n": 27,
+      "std_err": 0.024959238207243644
+    },
+    "wave5_cost_reduction_vs_coral": {
+      "ci_high": 7.513832186225776,
+      "ci_low": 6.377108448722525,
+      "confidence": 0.95,
+      "estimate": 6.940336227563576,
+      "n": 200,
+      "std_err": 0.28683430928440284
+    }
+  },
+  "completed_at": "2026-10-14T23:02:28-0400",
+  "confound_audits": {},
+  "elapsed_sec": 0.05,
+  "exp_id": "R-005",
+  "metrics": {
+    "convention_cost_to_pass_ratio": 0.419,
+    "legacy_18tool_empty_token_ratio": 1.3990000000000005,
+    "minimal_mcp_empty_token_ratio": 0.9070000000000001,
+    "wave5_cost_reduction_vs_coral": 6.397016637980493,
+    "wave5_cost_reduction_vs_isolated": 12.668100975329892,
+    "wave5_pass_rate_coral": 0.565,
+    "wave5_pass_rate_isolated": 0.305,
+    "wave5_pass_rate_opencommons": 0.865,
+    "wave5_pass_rate_pseudocode": 0.735
+  },
+  "outcomes": [
+    {
+      "hypothesis_id": "H1",
+      "metric_name": "minimal_mcp_empty_token_ratio",
+      "observed_value": 0.9070000000000001,
+      "op": "<=",
+      "p_value": 0.001,
+      "statement": "Minimal MCP profile empty-library session token ratio E/A <= 1.00x (zero carrying tax)",
+      "threshold": 1.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2",
+      "metric_name": "convention_cost_to_pass_ratio",
+      "observed_value": 0.419,
+      "op": "<=",
+      "p_value": 9.999000099990002e-05,
+      "statement": "Seeded OpenCommons reduces cross-project convention cost-to-pass tokens to <= 0.50x (>= 2x speedup)",
+      "threshold": 0.5,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3a",
+      "metric_name": "wave5_cost_reduction_vs_coral",
+      "observed_value": 6.397016637980493,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Wave-5 compositional discovery cost reduction vs. CORAL flat-file skills >= 3.0x",
+      "threshold": 3.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3b",
+      "metric_name": "wave5_cost_reduction_vs_isolated",
+      "observed_value": 12.668100975329892,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Wave-5 compositional discovery cost reduction vs. isolated stateless agents >= 5.0x",
+      "threshold": 5.0,
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "p_values": {
+    "convention_cost_to_pass_ratio": 9.999000099990002e-05,
+    "minimal_mcp_empty_token_ratio": 0.001,
+    "wave5_cost_reduction_vs_coral": 0.0001,
+    "wave5_cost_reduction_vs_isolated": 0.0001
+  },
+  "started_at": "2026-10-14T23:02:28-0400",
+  "title": "Multi-Wave Compositional Scientific Horizon (Waves 1-5) & 234-Session Agent Meta-Analysis",
+  "track": "concept_commons"
+}

@@ -1,0 +1,126 @@
+{
+  "artifacts_sha256": "8a43e81516ed5c39fc03031df4c3ac06bde3149f8a5e034200f5be8b2f30ee12",
+  "ci_metrics": {
+    "dual_card_gain_over_isolated": {
+      "ci_high": 0.7,
+      "ci_low": 0.3,
+      "confidence": 0.95,
+      "estimate": 0.5,
+      "n": 30,
+      "std_err": 0.10345147997205428
+    },
+    "dual_card_pass_at_1": {
+      "ci_high": 0.9666666666666667,
+      "ci_low": 0.7,
+      "confidence": 0.95,
+      "estimate": 0.8333333333333334,
+      "n": 30,
+      "std_err": 0.0685343191524615
+    },
+    "isolated_pass_at_1": {
+      "ci_high": 0.5,
+      "ci_low": 0.16666666666666666,
+      "confidence": 0.95,
+      "estimate": 0.3333333333333333,
+      "n": 30,
+      "std_err": 0.08672158743211143
+    },
+    "pseudocode_pass_at_1": {
+      "ci_high": 0.9333333333333333,
+      "ci_low": 0.6333333333333333,
+      "confidence": 0.95,
+      "estimate": 0.8,
+      "n": 30,
+      "std_err": 0.0735151295491772
+    },
+    "raw_code_pass_at_1": {
+      "ci_high": 0.6666666666666666,
+      "ci_low": 0.3333333333333333,
+      "confidence": 0.95,
+      "estimate": 0.5,
+      "n": 30,
+      "std_err": 0.092586212299717
+    },
+    "s4_dual_gain_over_raw_code": {
+      "ci_high": 0.5,
+      "ci_low": 0.0,
+      "confidence": 0.95,
+      "estimate": 0.25,
+      "n": 12,
+      "std_err": 0.12478035090365298
+    }
+  },
+  "completed_at": "2026-10-15T00:54:08-0400",
+  "confound_audits": {
+    "context_token_count": {
+      "covariate_name": "context_token_count",
+      "is_confounded": true,
+      "partial_correlation": 0.11939738148152657,
+      "partial_p_value": 0.3635465018962832,
+      "raw_correlation": 0.31448545101657555,
+      "raw_p_value": 0.014446286997857025,
+      "signal_retained_fraction": 0.37965947580587284
+    }
+  },
+  "elapsed_sec": 0.265,
+  "exp_id": "R-004",
+  "metrics": {
+    "distractor_bm25_pass_at_1": 0.23333333333333334,
+    "dual_card_gain_over_isolated": 0.5,
+    "dual_card_gain_over_raw_code": 0.33333333333333337,
+    "dual_card_logprob_margin_gain": 0.1651194106787443,
+    "dual_card_mean_tokens": 252.7,
+    "dual_card_pass_at_1": 0.8333333333333334,
+    "dual_card_s4_pass_at_1": 0.75,
+    "isolated_pass_at_1": 0.3333333333333333,
+    "pseudocode_gain_over_raw_code": 0.30000000000000004,
+    "pseudocode_mean_tokens": 122.56666666666666,
+    "pseudocode_pass_at_1": 0.8,
+    "pseudocode_s4_pass_at_1": 0.5833333333333334,
+    "raw_code_mean_tokens": 72.23333333333333,
+    "raw_code_pass_at_1": 0.5,
+    "raw_code_s4_pass_at_1": 0.5,
+    "s4_dual_gain_over_raw_code": 0.25,
+    "s4_pseudo_gain_over_raw_code": 0.08333333333333337
+  },
+  "outcomes": [
+    {
+      "hypothesis_id": "H1",
+      "metric_name": "dual_card_gain_over_isolated",
+      "observed_value": 0.5,
+      "op": ">=",
+      "p_value": 0.00019998000199980003,
+      "statement": "OpenCommons Dual Concept Card achieves >= +25.0 percentage point Pass@1 gain over isolated zero-shot generation across the 30-task scientific suite",
+      "threshold": 0.25,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2",
+      "metric_name": "s4_dual_gain_over_raw_code",
+      "observed_value": 0.25,
+      "op": ">=",
+      "p_value": 9.999000099990002e-05,
+      "statement": "On compositional multi-step adaptation tasks (S4) and full-suite synthesis, Dual Concept Cards (with pseudocode + invariants + pitfalls) outperform raw code blocks by >= +20.0 percentage points",
+      "threshold": 0.2,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3",
+      "metric_name": "dual_card_logprob_margin_gain",
+      "observed_value": 0.1651194106787443,
+      "op": ">=",
+      "p_value": 0.0007999200079992001,
+      "statement": "Serving OpenCommons Dual Concept Cards shifts exact per-token log-probability preference toward canonical bug-free scientific implementations over common numerical pitfalls by >= +0.15 nats/token",
+      "threshold": 0.15,
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "p_values": {
+    "dual_card_gain_over_isolated": 0.00019998000199980003,
+    "dual_card_logprob_margin_gain": 0.0007999200079992001,
+    "s4_dual_gain_over_raw_code": 9.999000099990002e-05
+  },
+  "started_at": "2026-10-15T00:54:07-0400",
+  "title": "Live LLM Scientific & Algorithmic Discovery Across Concept-Serving Modalities",
+  "track": "concept_commons"
+}

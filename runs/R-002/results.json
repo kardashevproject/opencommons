@@ -1,0 +1,111 @@
+{
+  "artifacts_sha256": "dc0cbc3f5dfcbed5977cf7120490fb440a0612e452416a3e43497a2a2777eaf1",
+  "ci_metrics": {
+    "bm25_precision_at_5000": {
+      "ci_high": 0.475,
+      "ci_low": 0.175,
+      "confidence": 0.95,
+      "estimate": 0.325,
+      "n": 40,
+      "std_err": 0.0737144567858154
+    },
+    "mean_query_latency_ms_at_5000": {
+      "ci_high": 8.107511457601504,
+      "ci_low": 6.3456401537769125,
+      "confidence": 0.95,
+      "estimate": 7.235181851137895,
+      "n": 40,
+      "std_err": 0.45722780941011876
+    },
+    "probe_precision_at_5000": {
+      "ci_high": 1.0,
+      "ci_low": 1.0,
+      "confidence": 0.95,
+      "estimate": 1.0,
+      "n": 40,
+      "std_err": 0.0
+    },
+    "pseudocode_compression_ratio": {
+      "ci_high": 2.717903346015267,
+      "ci_low": 2.626739091379204,
+      "confidence": 0.95,
+      "estimate": 2.672847805229894,
+      "n": 40,
+      "std_err": 0.02378812034606865
+    }
+  },
+  "completed_at": "2026-10-14T23:05:36-0400",
+  "confound_audits": {
+    "query_length": {
+      "covariate_name": "query_length",
+      "is_confounded": false,
+      "partial_correlation": 0.0,
+      "partial_p_value": 1.0,
+      "raw_correlation": 0.0,
+      "raw_p_value": 1.0,
+      "signal_retained_fraction": 1.0
+    }
+  },
+  "elapsed_sec": 5.8338,
+  "exp_id": "R-002",
+  "metrics": {
+    "bm25_precision_at_5000": 0.325,
+    "mean_query_latency_ms_at_5000": 7.235181851137895,
+    "meta_precision_at_5000": 1.0,
+    "precision_gain_over_bm25": 0.675,
+    "probe_precision_at_5000": 1.0,
+    "pseudocode_compression_ratio": 2.672847805229894,
+    "token_search_reduction_at_5000": 650.5263157894736
+  },
+  "outcomes": [
+    {
+      "hypothesis_id": "H1a",
+      "metric_name": "probe_precision_at_5000",
+      "observed_value": 1.0,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "OpenCommons live I/O-probe Precision@1 at N=5,000 concepts >= 97.5%",
+      "threshold": 0.975,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H1b",
+      "metric_name": "precision_gain_over_bm25",
+      "observed_value": 0.675,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Precision@1 gain over standard BM25 text search at N=5,000 >= +25.0 pts",
+      "threshold": 0.25,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H2",
+      "metric_name": "mean_query_latency_ms_at_5000",
+      "observed_value": 7.235181851137895,
+      "op": "<=",
+      "p_value": 0.0001,
+      "statement": "Mean query latency of OpenCommons with live I/O probes at N=5,000 <= 10.0 ms",
+      "threshold": 10.0,
+      "verdict": "SUPPORTED"
+    },
+    {
+      "hypothesis_id": "H3",
+      "metric_name": "pseudocode_compression_ratio",
+      "observed_value": 2.672847805229894,
+      "op": ">=",
+      "p_value": 0.0001,
+      "statement": "Pseudocode building blocks achieve >= 2.5x token compression over verbose raw code",
+      "threshold": 2.5,
+      "verdict": "SUPPORTED"
+    }
+  ],
+  "p_values": {
+    "mean_query_latency_ms_at_5000": 0.0001,
+    "precision_gain_over_bm25": 0.0001,
+    "probe_precision_at_5000": 0.0001,
+    "pseudocode_compression_ratio": 0.0001
+  },
+  "started_at": "2026-10-14T23:05:30-0400",
+  "title": "Retrieval Precision, Scaling Law (N=50 to 5,000), and Representation Token Compression",
+  "track": "concept_commons"
+}

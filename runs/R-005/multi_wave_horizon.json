@@ -1,0 +1,162 @@
+{
+  "1": {
+    "isolated_agents": {
+      "pass_rate": 0.8,
+      "mean_tokens_k": 26.76,
+      "mean_turns": 6.37,
+      "expected_tokens_per_solve_k": 33.45
+    },
+    "coral_flat_files": {
+      "pass_rate": 0.83,
+      "mean_tokens_k": 45.58,
+      "mean_turns": 9.91,
+      "expected_tokens_per_solve_k": 54.92
+    },
+    "raw_code_mcp": {
+      "pass_rate": 0.85,
+      "mean_tokens_k": 30.48,
+      "mean_turns": 7.43,
+      "expected_tokens_per_solve_k": 35.86
+    },
+    "opencommons_pseudocode": {
+      "pass_rate": 0.89,
+      "mean_tokens_k": 21.08,
+      "mean_turns": 6.2,
+      "expected_tokens_per_solve_k": 23.69
+    },
+    "opencommons_full": {
+      "pass_rate": 0.975,
+      "mean_tokens_k": 19.16,
+      "mean_turns": 5.25,
+      "expected_tokens_per_solve_k": 19.65
+    }
+  },
+  "2": {
+    "isolated_agents": {
+      "pass_rate": 0.575,
+      "mean_tokens_k": 54.74,
+      "mean_turns": 13.03,
+      "expected_tokens_per_solve_k": 95.2
+    },
+    "coral_flat_files": {
+      "pass_rate": 0.69,
+      "mean_tokens_k": 64.94,
+      "mean_turns": 14.12,
+      "expected_tokens_per_solve_k": 94.12
+    },
+    "raw_code_mcp": {
+      "pass_rate": 0.805,
+      "mean_tokens_k": 40.29,
+      "mean_turns": 9.83,
+      "expected_tokens_per_solve_k": 50.05
+    },
+    "opencommons_pseudocode": {
+      "pass_rate": 0.865,
+      "mean_tokens_k": 26.0,
+      "mean_turns": 7.65,
+      "expected_tokens_per_solve_k": 30.05
+    },
+    "opencommons_full": {
+      "pass_rate": 0.89,
+      "mean_tokens_k": 21.89,
+      "mean_turns": 6.0,
+      "expected_tokens_per_solve_k": 24.59
+    }
+  },
+  "3": {
+    "isolated_agents": {
+      "pass_rate": 0.38,
+      "mean_tokens_k": 82.11,
+      "mean_turns": 19.55,
+      "expected_tokens_per_solve_k": 216.07
+    },
+    "coral_flat_files": {
+      "pass_rate": 0.66,
+      "mean_tokens_k": 85.72,
+      "mean_turns": 18.63,
+      "expected_tokens_per_solve_k": 129.87
+    },
+    "raw_code_mcp": {
+      "pass_rate": 0.72,
+      "mean_tokens_k": 49.67,
+      "mean_turns": 12.12,
+      "expected_tokens_per_solve_k": 68.99
+    },
+    "opencommons_pseudocode": {
+      "pass_rate": 0.84,
+      "mean_tokens_k": 31.41,
+      "mean_turns": 9.24,
+      "expected_tokens_per_solve_k": 37.39
+    },
+    "opencommons_full": {
+      "pass_rate": 0.89,
+      "mean_tokens_k": 24.55,
+      "mean_turns": 6.73,
+      "expected_tokens_per_solve_k": 27.59
+    }
+  },
+  "4": {
+    "isolated_agents": {
+      "pass_rate": 0.25,
+      "mean_tokens_k": 108.71,
+      "mean_turns": 25.88,
+      "expected_tokens_per_solve_k": 434.85
+    },
+    "coral_flat_files": {
+      "pass_rate": 0.58,
+      "mean_tokens_k": 106.52,
+      "mean_turns": 23.16,
+      "expected_tokens_per_solve_k": 183.65
+    },
+    "raw_code_mcp": {
+      "pass_rate": 0.67,
+      "mean_tokens_k": 60.13,
+      "mean_turns": 14.67,
+      "expected_tokens_per_solve_k": 89.75
+    },
+    "opencommons_pseudocode": {
+      "pass_rate": 0.755,
+      "mean_tokens_k": 36.14,
+      "mean_turns": 10.63,
+      "expected_tokens_per_solve_k": 47.87
+    },
+    "opencommons_full": {
+      "pass_rate": 0.885,
+      "mean_tokens_k": 27.24,
+      "mean_turns": 7.46,
+      "expected_tokens_per_solve_k": 30.78
+    }
+  },
+  "5": {
+    "isolated_agents": {
+      "pass_rate": 0.305,
+      "mean_tokens_k": 134.69,
+      "mean_turns": 32.07,
+      "expected_tokens_per_solve_k": 441.61
+    },
+    "coral_flat_files": {
+      "pass_rate": 0.565,
+      "mean_tokens_k": 125.99,
+      "mean_turns": 27.39,
+      "expected_tokens_per_solve_k": 223.0
+    },
+    "raw_code_mcp": {
+      "pass_rate": 0.6,
+      "mean_tokens_k": 69.59,
+      "mean_turns": 16.97,
+      "expected_tokens_per_solve_k": 115.99
+    },
+    "opencommons_pseudocode": {
+      "pass_rate": 0.735,
+      "mean_tokens_k": 41.01,
+      "mean_turns": 12.06,
+      "expected_tokens_per_solve_k": 55.8
+    },
+    "opencommons_full": {
+      "pass_rate": 0.865,
+      "mean_tokens_k": 30.15,
+      "mean_turns": 8.26,
+      "expected_tokens_per_solve_k": 34.86
+    }
+  }
+}
