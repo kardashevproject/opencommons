@@ -8,17 +8,17 @@
     ],
     "return_type": "float",
     "summary": "Compute normalized line-offset penalty for fuzzy self-healing file patch anchoring.",
-    "pseudocode": "Algorithm fuzzy_line_anchor_distance(int, int, int) -> float:\n1. Receive typed arguments (int, int, int)\n2. Execute canonical calculation\n3. Return float",
+    "pseudocode": "1. Compute absolute line offset drift = abs(candidate_line - expected_line).\n2. Clamp tolerance window limit = max(1, abs(max_drift)).\n3. Return 0.0 if drift >= limit else 1.0 - drift / limit.",
     "invariants": [
       "0.0 <= out <= 1.0",
       "out == f(expected_line, candidate_line, max_drift)"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "1.0 - abs(candidate_line - expected_line) / max_drift",
+        "failure_mechanism": "Returns negative similarity scores when candidate_line drifts beyond max_drift, corrupting composite patch-anchor ranking.",
+        "counterexample_input": "(100, 10, 20)",
+        "verified_fix": "Return 0.0 whenever drift >= max(1, abs(max_drift))."
       }
     ],
     "source_code": "def fuzzy_line_anchor_distance(candidate_line: int, expected_line: int, max_drift: int) -> float:\n    drift = abs(int(candidate_line) - int(expected_line))\n    limit = max(1, abs(int(max_drift)))\n    if drift >= limit:\n        return 0.0\n    return 1.0 - drift / float(limit)",
@@ -34,17 +34,17 @@
     ],
     "return_type": "int",
     "summary": "Allocate token budget to a context segment proportionally to its relevance weight with a floor reserve.",
-    "pseudocode": "Algorithm context_budget_proportional_alloc(int, float, float, int) -> int:\n1. Receive typed arguments (int, float, float, int)\n2. Execute canonical calculation\n3. Return int",
+    "pseudocode": "1. Clamp total_budget >= 0 and min_floor in [0, total_budget].\n2. Clamp item_weight >= 0.0 and sum_weights >= item_weight; return min_floor if sum_weights <= 0.0.\n3. Compute proportional share round(total_budget * (item_weight / sum_weights)) clamped to [min_floor, total_budget].",
     "invariants": [
       "0 <= out <= max(0, total_budget)",
       "out >= max(0, min(max(0, total_budget), min_floor))"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "max(min_floor, int(total_budget * (item_weight / sum_weights)))",
+        "failure_mechanism": "Exceeds total_budget when min_floor > total_budget or when item_weight > sum_weights due to unnormalized relevance scores.",
+        "counterexample_input": "(100, 5.0, 2.0, 200)",
+        "verified_fix": "Clamp floor_val = min(budget, min_floor) and sw = max(item_weight, sum_weights)."
       }
     ],
     "source_code": "def context_budget_proportional_alloc(total_budget: int, item_weight: float, sum_weights: float, min_floor: int) -> int:\n    budget = max(0, int(total_budget))\n    floor_val = max(0, min(budget, int(min_floor)))\n    w = max(0.0, float(item_weight))\n    sw = max(w, float(sum_weights))\n    if sw <= 0.0:\n        return floor_val\n    raw = int(round(budget * (w / sw)))\n    return max(floor_val, min(budget, raw))",
@@ -60,17 +60,17 @@
     ],
     "return_type": "int",
     "summary": "Compute next state (0=CLOSED, 1=HALF_OPEN, 2=OPEN) of an agent tool circuit breaker.",
-    "pseudocode": "Algorithm circuit_breaker_next_state(int, int, int, bool) -> int:\n1. Receive typed arguments (int, int, int, bool)\n2. Execute canonical calculation\n3. Return int",
+    "pseudocode": "1. Normalize current_state in {0=CLOSED, 1=HALF_OPEN, 2=OPEN} and failure_threshold >= 1.\n2. If OPEN (2), transition to HALF_OPEN (1) iff cooldown_elapsed else remain OPEN (2).\n3. If HALF_OPEN (1), trip to OPEN (2) on any failure (fails > 0) else reset to CLOSED (0); if CLOSED (0), trip to OPEN (2) iff fails >= failure_threshold.",
     "invariants": [
       "0 <= out <= 2",
       "not (current_state == 2 and not cooldown_elapsed) or (out == 2)"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "return 0 if cooldown_elapsed else (2 if consecutive_failures >= failure_threshold else 0)",
+        "failure_mechanism": "Jumps directly from OPEN (2) to CLOSED (0) on cooldown expiry without a single-probe HALF_OPEN (1) check, allowing a still-broken tool to flood errors.",
+        "counterexample_input": "(2, 5, 3, True)",
+        "verified_fix": "Transition OPEN (2) -> HALF_OPEN (1) when cooldown_elapsed is True, and require fails == 0 in HALF_OPEN to close."
       }
     ],
     "source_code": "def circuit_breaker_next_state(current_state: int, consecutive_failures: int, failure_threshold: int, cooldown_elapsed: bool) -> int:\n    state = max(0, min(2, int(current_state)))\n    fails = max(0, int(consecutive_failures))\n    thresh = max(1, int(failure_threshold))\n    if state == 2:\n        return 1 if cooldown_elapsed else 2\n    if state == 1:\n        return 2 if fails > 0 else 0\n    return 2 if fails >= thresh else 0",
@@ -86,17 +86,17 @@
     ],
     "return_type": "float",
     "summary": "Compute Weighted Shortest Job First (WSJF) scheduling priority score for agent task queues.",
-    "pseudocode": "Algorithm task_priority_wsjf_score(float, float, float, float) -> float:\n1. Receive typed arguments (float, float, float, float)\n2. Execute canonical calculation\n3. Return float",
+    "pseudocode": "1. Clamp cost-of-delay components user_value, time_criticality, and risk_reduction to >= 0.0.\n2. Clamp job_duration to at least 0.1 to prevent sub-unit duration explosion.\n3. Return (user_value + time_criticality + risk_reduction) / job_duration.",
     "invariants": [
       "out >= 0.0",
       "f(0.0, 0.0, 0.0, job_duration) == 0.0"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "(user_value + time_criticality + risk_reduction) / job_duration",
+        "failure_mechanism": "Zero or near-zero job_duration estimates cause WSJF priority to explode to infinity or raise ZeroDivisionError.",
+        "counterexample_input": "(5.0, 3.0, 2.0, 0.0)",
+        "verified_fix": "Clamp job_duration with max(0.1, abs(float(job_duration)))."
       }
     ],
     "source_code": "def task_priority_wsjf_score(user_value: float, time_criticality: float, risk_reduction: float, job_duration: float) -> float:\n    uv = max(0.0, float(user_value))\n    tc = max(0.0, float(time_criticality))\n    rr = max(0.0, float(risk_reduction))\n    dur = max(0.1, abs(float(job_duration)))\n    return (uv + tc + rr) / dur",
@@ -110,17 +110,17 @@
     ],
     "return_type": "float",
     "summary": "Compute total critical-path latency across sequential dependency stages with parallel stage max durations.",
-    "pseudocode": "Algorithm critical_path_duration(list[float], float) -> float:\n1. Receive typed arguments (list[float], float)\n2. Execute canonical calculation\n3. Return float",
+    "pseudocode": "1. Clamp per-stage orchestration overhead ov = max(0.0, overhead_per_stage).\n2. Clamp each stage duration in stage_max_durations to >= 0.0; return 0.0 if stage list is empty.\n3. Return sum(stage_durations) + len(stage_durations) * ov.",
     "invariants": [
       "out >= 0.0",
       "f([], overhead_per_stage) == 0.0"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "sum(stage_max_durations) + overhead_per_stage",
+        "failure_mechanism": "Adds handoff overhead only once instead of per sequential stage and returns non-zero duration on an empty stage list.",
+        "counterexample_input": "([], 2.5)",
+        "verified_fix": "Return 0.0 when stage_max_durations is empty, otherwise add len(pos) * ov."
       }
     ],
     "source_code": "def critical_path_duration(stage_max_durations: list[float], overhead_per_stage: float) -> float:\n    ov = max(0.0, float(overhead_per_stage))\n    pos = [max(0.0, float(d)) for d in stage_max_durations]\n    if not pos:\n        return 0.0\n    return sum(pos) + len(pos) * ov",
@@ -135,17 +135,17 @@
     ],
     "return_type": "int",
     "summary": "Compute minimum parallel execution waves required for n tasks given maximum concurrency width.",
-    "pseudocode": "Algorithm topological_task_waves(int, int, int) -> int:\n1. Receive typed arguments (int, int, int)\n2. Execute canonical calculation\n3. Return int",
+    "pseudocode": "1. Return 0 if num_tasks <= 0; clamp max_parallel_workers >= 1 and serial_bottlenecks in [0, num_tasks].\n2. Subtract serial_bottlenecks from num_tasks to obtain parallelizable tasks.\n3. Return serial_bottlenecks + ceil(parallelizable / max_parallel_workers).",
     "invariants": [
       "out >= 0",
       "f(0, max_parallel_workers, serial_bottlenecks) == 0"
     ],
     "pitfalls": [
       {
-        "naive_pattern": "Unclamped division or unguarded zero/negative denominator in agent telemetry.",
-        "failure_mechanism": "ZeroDivisionError or out-of-bounds score on degenerate inputs.",
-        "counterexample_input": "0",
-        "verified_fix": "Clamp denominator and domain boundaries before arithmetic evaluation."
+        "naive_pattern": "(num_tasks + max_parallel_workers - 1) // max_parallel_workers",
+        "failure_mechanism": "Ignores sequential dependency bottlenecks that cannot be parallelized across workers, underestimating minimum wave count.",
+        "counterexample_input": "(6, 4, 3)",
+        "verified_fix": "Separate serial_bottlenecks from parallelizable = tasks - serial and add serial + ceil(parallelizable / workers)."
       }
     ],
     "source_code": "def topological_task_waves(num_tasks: int, max_parallel_workers: int, serial_bottlenecks: int) -> int:\n    tasks = max(0, int(num_tasks))\n    if tasks == 0:\n        return 0\n    workers = max(1, abs(int(max_parallel_workers)))\n    serial = max(0, min(tasks, int(serial_bottlenecks)))\n    parallelizable = tasks - serial\n    parallel_waves = (parallelizable + workers - 1) // workers\n    return serial + parallel_waves",
