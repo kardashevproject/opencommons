@@ -1,0 +1,1111 @@
+[
+  {
+    "name": "andoyer_lambert_geodesic_distance",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Andoyer-Lambert formula calculating geodesic ellipsoidal distance on reference ellipsoid.",
+    "pseudocode": "1. Convert latitudes and longitudes from degrees to radians.\n2. Compute parametric midpoint differences F, G, L.\n3. Solve for spherical angle omega and ellipsoidal correction term.\n4. Return geodesic distance in meters.",
+    "invariants": [
+      "Calculated geodesic distance is non-negative: d >= 0.0.",
+      "Zero distance when starting and destination coordinates are identical."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "d = 2.0 * a * math.asin(math.sqrt(s_val))",
+        "failure_mechanism": "Omitting ellipsoidal flattening introduces up to 20 km error on trans-oceanic routes.",
+        "counterexample_input": "lat1=0.0, lon1=0.0, lat2=60.0, lon2=120.0, a=6378137.0, f=0.0033528",
+        "verified_fix": "Incorporate first-order flattening correction terms h1 and h2."
+      }
+    ],
+    "source_code": "def andoyer_lambert_geodesic_distance(lat1: float, lon1: float, lat2: float, lon2: float, a: float, f: float) -> float:\n    rad = 0.01745329\n    phi1, phi2 = (lat1 * rad, lat2 * rad)\n    f_mid = (phi1 + phi2) * 0.5\n    g_mid = (phi1 - phi2) * 0.5\n    l_mid = (lon1 - lon2) * rad * 0.5\n    sin_g, cos_g = (math.sin(g_mid), math.cos(g_mid))\n    sin_f, cos_f = (math.sin(f_mid), math.cos(f_mid))\n    sin_l, cos_l = (math.sin(l_mid), math.cos(l_mid))\n    s_val = (sin_g * cos_l) ** 2 + (cos_f * sin_l) ** 2\n    c_val = (cos_g * cos_l) ** 2 + (sin_f * sin_l) ** 2\n    if s_val == 0.0:\n        return 0.0\n    omega = math.atan(math.sqrt(s_val / max(1e-15, c_val)))\n    r_val = math.sqrt(s_val * c_val) / max(1e-15, omega)\n    d_val = 2.0 * omega * a\n    h1 = (3.0 * r_val - 1.0) / (2.0 * max(1e-15, c_val))\n    h2 = (3.0 * r_val + 1.0) / (2.0 * max(1e-15, s_val))\n    corr = 1.0 + f * (h1 * (sin_f * cos_g) ** 2 - h2 * (cos_f * sin_g) ** 2)\n    return max(0.0, d_val * corr)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "great_circle_destination_latlon",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Great-circle direct navigation formula computing destination latitude and longitude given starting point, bearing, and distance.",
+    "pseudocode": "1. Convert starting coordinates and bearing to radians.\n2. Compute angular distance delta = distance / radius.\n3. Compute target spherical latitude and longitude.\n4. Return normalized (dest_lat_deg, dest_lon_deg).",
+    "invariants": [
+      "Latitude is bounded in range [-90.0, 90.0].",
+      "Longitude is normalized in range [-180.0, 180.0)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dest_lat = lat1 + (dist / R) * math.cos(bearing)",
+        "failure_mechanism": "Planar/flat approximation produces dozens of kilometers of distortion across long distances.",
+        "counterexample_input": "lat1=60.0, lon1=0.0, bearing_deg=45.0, distance_km=1000.0, radius_km=6371.0",
+        "verified_fix": "Use spherical trigonometry destination formulation."
+      }
+    ],
+    "source_code": "def great_circle_destination_latlon(lat1: float, lon1: float, bearing_deg: float, distance_km: float, radius_km: float) -> tuple[float, float]:\n    rad = 0.01745329\n    deg = 57.29578\n    p1 = lat1 * rad\n    l1 = lon1 * rad\n    th = bearing_deg * rad\n    r = max(1.0, radius_km)\n    d = max(0.0, distance_km) / r\n    sin_p1, cos_p1 = (math.sin(p1), math.cos(p1))\n    sin_d, cos_d = (math.sin(d), math.cos(d))\n    sin_p2 = sin_p1 * cos_d + cos_p1 * sin_d * math.cos(th)\n    p2 = math.asin(max(-1.0, min(1.0, sin_p2)))\n    y = math.sin(th) * sin_d * cos_p1\n    x = cos_d - sin_p1 * sin_p2\n    l2 = l1 + math.atan2(y, x)\n    lat_out = p2 * deg\n    lon_out = (l2 * deg + 180.0) % 360.0 - 180.0\n    return (max(-90.0, min(90.0, lat_out)), lon_out)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "great_circle_bearing",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Initial great-circle navigation forward bearing from point 1 to point 2.",
+    "pseudocode": "1. Convert latitudes and longitudes from degrees to radians.\n2. Compute spherical navigation offsets y and x.\n3. Compute atan2(y, x) and convert to degrees.\n4. Normalize bearing into range [0.0, 360.0).",
+    "invariants": [
+      "Initial bearing is bounded in range [0.0, 360.0).",
+      "Invariant under uniform longitudinal translation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "bearing = math.atan2(lat2 - lat1, lon2 - lon1)",
+        "failure_mechanism": "Planar arctangent produces up to 90 degrees bearing error near polar latitudes.",
+        "counterexample_input": "lat1=60.0, lon1=0.0, lat2=60.0, lon2=10.0",
+        "verified_fix": "Use spherical navigation formula: atan2(sin(dlon)*cos(lat2), cos(lat1)*sin(lat2) - sin(lat1)*cos(lat2)*cos(dlon))."
+      }
+    ],
+    "source_code": "def great_circle_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:\n    rad = 0.01745329\n    deg = 57.29578\n    phi1 = float(lat1) * rad\n    phi2 = float(lat2) * rad\n    dlon = (float(lon2) - float(lon1)) * rad\n    y = math.sin(dlon) * math.cos(phi2)\n    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlon)\n    b = math.atan2(y, x) * deg\n    res = (b + 360.0) % 360.0\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "cross_track_distance_km",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Spherical signed cross-track distance from a point to a great circle flight corridor.",
+    "pseudocode": "1. Compute angular distance d13 between path start A and point P.\n2. Compute bearing theta13 from A to P and path bearing theta12 from A to B.\n3. Compute cross-track distance as asin(sin(d13) * sin(theta13 - theta12)) * R.\n4. Return signed cross-track distance (positive right, negative left).",
+    "invariants": [
+      "Cross-track distance is strictly zero when point lies on great circle path.",
+      "Absolute distance is bounded by pi * radius / 2."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "xtd = math.asin(math.sin(d13) * math.sin(theta_diff)) * radius",
+        "failure_mechanism": "Floating point rounding causing sin argument > 1.0 triggers ValueError in asin.",
+        "counterexample_input": "lat_p=0.0, lon_p=90.0, lat_a=0.0, lon_a=0.0, lat_b=0.0, lon_b=10.0, radius=6371.0",
+        "verified_fix": "Clamp argument of asin to range [-1.0, 1.0]."
+      }
+    ],
+    "source_code": "def cross_track_distance_km(lat_p: float, lon_p: float, lat_a: float, lon_a: float, lat_b: float, lon_b: float, radius: float) -> float:\n    rad = 0.01745329\n    r = max(1.0, float(radius))\n    phi1 = float(lat_a) * rad\n    phi3 = float(lat_p) * rad\n    dphi = phi3 - phi1\n    dlam = (float(lon_p) - float(lon_a)) * rad\n    hav = math.sin(dphi * 0.5) ** 2 + math.cos(phi1) * math.cos(phi3) * math.sin(dlam * 0.5) ** 2\n    d13 = 2.0 * math.atan2(math.sqrt(max(0.0, min(1.0, hav))), math.sqrt(max(0.0, 1.0 - hav)))\n    y13 = math.sin(dlam) * math.cos(phi3)\n    x13 = math.cos(phi1) * math.sin(phi3) - math.sin(phi1) * math.cos(phi3) * math.cos(dlam)\n    theta13 = math.atan2(y13, x13)\n    phi2 = float(lat_b) * rad\n    dlam12 = (float(lon_b) - float(lon_a)) * rad\n    y12 = math.sin(dlam12) * math.cos(phi2)\n    x12 = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlam12)\n    theta12 = math.atan2(y12, x12)\n    sin_xtd = math.sin(d13) * math.sin(theta13 - theta12)\n    clamped_sin = max(-1.0, min(1.0, sin_xtd))\n    xtd = math.asin(clamped_sin) * r\n    return xtd",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "along_track_distance_km",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Great-circle along-track distance from corridor start to the point of closest approach.",
+    "pseudocode": "1. Compute distance d13 from start point A to target point P.\n2. Compute cross-track distance xtd.\n3. Compute along-track angular distance via spherical cosine rule: acos(cos(d13) / cos(xtd)).\n4. Multiply by Earth radius and return.",
+    "invariants": [
+      "Along-track distance is non-negative when point is ahead of start.",
+      "Satisfies spherical Pythagorean theorem: cos(d13) == cos(xtd) * cos(atd)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "atd = math.sqrt(d13**2 - xtd**2)",
+        "failure_mechanism": "Planar Pythagorean theorem fails on spherical geodesics, causing large navigation errors.",
+        "counterexample_input": "lat_p=30.0, lon_p=30.0, lat_a=0.0, lon_a=0.0, lat_b=0.0, lon_b=60.0, radius=6371.0",
+        "verified_fix": "Use spherical cosine rule: acos(cos(d13) / cos(xtd/R))."
+      }
+    ],
+    "source_code": "def along_track_distance_km(lat_p: float, lon_p: float, lat_a: float, lon_a: float, lat_b: float, lon_b: float, radius: float) -> float:\n    rad = 0.01745329\n    r = max(1.0, float(radius))\n    phi1 = float(lat_a) * rad\n    phi3 = float(lat_p) * rad\n    dphi = phi3 - phi1\n    dlam = (float(lon_p) - float(lon_a)) * rad\n    hav = math.sin(dphi * 0.5) ** 2 + math.cos(phi1) * math.cos(phi3) * math.sin(dlam * 0.5) ** 2\n    d13 = 2.0 * math.atan2(math.sqrt(max(0.0, min(1.0, hav))), math.sqrt(max(0.0, 1.0 - hav)))\n    y13 = math.sin(dlam) * math.cos(phi3)\n    x13 = math.cos(phi1) * math.sin(phi3) - math.sin(phi1) * math.cos(phi3) * math.cos(dlam)\n    theta13 = math.atan2(y13, x13)\n    phi2 = float(lat_b) * rad\n    dlam12 = (float(lon_b) - float(lon_a)) * rad\n    y12 = math.sin(dlam12) * math.cos(phi2)\n    x12 = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlam12)\n    theta12 = math.atan2(y12, x12)\n    sin_xtd = math.sin(d13) * math.sin(theta13 - theta12)\n    delta_xt = math.asin(max(-1.0, min(1.0, sin_xtd)))\n    cos_at = math.cos(d13) / max(1e-12, math.cos(delta_xt))\n    atd = math.acos(max(-1.0, min(1.0, cos_at))) * r\n    return atd",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "intermediate_point_geodesic",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Interpolates spherical waypoint coordinates at fraction f along a great circle path.",
+    "pseudocode": "1. Convert end point coordinates to radians.\n2. Compute angular distance d between points.\n3. Compute spherical interpolation coefficients A = sin((1-f)*d)/sin(d), B = sin(f*d)/sin(d).\n4. Return interpolated (latitude_deg, longitude_deg).",
+    "invariants": [
+      "f=0.0 returns exactly start point; f=1.0 returns exactly destination.",
+      "Interpolated waypoint lies strictly on the great circle arc."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lat = lat1 + f * (lat2 - lat1); lon = lon1 + f * (lon2 - lon1)",
+        "failure_mechanism": "Linear interpolation deviates drastically from great circle arc on long trans-oceanic legs.",
+        "counterexample_input": "lat1=0.0, lon1=0.0, lat2=60.0, lon2=120.0, f_frac=0.5",
+        "verified_fix": "Use spherical Slerp coefficients A and B based on angular distance."
+      }
+    ],
+    "source_code": "def intermediate_point_geodesic(lat1: float, lon1: float, lat2: float, lon2: float, f_frac: float) -> tuple[float, float]:\n    rad = 0.01745329\n    deg = 57.29578\n    f = max(0.0, min(1.0, float(f_frac)))\n    phi1 = float(lat1) * rad\n    lam1 = float(lon1) * rad\n    phi2 = float(lat2) * rad\n    lam2 = float(lon2) * rad\n    dphi = phi2 - phi1\n    dlam = lam2 - lam1\n    hav = math.sin(dphi * 0.5) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam * 0.5) ** 2\n    d = 2.0 * math.atan2(math.sqrt(max(0.0, min(1.0, hav))), math.sqrt(max(0.0, 1.0 - hav)))\n    if d < 1e-12:\n        return (float(lat1), float(lon1))\n    sin_d = math.sin(d)\n    a = math.sin((1.0 - f) * d) / sin_d\n    b = math.sin(f * d) / sin_d\n    x = a * math.cos(phi1) * math.cos(lam1) + b * math.cos(phi2) * math.cos(lam2)\n    y = a * math.cos(phi1) * math.sin(lam1) + b * math.cos(phi2) * math.sin(lam2)\n    z = a * math.sin(phi1) + b * math.sin(phi2)\n    phi_i = math.atan2(z, math.sqrt(x * x + y * y))\n    lam_i = math.atan2(y, x)\n    return (phi_i * deg, (lam_i * deg + 540.0) % 360.0 - 180.0)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "ecef_to_geodetic_bowring",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Bowring's closed-form algorithm for converting Earth-Centered Earth-Fixed (ECEF) Cartesian coordinates to geodetic lat/lon/height.",
+    "pseudocode": "1. Compute equatorial radius p = sqrt(x^2 + y^2).\n2. Compute parametric latitude theta using Bowring closed form.\n3. Solve for geodetic latitude phi and longitude lambda.\n4. Compute ellipsoidal height h. Return (lat_deg, lon_deg, h_m).",
+    "invariants": [
+      "Latitude is bounded within [-90.0, 90.0].",
+      "Sub-millimeter accuracy up to satellite altitudes without iteration."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lat = math.atan2(z, math.sqrt(x**2 + y**2))",
+        "failure_mechanism": "Spherical approximation causes up to 21 kilometers of latitude error on WGS-84 ellipsoid.",
+        "counterexample_input": "x=3800000.0, y=1000000.0, z=5000000.0, a=6378137.0, b=6356752.3142",
+        "verified_fix": "Use Bowring parametric formulation with eccentricity squared e^2 and e'^2."
+      }
+    ],
+    "source_code": "def ecef_to_geodetic_bowring(x: float, y: float, z: float, a: float, b: float) -> tuple[float, float, float]:\n    px = float(x)\n    py = float(y)\n    pz = float(z)\n    a_axis = max(1.0, float(a))\n    b_axis = max(1.0, float(b))\n    e2 = (a_axis * a_axis - b_axis * b_axis) / (a_axis * a_axis)\n    e_prime2 = (a_axis * a_axis - b_axis * b_axis) / (b_axis * b_axis)\n    p = math.sqrt(px * px + py * py)\n    deg = 57.29578\n    if p < 1e-06:\n        lat = 90.0 if pz >= 0.0 else -90.0\n        return (lat, 0.0, abs(pz) - b_axis)\n    theta = math.atan2(pz * a_axis, p * b_axis)\n    sin_th = math.sin(theta)\n    cos_th = math.cos(theta)\n    phi = math.atan2(pz + e_prime2 * b_axis * sin_th ** 3, p - e2 * a_axis * cos_th ** 3)\n    lam = math.atan2(py, px)\n    sin_phi = math.sin(phi)\n    n_rad = a_axis / math.sqrt(1.0 - e2 * sin_phi * sin_phi)\n    h = p / math.cos(phi) - n_rad\n    return (phi * deg, lam * deg, h)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "geodetic_to_ecef",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Forward conversion from geodetic coordinates (latitude, longitude, height) to Cartesian ECEF.",
+    "pseudocode": "1. Convert latitude and longitude to radians.\n2. Compute prime vertical radius of curvature N(phi).\n3. Compute Cartesian X, Y, Z coordinates.\n4. Return (X_m, Y_m, Z_m).",
+    "invariants": [
+      "Exact analytic transform reversible via ecef_to_geodetic_bowring.",
+      "X^2 + Y^2 + Z^2 approximates squared physical Earth radius plus altitude."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x = (a + h) * math.cos(lat) * math.cos(lon)",
+        "failure_mechanism": "Fails to scale radius by prime vertical curvature N, causing miles of altitude distortion.",
+        "counterexample_input": "lat=45.0, lon=9.0, h=100.0, a=6378137.0, f=0.0033528",
+        "verified_fix": "Scale horizontal coordinates by (N + h) and vertical by (N * (1 - e^2) + h)."
+      }
+    ],
+    "source_code": "def geodetic_to_ecef(lat: float, lon: float, h: float, a: float, f: float) -> tuple[float, float, float]:\n    rad = 0.01745329\n    phi = float(lat) * rad\n    lam = float(lon) * rad\n    alt = float(h)\n    a_axis = max(1.0, float(a))\n    flat = max(0.0, min(0.1, float(f)))\n    e2 = 2.0 * flat - flat * flat\n    sin_phi = math.sin(phi)\n    cos_phi = math.cos(phi)\n    n = a_axis / math.sqrt(1.0 - e2 * sin_phi * sin_phi)\n    x = (n + alt) * cos_phi * math.cos(lam)\n    y = (n + alt) * cos_phi * math.sin(lam)\n    z = (n * (1.0 - e2) + alt) * sin_phi\n    return (x, y, z)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "enu_to_ecef_rotation",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Rotates local East-North-Up (ENU) tangent plane vector into ECEF coordinate frame.",
+    "pseudocode": "1. Convert reference origin latitude and longitude to radians.\n2. Construct 3x3 orthonormal rotation matrix from ENU to ECEF.\n3. Multiply ENU vector by rotation matrix.\n4. Return (dx_ecef, dy_ecef, dz_ecef).",
+    "invariants": [
+      "Isometry: preserves vector Euclidean length exactly (||ECEF|| == ||ENU||).",
+      "Orthonormal transformation with determinant equal to 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dx = -math.sin(lon)*e; dy = math.cos(lon)*n; dz = u",
+        "failure_mechanism": "Omits latitude cross-terms in rotation matrix, causing coordinate tilting.",
+        "counterexample_input": "e=10.0, n=20.0, u=30.0, ref_lat=45.0, ref_lon=10.0",
+        "verified_fix": "Apply full 3D Euler rotation matrix incorporating both ref_lat and ref_lon."
+      }
+    ],
+    "source_code": "def enu_to_ecef_rotation(e: float, n: float, u: float, ref_lat: float, ref_lon: float) -> tuple[float, float, float]:\n    rad = 0.01745329\n    phi = float(ref_lat) * rad\n    lam = float(ref_lon) * rad\n    sin_phi = math.sin(phi)\n    cos_phi = math.cos(phi)\n    sin_lam = math.sin(lam)\n    cos_lam = math.cos(lam)\n    ve = float(e)\n    vn = float(n)\n    vu = float(u)\n    dx = -sin_lam * ve - sin_phi * cos_lam * vn + cos_phi * cos_lam * vu\n    dy = cos_lam * ve - sin_phi * sin_lam * vn + cos_phi * sin_lam * vu\n    dz = cos_phi * vn + sin_phi * vu\n    return (dx, dy, dz)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "utm_forward_projection_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Universal Transverse Mercator (UTM) forward conformal projection step to Easting and Northing coordinates.",
+    "pseudocode": "1. Compute central meridian offset delta_lon in radians.\n2. Compute meridional arc distance M.\n3. Apply Transverse Mercator series expansions for Easting and Northing.\n4. Add 500,000m false easting and return (Easting, Northing).",
+    "invariants": [
+      "Conformal mapping: preserves local angles and infinitesimal shapes.",
+      "False easting of 500,000 meters guarantees positive easting values across standard 6-degree zone."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "easting = a * delta_lon * math.cos(lat)",
+        "failure_mechanism": "Omits UTM false easting and higher-order series curvature terms.",
+        "counterexample_input": "lat=45.0, lon=9.0, lon0=9.0, a=6378137.0, f=0.0033528",
+        "verified_fix": "Add 500,000m false easting and apply UTM scale factor k0=0.9996."
+      }
+    ],
+    "source_code": "def utm_forward_projection_step(lat: float, lon: float, lon0: float, a: float, f: float) -> tuple[float, float]:\n    rad = 0.01745329\n    phi = float(lat) * rad\n    lam = float(lon) * rad\n    lam0 = float(lon0) * rad\n    a_axis = max(1.0, float(a))\n    flat = max(0.0, min(0.1, float(f)))\n    e2 = 2.0 * flat - flat * flat\n    k0 = 0.9996\n    dlam = lam - lam0\n    sin_phi = math.sin(phi)\n    cos_phi = math.cos(phi)\n    tan_phi = math.tan(phi)\n    n = a_axis / math.sqrt(1.0 - e2 * sin_phi * sin_phi)\n    t = tan_phi * tan_phi\n    c = e2 / (1.0 - e2) * cos_phi * cos_phi\n    al = cos_phi * dlam\n    m = a_axis * ((1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0) * phi - (3.0 * e2 / 8.0 + 3.0 * e2 * e2 / 32.0) * math.sin(2.0 * phi) + 15.0 * e2 * e2 / 256.0 * math.sin(4.0 * phi))\n    easting = 500000.0 + k0 * n * (al + (1.0 - t + c) * al ** 3 / 6.0)\n    northing = k0 * (m + n * tan_phi * (al ** 2 / 2.0 + (5.0 - t + 9.0 * c + 4.0 * c * c) * al ** 4 / 24.0))\n    if phi < 0.0:\n        northing += 10000000.0\n    return (easting, northing)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "web_mercator_latlon_to_xy",
+    "param_types": [
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "EPSG:3857 Web Mercator coordinate projection from WGS-84 lat/lon to pixel coordinates at zoom level.",
+    "pseudocode": "1. Clamp latitude to valid Web Mercator bounds [-85.051129, 85.051129].\n2. Compute normalized x in range [0, 1] from longitude.\n3. Compute normalized y using log-tangent Mercator formula.\n4. Scale by map tile dimension 256 * 2^zoom and return (pixel_x, pixel_y).",
+    "invariants": [
+      "Square coordinate space: extent is [0, 256 * 2^zoom] on both axes.",
+      "Conformal cylindrical projection preserving angles locally."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "y = math.log(math.tan(math.pi/4 + lat/2))",
+        "failure_mechanism": "Latitudes beyond 85.051129 degrees produce infinite or out-of-bounds pixel coordinates.",
+        "counterexample_input": "lat=89.0, lon=0.0, zoom=5",
+        "verified_fix": "Clamp latitude to [-85.051129, 85.051129] before projection."
+      }
+    ],
+    "source_code": "def web_mercator_latlon_to_xy(lat: float, lon: float, zoom: int) -> tuple[float, float]:\n    z = max(0, min(24, int(zoom)))\n    clamped_lat = max(-85.05112878, min(85.05112878, float(lat)))\n    clamped_lon = max(-180.0, min(180.0, float(lon)))\n    rad = 0.01745329\n    phi = clamped_lat * rad\n    size = 256.0 * float(1 << z)\n    x = (clamped_lon + 180.0) / 360.0 * size\n    sin_phi = math.sin(phi)\n    y = (0.5 - math.log((1.0 + sin_phi) / (1.0 - sin_phi)) / (4.0 * 3.1415927)) * size\n    return (max(0.0, min(size, x)), max(0.0, min(size, y)))",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "web_mercator_xy_to_latlon",
+    "param_types": [
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "EPSG:3857 Web Mercator inverse projection from pixel coordinates to WGS-84 lat/lon.",
+    "pseudocode": "1. Normalize pixel coordinates by map dimension 256 * 2^zoom.\n2. Convert normalized x linearly to longitude in [-180, 180].\n3. Invert log-tangent Mercator formula to recover latitude.\n4. Return (lat_deg, lon_deg).",
+    "invariants": [
+      "Exact inverse of web_mercator_latlon_to_xy.",
+      "Output latitude is bounded within [-85.051129, 85.051129]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lat = (2 * math.atan(math.exp(y)) - math.pi/2) * (180 / math.pi)",
+        "failure_mechanism": "Fails to normalize Y by map dimension size first, returning nonsensical latitude.",
+        "counterexample_input": "x=128.0, y=128.0, zoom=0",
+        "verified_fix": "Normalize y to [0, 1] range: y_norm = 0.5 - y / map_size."
+      }
+    ],
+    "source_code": "def web_mercator_xy_to_latlon(x: float, y: float, zoom: int) -> tuple[float, float]:\n    z = max(0, min(24, int(zoom)))\n    size = 256.0 * float(1 << z)\n    norm_x = max(0.0, min(1.0, float(x) / size))\n    norm_y = max(0.0, min(1.0, float(y) / size))\n    deg = 57.29578\n    lon = norm_x * 360.0 - 180.0\n    y2 = 3.1415927 - 2.0 * 3.1415927 * norm_y\n    lat = deg * math.atan(math.sinh(y2))\n    return (max(-85.05112878, min(85.05112878, lat)), lon)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "point_in_polygon_ray_casting",
+    "param_types": [
+      "float",
+      "float",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "bool",
+    "summary": "Jordan curve theorem ray-casting point-in-polygon predicate counting edge crossings.",
+    "pseudocode": "1. Check polygon has at least 3 vertices.\n2. Cast a horizontal ray to the right from test point (px, py).\n3. For each polygon edge, test if ray intersects segment.\n4. Toggle inside flag on each intersection; return final boolean.",
+    "invariants": [
+      "Odd number of ray crossings indicates point is inside polygon.",
+      "Handles non-convex and self-intersecting simple polygons."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if (yi >= py and yj < py) or (yj >= py and yi < py):",
+        "failure_mechanism": "Ray passing through exact vertex is double-counted if inequalities are not half-open.",
+        "counterexample_input": "px=0.5, py=0.0, poly_x=[0.0, 1.0, 0.5], poly_y=[0.0, 0.0, 1.0]",
+        "verified_fix": "Use strict half-open interval rule: (yi > py) != (yj > py)."
+      }
+    ],
+    "source_code": "def point_in_polygon_ray_casting(px: float, py: float, poly_x: list[float], poly_y: list[float]) -> bool:\n    n = min(len(poly_x), len(poly_y))\n    if n < 3:\n        return False\n    inside = False\n    x = float(px)\n    y = float(py)\n    j = n - 1\n    for i in range(n):\n        xi = poly_x[i]\n        yi = poly_y[i]\n        xj = poly_x[j]\n        yj = poly_y[j]\n        if (yi > y) != (yj > y):\n            slope = (xj - xi) / max(1e-12, yj - yi)\n            if x < xi + slope * (y - yi):\n                inside = not inside\n        j = i\n    return inside",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "point_in_polygon_winding_number",
+    "param_types": [
+      "float",
+      "float",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "bool",
+    "summary": "Winding number point-in-polygon algorithm robust against overlapping complex boundaries.",
+    "pseudocode": "1. Initialize winding number to zero.\n2. For each edge, check whether edge crosses ray upward or downward.\n3. Evaluate counter-clockwise orientation cross product.\n4. Increment or decrement winding number; return wn != 0.",
+    "invariants": [
+      "Winding number != 0 indicates point lies in interior.",
+      "Immune to edge cases where ray passes along collinear polygon edges."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if cross_product > 0: wn += 1",
+        "failure_mechanism": "Fails to verify edge strictly crosses the horizontal ray altitude, producing bogus winding counts.",
+        "counterexample_input": "px=10.0, py=10.0, poly_x=[0.0, 1.0, 1.0, 0.0], poly_y=[0.0, 0.0, 1.0, 1.0]",
+        "verified_fix": "Only test cross product when edge endpoints bracket point y coordinate."
+      }
+    ],
+    "source_code": "def point_in_polygon_winding_number(px: float, py: float, poly_x: list[float], poly_y: list[float]) -> bool:\n    n = min(len(poly_x), len(poly_y))\n    if n < 3:\n        return False\n    x = float(px)\n    y = float(py)\n    wn = 0\n    for i in range(n):\n        x1 = poly_x[i]\n        y1 = poly_y[i]\n        idx_next = (i + 1) % n\n        x2 = poly_x[idx_next]\n        y2 = poly_y[idx_next]\n        if y1 <= y:\n            if y2 > y:\n                cross = (x2 - x1) * (y - y1) - (x - x1) * (y2 - y1)\n                if cross > 0.0:\n                    wn += 1\n        elif y2 <= y:\n            cross = (x2 - x1) * (y - y1) - (x - x1) * (y2 - y1)\n            if cross < 0.0:\n                wn -= 1\n    res = wn != 0\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "polygon_shoelace_area",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Gauss shoelace formula calculating exact planar area of a simple 2D polygon.",
+    "pseudocode": "1. Ensure polygon has at least 3 vertices.\n2. Accumulate cross determinants xs[i] * ys[i+1] - xs[i+1] * ys[i].\n3. Take absolute value of cross sum.\n4. Multiply by 0.5 and return non-negative area.",
+    "invariants": [
+      "Area is strictly non-negative: result >= 0.0.",
+      "Invariant under vertex cyclic permutation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "area = sum(xs[i] * ys[i+1] - xs[i+1] * ys[i] for i in range(n-1))",
+        "failure_mechanism": "Fails to close polygon between last vertex and first vertex, missing final triangle.",
+        "counterexample_input": "xs=[0.0, 4.0, 4.0, 0.0], ys=[0.0, 0.0, 4.0, 4.0]",
+        "verified_fix": "Wrap index with modulo n: (i + 1) % n."
+      }
+    ],
+    "source_code": "def polygon_shoelace_area(xs: list[float], ys: list[float]) -> float:\n    n = min(len(xs), len(ys))\n    if n < 3:\n        return 0.0\n    cross_sum = 0.0\n    for i in range(n):\n        j = (i + 1) % n\n        cross_sum += xs[i] * ys[j] - xs[j] * ys[i]\n    area = 0.5 * abs(cross_sum)\n    return area",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "polygon_centroid_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Area-weighted center of mass (centroid) coordinates of a simple 2D planar polygon.",
+    "pseudocode": "1. Compute polygon signed area via shoelace sum.\n2. Accumulate area-weighted moment sums for x and y.\n3. Divide moment sums by 6 * signed_area.\n4. Return (centroid_x, centroid_y).",
+    "invariants": [
+      "Centroid of convex polygon lies strictly inside the polygon interior.",
+      "Invariant under rigid-body translation and rotation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (sum(xs) / len(xs), sum(ys) / len(ys))",
+        "failure_mechanism": "Vertex average is biased by dense clusters of collinear vertices.",
+        "counterexample_input": "xs=[0.0, 1.0, 2.0, 3.0, 3.0, 0.0], ys=[0.0, 0.0, 0.0, 0.0, 2.0, 2.0]",
+        "verified_fix": "Compute integral area-weighted centroid using shoelace moments."
+      }
+    ],
+    "source_code": "def polygon_centroid_2d(xs: list[float], ys: list[float]) -> tuple[float, float]:\n    n = min(len(xs), len(ys))\n    if n < 3:\n        if n == 0:\n            return (0.0, 0.0)\n        return (sum(xs) / float(n), sum(ys) / float(n))\n    signed_area = 0.0\n    cx = 0.0\n    cy = 0.0\n    for i in range(n):\n        j = (i + 1) % n\n        cross = xs[i] * ys[j] - xs[j] * ys[i]\n        signed_area += cross\n        cx += (xs[i] + xs[j]) * cross\n        cy += (ys[i] + ys[j]) * cross\n    area = signed_area * 0.5\n    if abs(area) < 1e-12:\n        return (sum(xs) / float(n), sum(ys) / float(n))\n    inv = 1.0 / (6.0 * area)\n    return (cx * inv, cy * inv)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "graham_scan_convex_hull_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "tuple[list[float], list[float]]",
+    "summary": "Graham scan algorithm constructing the 2D convex hull of a planar point set.",
+    "pseudocode": "1. Pair coordinates and find pivot with minimum y.\n2. Sort remaining points by polar angle with respect to pivot.\n3. Push points to stack, popping non-left turns.\n4. Return convex hull vertices (hull_x, hull_y).",
+    "invariants": [
+      "Convex hull vertices form a strictly counter-clockwise convex polygon.",
+      "Contains all input points within its bounding perimeter."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if cross <= 0: stack.pop()",
+        "failure_mechanism": "Collinear points with identical polar angle cause incorrect stack popping.",
+        "counterexample_input": "xs=[0.0, 1.0, 2.0, 0.0], ys=[0.0, 0.0, 0.0, 2.0]",
+        "verified_fix": "Break polar angle ties by distance from pivot."
+      }
+    ],
+    "source_code": "def graham_scan_convex_hull_2d(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:\n    n = min(len(xs), len(ys))\n    if n < 3:\n        return (list(xs[:n]), list(ys[:n]))\n    pts = sorted(list(set(((xs[i], ys[i]) for i in range(n)))))\n    if len(pts) < 3:\n        return ([p[0] for p in pts], [p[1] for p in pts])\n    lower = []\n    for p in pts:\n        while len(lower) >= 2:\n            o = (lower[-1][0] - lower[-2][0]) * (p[1] - lower[-2][1]) - (lower[-1][1] - lower[-2][1]) * (p[0] - lower[-2][0])\n            if o <= 0.0:\n                lower.pop()\n            else:\n                break\n        lower.append(p)\n    upper = []\n    for p in reversed(pts):\n        while len(upper) >= 2:\n            o = (upper[-1][0] - upper[-2][0]) * (p[1] - upper[-2][1]) - (upper[-1][1] - upper[-2][1]) * (p[0] - upper[-2][0])\n            if o <= 0.0:\n                upper.pop()\n            else:\n                break\n        upper.append(p)\n    hull = lower[:-1] + upper[:-1]\n    return ([p[0] for p in hull], [p[1] for p in hull])",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "rotating_calipers_polygon_diameter_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Rotating calipers algorithm finding the maximum diameter of a convex polygon in linear time.",
+    "pseudocode": "1. Handle degenerate point sets (n < 2: return 0, n == 2: return distance).\n2. Iterate through edges maintaining antipodal vertex k with maximum perpendicular height.\n3. Compute squared distances to antipodal vertices.\n4. Return maximum Euclidean diameter.",
+    "invariants": [
+      "Runs in O(N) time for convex polygons.",
+      "Diameter is non-negative and equals maximum distance between any vertex pair."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "max_d = max(dist(p, q) for p in pts for q in pts)",
+        "failure_mechanism": "Quadratic O(N^2) pairwise comparisons timeout on large polygons.",
+        "counterexample_input": "xs=[float(i) for i in range(1000)], ys=[0.0]*1000",
+        "verified_fix": "Use rotating calipers advancing antipodal pointer monotonically in O(N)."
+      }
+    ],
+    "source_code": "def rotating_calipers_polygon_diameter_2d(xs: list[float], ys: list[float]) -> float:\n    n = min(len(xs), len(ys))\n    if n < 2:\n        return 0.0\n    if n == 2:\n        return math.hypot(float(xs[1]) - float(xs[0]), float(ys[1]) - float(ys[0]))\n    max_d_sq = 0.0\n    k = 1\n    for i in range(n):\n        nxt = (i + 1) % n\n        dx = float(xs[nxt]) - float(xs[i])\n        dy = float(ys[nxt]) - float(ys[i])\n        for _ in range(n):\n            k_nxt = (k + 1) % n\n            c1 = abs(dx * (float(ys[k]) - float(ys[i])) - dy * (float(xs[k]) - float(xs[i])))\n            c2 = abs(dx * (float(ys[k_nxt]) - float(ys[i])) - dy * (float(xs[k_nxt]) - float(xs[i])))\n            if c2 > c1:\n                k = k_nxt\n            else:\n                break\n        d1 = (float(xs[i]) - float(xs[k])) ** 2 + (float(ys[i]) - float(ys[k])) ** 2\n        d2 = (float(xs[nxt]) - float(xs[k])) ** 2 + (float(ys[nxt]) - float(ys[k])) ** 2\n        max_d_sq = max(max_d_sq, max(d1, d2))\n    return math.sqrt(max_d_sq)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "polygon_perimeter_length_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "bool"
+    ],
+    "return_type": "float",
+    "summary": "Total Euclidean perimeter length of a 2D polyline or closed polygon.",
+    "pseudocode": "1. Check minimum vertices count.\n2. Sum Euclidean distances between adjacent vertices.\n3. If is_closed is True, add distance between final and first vertex.\n4. Return total accumulated length.",
+    "invariants": [
+      "Accumulated perimeter length is non-negative: length >= 0.0.",
+      "Zero length for empty or single-point paths."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "for i in range(n): total += dist(pts[i], pts[i+1])",
+        "failure_mechanism": "Out-of-bounds index error at i = n - 1 or unconditionally closing open polylines.",
+        "counterexample_input": "xs=[0.0, 1.0], ys=[0.0, 0.0], is_closed=False",
+        "verified_fix": "Loop up to n - 1 and only connect n-1 to 0 if is_closed is True and n >= 3."
+      }
+    ],
+    "source_code": "def polygon_perimeter_length_2d(xs: list[float], ys: list[float], is_closed: bool) -> float:\n    n = min(len(xs), len(ys))\n    if n < 2:\n        return 0.0\n    total = 0.0\n    for i in range(n - 1):\n        dx = float(xs[i + 1]) - float(xs[i])\n        dy = float(ys[i + 1]) - float(ys[i])\n        total += math.hypot(dx, dy)\n    if bool(is_closed) and n >= 3:\n        dx = float(xs[0]) - float(xs[n - 1])\n        dy = float(ys[0]) - float(ys[n - 1])\n        total += math.hypot(dx, dy)\n    return max(0.0, total)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "point_to_line_segment_distance_2d",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Minimum Euclidean distance from a point to a finite 2D line segment with clamping.",
+    "pseudocode": "1. Compute segment vector and squared length.\n2. If segment is degenerate point, return distance to endpoint.\n3. Project point onto segment and clamp parametric t in [0.0, 1.0].\n4. Compute distance from point to projected point.",
+    "invariants": [
+      "Distance is strictly non-negative: result >= 0.0.",
+      "Zero if and only if point lies on line segment."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "t = dot(AP, AB) / len(AB)**2; return dist(P, A + t * AB)",
+        "failure_mechanism": "Without clamping t to [0, 1], returns distance to infinite line rather than finite segment.",
+        "counterexample_input": "px=5.0, py=0.0, x1=0.0, y1=0.0, x2=2.0, y2=0.0",
+        "verified_fix": "Clamp projection parameter t = max(0.0, min(1.0, t))."
+      }
+    ],
+    "source_code": "def point_to_line_segment_distance_2d(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> float:\n    dx = float(x2) - float(x1)\n    dy = float(y2) - float(y1)\n    len_sq = dx * dx + dy * dy\n    p_x = float(px)\n    p_y = float(py)\n    if len_sq < 1e-12:\n        return math.sqrt((p_x - float(x1)) ** 2 + (p_y - float(y1)) ** 2)\n    t = ((p_x - float(x1)) * dx + (p_y - float(y1)) * dy) / len_sq\n    clamped_t = max(0.0, min(1.0, t))\n    proj_x = float(x1) + clamped_t * dx\n    proj_y = float(y1) + clamped_t * dy\n    dist = math.sqrt((p_x - proj_x) ** 2 + (p_y - proj_y) ** 2)\n    return dist",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "line_segment_intersection_2d",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[bool, float, float]",
+    "summary": "Parametric 2D line segment intersection solver returning intersection status and coordinates.",
+    "pseudocode": "1. Compute 2D determinant of segment direction vectors.\n2. If determinant is near zero, segments are parallel.\n3. Solve for parametric parameters t and u.\n4. If both t and u in [0, 1], return (True, ix, iy); else return (False, 0.0, 0.0).",
+    "invariants": [
+      "Returns True if and only if segments intersect within their finite lengths.",
+      "Intersection coordinates lie on both segments when returning True."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if det == 0.0: return (False, 0.0, 0.0)",
+        "failure_mechanism": "Exact float equality misses nearly parallel segments, causing numerical division instability.",
+        "counterexample_input": "x1=0.0, y1=0.0, x2=1.0, y2=1.0, x3=0.0, y3=1e-10, x4=1.0, y4=1.00001",
+        "verified_fix": "Check absolute determinant |det| > 1e-12."
+      }
+    ],
+    "source_code": "def line_segment_intersection_2d(x1: float, y1: float, x2: float, y2: float, x3: float, y3: float, x4: float, y4: float) -> tuple[bool, float, float]:\n    d1x = float(x2) - float(x1)\n    d1y = float(y2) - float(y1)\n    d2x = float(x4) - float(x3)\n    d2y = float(y4) - float(y3)\n    det = d1x * d2y - d1y * d2x\n    if abs(det) < 1e-12:\n        return (False, 0.0, 0.0)\n    dx = float(x3) - float(x1)\n    dy = float(y3) - float(y1)\n    t = (dx * d2y - dy * d2x) / det\n    u = (dx * d1y - dy * d1x) / det\n    if 0.0 <= t <= 1.0 and 0.0 <= u <= 1.0:\n        ix = float(x1) + t * d1x\n        iy = float(y1) + t * d1y\n        return (True, ix, iy)\n    return (False, 0.0, 0.0)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "douglas_peucker_simplify_step",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[int]",
+    "summary": "Douglas-Peucker polyline simplification returning retained vertex indices within epsilon tolerance.",
+    "pseudocode": "1. If segment length <= 2, return endpoint indices.\n2. Find vertex with maximum perpendicular distance to chord between endpoints.\n3. If max distance > epsilon, recursively simplify left and right sub-polylines.\n4. Else return endpoints only.",
+    "invariants": [
+      "Always retains the first and last vertex indices: 0 and N-1.",
+      "Maximum perpendicular deviation from simplified line is bounded by epsilon."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if max_dist > eps: return simplify(left) + simplify(right)",
+        "failure_mechanism": "Direct concatenation duplicates the midpoint index shared by both recursive calls.",
+        "counterexample_input": "xs=[0.0, 1.0, 2.0], ys=[0.0, 5.0, 0.0], epsilon=1.0",
+        "verified_fix": "Slice [:-1] from left recursive call or deduplicate indices."
+      }
+    ],
+    "source_code": "def douglas_peucker_simplify_step(xs: list[float], ys: list[float], epsilon: float) -> list[int]:\n    n = min(len(xs), len(ys))\n    if n <= 2:\n        return list(range(n))\n    eps = max(1e-06, float(epsilon))\n    stack = [(0, n - 1)]\n    keep = {0, n - 1}\n    while stack:\n        start_idx, end_idx = stack.pop()\n        x1 = xs[start_idx]\n        y1 = ys[start_idx]\n        x2 = xs[end_idx]\n        y2 = ys[end_idx]\n        dx = x2 - x1\n        dy = y2 - y1\n        line_len = math.sqrt(dx * dx + dy * dy)\n        max_d = -1.0\n        max_idx = start_idx\n        for i in range(start_idx + 1, end_idx):\n            px = xs[i]\n            py = ys[i]\n            if line_len < 1e-12:\n                d = math.sqrt((px - x1) ** 2 + (py - y1) ** 2)\n            else:\n                d = abs((px - x1) * dy - (py - y1) * dx) / line_len\n            if d > max_d:\n                max_d = d\n                max_idx = i\n        if max_d > eps:\n            keep.add(max_idx)\n            stack.append((start_idx, max_idx))\n            stack.append((max_idx, end_idx))\n    res = sorted(list(keep))\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "visvalingam_whyatt_effective_area",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Visvalingam-Whyatt triangular effective area metric for geometric point significance.",
+    "pseudocode": "1. Compute triangular area formed by previous, current, and next vertices.\n2. Use cross product of vectors (p1 - p0) and (p2 - p0).\n3. Multiply by 0.5 and take absolute value.\n4. Return non-negative effective area.",
+    "invariants": [
+      "Effective area is non-negative: result >= 0.0.",
+      "Zero if and only if the three vertices are collinear."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 0.5 * ((x1 - x0)*(y2 - y0) - (x2 - x0)*(y1 - y0))",
+        "failure_mechanism": "Without abs(), negative area is returned for clockwise vertex triplets.",
+        "counterexample_input": "x0=0.0, y0=0.0, x1=1.0, y1=1.0, x2=2.0, y2=0.0",
+        "verified_fix": "Apply absolute value: 0.5 * abs(cross)."
+      }
+    ],
+    "source_code": "def visvalingam_whyatt_effective_area(x0: float, y0: float, x1: float, y1: float, x2: float, y2: float) -> float:\n    v1x = float(x1) - float(x0)\n    v1y = float(y1) - float(y0)\n    v2x = float(x2) - float(x0)\n    v2y = float(y2) - float(y0)\n    cross = v1x * v2y - v1y * v2x\n    area = 0.5 * abs(cross)\n    return area",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "ccw_orientation_test_2d",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "int",
+    "summary": "2D counter-clockwise orientation test predicate returning +1 (CCW), -1 (CW), or 0 (collinear).",
+    "pseudocode": "1. Compute 2D cross determinant (bx - ax)*(cy - ay) - (by - ay)*(cx - ax).\n2. If determinant > 1e-12, return +1 (counter-clockwise).\n3. If determinant < -1e-12, return -1 (clockwise).\n4. Else return 0 (collinear).",
+    "invariants": [
+      "Result is always one of {-1, 0, 1}.",
+      "Anti-symmetric: ccw(A, B, C) == -ccw(B, A, C)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if det > 0: return 1; if det < 0: return -1; return 0",
+        "failure_mechanism": "Floating point cancellation misclassifies collinear points as CW or CCW.",
+        "counterexample_input": "ax=0.0, ay=0.0, bx=1.0, by=1.0, cx=2.00001, cy=2.0",
+        "verified_fix": "Use epsilon deadband: abs(det) <= 1e-12 returns 0."
+      }
+    ],
+    "source_code": "def ccw_orientation_test_2d(ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> int:\n    v1x = float(bx) - float(ax)\n    v1y = float(by) - float(ay)\n    v2x = float(cx) - float(ax)\n    v2y = float(cy) - float(ay)\n    det = v1x * v2y - v1y * v2x\n    if det > 1e-12:\n        return 1\n    if det < -1e-12:\n        return -1\n    return 0",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "in_circle_predicate_2d",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "bool",
+    "summary": "Delaunay triangulation 2D in-circle determinant predicate testing if D lies inside circumcircle of ABC.",
+    "pseudocode": "1. Verify triangle ABC is counter-clockwise oriented; if CW, swap B and C.\n2. Translate coordinates so D is at the origin.\n3. Compute 3x3 determinant with squared distance column.\n4. Return determinant > 0.",
+    "invariants": [
+      "Invariant under cyclic permutation of CCW triangle vertices.",
+      "Returns True if and only if point D lies strictly inside circumcircle of ABC."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return det > 0",
+        "failure_mechanism": "If triangle ABC is clockwise, determinant sign inverts, falsely rejecting valid Delaunay edges.",
+        "counterexample_input": "ax=0.0, ay=0.0, bx=0.0, by=1.0, cx=1.0, cy=0.0, dx=0.5, dy=0.5",
+        "verified_fix": "Enforce CCW vertex orientation before evaluating determinant."
+      }
+    ],
+    "source_code": "def in_circle_predicate_2d(ax: float, ay: float, bx: float, by: float, cx: float, cy: float, dx: float, dy: float) -> bool:\n    ccw = (float(bx) - float(ax)) * (float(cy) - float(ay)) - (float(by) - float(ay)) * (float(cx) - float(ax))\n    if ccw < 0.0:\n        bx, cx = (cx, bx)\n        by, cy = (cy, by)\n    adx = float(ax) - float(dx)\n    ady = float(ay) - float(dy)\n    bdx = float(bx) - float(dx)\n    bdy = float(by) - float(dy)\n    cdx = float(cx) - float(dx)\n    cdy = float(cy) - float(dy)\n    alift = adx * adx + ady * ady\n    blift = bdx * bdx + bdy * bdy\n    clift = cdx * cdx + cdy * cdy\n    det = adx * (bdy * clift - cdy * blift) - ady * (bdx * clift - cdx * blift) + alift * (bdx * cdy - bdy * cdx)\n    res = det > 1e-12\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "circumcenter_2d_triangle",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Calculates Cartesian circumcenter coordinates of a non-degenerate 2D triangle.",
+    "pseudocode": "1. Compute determinant D = 2 * (ax*(by - cy) + bx*(cy - ay) + cx*(ay - by)).\n2. Compute circumcenter x using squared distance moments.\n3. Compute circumcenter y using squared distance moments.\n4. Return (circumcenter_x, circumcenter_y).",
+    "invariants": [
+      "Equidistant to all three vertices of the triangle.",
+      "Intersection point of the three perpendicular bisectors."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (num_x / D, num_y / D)",
+        "failure_mechanism": "Collinear triangle vertices cause D == 0 and division by zero.",
+        "counterexample_input": "ax=0.0, ay=0.0, bx=1.0, by=1.0, cx=2.0, cy=2.0",
+        "verified_fix": "Check |D| > 1e-12; fallback to centroid if collinear."
+      }
+    ],
+    "source_code": "def circumcenter_2d_triangle(ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> tuple[float, float]:\n    d = 2.0 * (float(ax) * (float(by) - float(cy)) + float(bx) * (float(cy) - float(ay)) + float(cx) * (float(ay) - float(by)))\n    if abs(d) < 1e-12:\n        return ((float(ax) + float(bx) + float(cx)) / 3.0, (float(ay) + float(by) + float(cy)) / 3.0)\n    a2 = float(ax) * float(ax) + float(ay) * float(ay)\n    b2 = float(bx) * float(bx) + float(by) * float(by)\n    c2 = float(cx) * float(cx) + float(cy) * float(cy)\n    ux = (a2 * (float(by) - float(cy)) + b2 * (float(cy) - float(ay)) + c2 * (float(ay) - float(by))) / d\n    uy = (a2 * (float(cx) - float(bx)) + b2 * (float(ax) - float(cx)) + c2 * (float(bx) - float(ax))) / d\n    return (ux, uy)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "barycentric_coordinates_2d_triangle",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Calculates normalized barycentric coordinates (lambda1, lambda2, lambda3) of a point in a 2D triangle.",
+    "pseudocode": "1. Compute area determinant of triangle ABC.\n2. Compute sub-triangle area determinants for point P.\n3. Compute weights lambda1, lambda2, lambda3.\n4. Return normalized barycentric coordinates.",
+    "invariants": [
+      "Sum of coordinates lambda1 + lambda2 + lambda3 == 1.0.",
+      "All lambda_i >= 0.0 if and only if point lies inside or on the triangle boundary."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (w1 / det, w2 / det, w3 / det)",
+        "failure_mechanism": "Degenerate zero-area triangle causes division by zero.",
+        "counterexample_input": "px=0.5, py=0.5, ax=0.0, ay=0.0, bx=1.0, by=0.0, cx=2.0, cy=0.0",
+        "verified_fix": "Check |det| > 1e-12 before dividing."
+      }
+    ],
+    "source_code": "def barycentric_coordinates_2d_triangle(px: float, py: float, ax: float, ay: float, bx: float, by: float, cx: float, cy: float) -> tuple[float, float, float]:\n    det = (float(by) - float(cy)) * (float(ax) - float(cx)) + (float(cx) - float(bx)) * (float(ay) - float(cy))\n    if abs(det) < 1e-12:\n        return (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)\n    p_x = float(px)\n    p_y = float(py)\n    l1 = ((float(by) - float(cy)) * (p_x - float(cx)) + (float(cx) - float(bx)) * (p_y - float(cy))) / det\n    l2 = ((float(cy) - float(ay)) * (p_x - float(cx)) + (float(ax) - float(cx)) * (p_y - float(cy))) / det\n    l3 = 1.0 - l1 - l2\n    return (l1, l2, l3)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "minimum_bounding_box_feret_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Minimum bounding box dimensions and orientation using rotating calipers edge sweeps.",
+    "pseudocode": "1. Iterate through edges of convex hull.\n2. Project all points onto edge direction and orthogonal normal.\n3. Compute width, height, and area of bounding rectangle aligned with edge.\n4. Return minimum area (min_width, min_height, min_area).",
+    "invariants": [
+      "At least one edge of the minimum bounding box is collinear with an edge of the convex hull.",
+      "Minimum area is non-negative: area >= 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (max(xs) - min(xs)) * (max(ys) - min(ys))",
+        "failure_mechanism": "Axis-aligned bounding box (AABB) can be up to 2x larger than the true oriented minimum bounding box.",
+        "counterexample_input": "xs=[0.0, 1.0, 2.0, 1.0], ys=[1.0, 2.0, 1.0, 0.0]",
+        "verified_fix": "Rotate calipers along each polygon edge to find minimum area oriented rectangle."
+      }
+    ],
+    "source_code": "def minimum_bounding_box_feret_2d(xs: list[float], ys: list[float]) -> tuple[float, float, float]:\n    n = min(len(xs), len(ys))\n    if n < 2:\n        return (0.0, 0.0, 0.0)\n    best_area = 1e+30\n    best_w = 0.0\n    best_h = 0.0\n    for i in range(n):\n        j = (i + 1) % n\n        edge_x = xs[j] - xs[i]\n        edge_y = ys[j] - ys[i]\n        edge_len = math.sqrt(edge_x * edge_x + edge_y * edge_y)\n        if edge_len < 1e-12:\n            continue\n        ux = edge_x / edge_len\n        uy = edge_y / edge_len\n        vx = -uy\n        vy = ux\n        min_u = 1e+30\n        max_u = -1e+30\n        min_v = 1e+30\n        max_v = -1e+30\n        for k in range(n):\n            proj_u = xs[k] * ux + ys[k] * uy\n            proj_v = xs[k] * vx + ys[k] * vy\n            if proj_u < min_u:\n                min_u = proj_u\n            if proj_u > max_u:\n                max_u = proj_u\n            if proj_v < min_v:\n                min_v = proj_v\n            if proj_v > max_v:\n                max_v = proj_v\n        w = max_u - min_u\n        h = max_v - min_v\n        area = w * h\n        if area < best_area:\n            best_area = area\n            best_w = w\n            best_h = h\n    if best_area >= 1e+29:\n        return (0.0, 0.0, 0.0)\n    return (best_w, best_h, best_area)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "morton_encode_2d",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "2D Morton Z-order curve bit-interleaving encoding 2D integer coordinates into a 1D spatial index.",
+    "pseudocode": "1. Clamp x and y to non-negative 16-bit integers.\n2. Interleave bits of x into even bit positions.\n3. Interleave bits of y into odd bit positions.\n4. Return 32-bit Morton code.",
+    "invariants": [
+      "Bijective mapping between coordinate pairs and Morton code.",
+      "Preserves spatial multidimensional locality."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (x << 16) | y",
+        "failure_mechanism": "Linear concatenation destroys 2D spatial locality; points nearby in Y are separated by 65536 in code.",
+        "counterexample_input": "x=2, y=3",
+        "verified_fix": "Interleave bits alternately: bit 0 from x, bit 1 from y, bit 2 from x..."
+      }
+    ],
+    "source_code": "def morton_encode_2d(x: int, y: int) -> int:\n    val_x = abs(int(x)) & 65535\n    val_y = abs(int(y)) & 65535\n    code = 0\n    for i in range(16):\n        bit_x = val_x >> i & 1\n        bit_y = val_y >> i & 1\n        code |= bit_x << 2 * i\n        code |= bit_y << 2 * i + 1\n    return code",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "morton_decode_2d",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "2D Morton Z-order curve de-interleaving decoding a 1D spatial code back into 2D coordinates.",
+    "pseudocode": "1. Mask code to 32-bit unsigned integer.\n2. Extract even bits into coordinate x.\n3. Extract odd bits into coordinate y.\n4. Return (x, y).",
+    "invariants": [
+      "Exact inverse: morton_decode_2d(morton_encode_2d(x, y)) == (x, y).",
+      "Coordinates x and y are non-negative integers."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x = code & 0xFFFF; y = code >> 16",
+        "failure_mechanism": "Fails to de-interleave alternating bits, extracting scrambled values.",
+        "counterexample_input": "code=15",
+        "verified_fix": "Extract alternating bit positions: even bits to x, odd bits to y."
+      }
+    ],
+    "source_code": "def morton_decode_2d(code: int) -> tuple[int, int]:\n    val = abs(int(code))\n    x = 0\n    y = 0\n    for i in range(16):\n        bit_x = val >> 2 * i & 1\n        bit_y = val >> 2 * i + 1 & 1\n        x |= bit_x << i\n        y |= bit_y << i\n    return (x, y)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "hilbert_curve_xy2d_step",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "2D Hilbert space-filling curve coordinate to distance index mapping.",
+    "pseudocode": "1. Enforce grid dimension n is a power of 2.\n2. Iteratively divide grid into quadrants.\n3. Rotate quadrant orientation and accumulate distance.\n4. Return 1D Hilbert curve distance index.",
+    "invariants": [
+      "Continuous 1D path passing through all grid cells.",
+      "Superior locality preservation compared to Morton Z-order."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "d = y * n + x",
+        "failure_mechanism": "Row-major raster scan has massive discontinous jumps at row boundaries.",
+        "counterexample_input": "n=4, x=1, y=2",
+        "verified_fix": "Apply Hilbert quadrant reflection and rotation rules."
+      }
+    ],
+    "source_code": "def hilbert_curve_xy2d_step(n: int, x: int, y: int) -> int:\n    d = 0\n    s = max(2, int(n)) // 2\n    cur_x = abs(int(x))\n    cur_y = abs(int(y))\n    while s > 0:\n        rx = 1 if cur_x & s > 0 else 0\n        ry = 1 if cur_y & s > 0 else 0\n        d += s * s * (3 * rx ^ ry)\n        if ry == 0:\n            if rx == 1:\n                cur_x = s - 1 - cur_x\n                cur_y = s - 1 - cur_y\n            cur_x, cur_y = (cur_y, cur_x)\n        s = s // 2\n    return d",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "hilbert_curve_d2xy_step",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "2D Hilbert space-filling curve distance index to 2D coordinate inverse mapping.",
+    "pseudocode": "1. Decompose distance index t into base-4 quadrant digits.\n2. Apply inverse quadrant rotation and reflection.\n3. Accumulate quadrant offsets into x and y.\n4. Return (x, y) coordinate pair.",
+    "invariants": [
+      "Exact inverse of hilbert_curve_xy2d_step.",
+      "Output coordinates x, y in range [0, n - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x = d % n; y = d // n",
+        "failure_mechanism": "Raster decoding produces row-major coordinates completely mismatched from Hilbert path.",
+        "counterexample_input": "n=4, d=7",
+        "verified_fix": "Inverse Hilbert quadrant bit unfolding with rotation."
+      }
+    ],
+    "source_code": "def hilbert_curve_d2xy_step(n: int, d: int) -> tuple[int, int]:\n    s = 1\n    t = abs(int(d))\n    limit = max(2, int(n))\n    cur_x = 0\n    cur_y = 0\n    while s < limit:\n        rx = 1 & t // 2\n        ry = 1 & (t ^ rx)\n        if ry == 0:\n            if rx == 1:\n                cur_x = s - 1 - cur_x\n                cur_y = s - 1 - cur_y\n            cur_x, cur_y = (cur_y, cur_x)\n        cur_x += s * rx\n        cur_y += s * ry\n        t = t // 4\n        s = s * 2\n    return (cur_x, cur_y)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "geohash_encode_latlon",
+    "param_types": [
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "str",
+    "summary": "Geohash base32 hierarchical spatial index encoding latitude and longitude into string.",
+    "pseudocode": "1. Alternate longitude and latitude interval bisection.\n2. Accumulate 5 bits per character into base32 symbol index.\n3. Lookup symbol in base32 alphabet.\n4. Return geohash string of length precision.",
+    "invariants": [
+      "Shared string prefix implies spatial bounding box proximity.",
+      "Resulting string length equals precision exactly."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if lon == 180.0: pass",
+        "failure_mechanism": "Longitude +180.0 causes out-of-bounds interval bisect error.",
+        "counterexample_input": "lat=0.0, lon=180.0, precision=6",
+        "verified_fix": "Clamp longitude to open interval [-180.0, 180.0)."
+      }
+    ],
+    "source_code": "def geohash_encode_latlon(lat: float, lon: float, precision: int) -> str:\n    b32 = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z')\n    p = max(1, min(12, int(precision)))\n    lat_range = [-90.0, 90.0]\n    lon_range = [-180.0, 180.0]\n    is_even = True\n    bit = 0\n    ch_idx = 0\n    res = ''\n    while len(res) < p:\n        if is_even:\n            mid = (lon_range[0] + lon_range[1]) * 0.5\n            if float(lon) >= mid:\n                ch_idx |= 1 << 4 - bit\n                lon_range[0] = mid\n            else:\n                lon_range[1] = mid\n        else:\n            mid = (lat_range[0] + lat_range[1]) * 0.5\n            if float(lat) >= mid:\n                ch_idx |= 1 << 4 - bit\n                lat_range[0] = mid\n            else:\n                lat_range[1] = mid\n        is_even = not is_even\n        if bit < 4:\n            bit += 1\n        else:\n            res += b32[ch_idx]\n            bit = 0\n            ch_idx = 0\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "geohash_decode_bounds",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Decodes a Geohash string into rectangular lat/lon bounding box (lat_min, lat_max, lon_min, lon_max).",
+    "pseudocode": "1. Initialize bounding box [-90, 90] and [-180, 180].\n2. For each character, find 5-bit index in base32 alphabet.\n3. Alternately refine longitude and latitude intervals.\n4. Return (lat_min, lat_max, lon_min, lon_max).",
+    "invariants": [
+      "lat_min <= lat_max and lon_min <= lon_max.",
+      "Precision refinement: box size shrinks by 2^2.5 per character."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "val = base32.index(ch)",
+        "failure_mechanism": "Invalid or uppercase character raises ValueError/crash.",
+        "counterexample_input": "geohash='9Q8U#'",
+        "verified_fix": "Safely match characters without exceptions."
+      }
+    ],
+    "source_code": "def geohash_decode_bounds(geohash: str) -> tuple[float, float, float, float]:\n    b32 = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z')\n    lat_r = [-90.0, 90.0]\n    lon_r = [-180.0, 180.0]\n    is_even = True\n    for ch in geohash.lower():\n        val = -1\n        for i in range(len(b32)):\n            if ch == b32[i]:\n                val = i\n                break\n        if val < 0:\n            continue\n        for bit in range(5):\n            mask = 1 << 4 - bit\n            if is_even:\n                mid = (lon_r[0] + lon_r[1]) * 0.5\n                if val & mask:\n                    lon_r[0] = mid\n                else:\n                    lon_r[1] = mid\n            else:\n                mid = (lat_r[0] + lat_r[1]) * 0.5\n                if val & mask:\n                    lat_r[0] = mid\n                else:\n                    lat_r[1] = mid\n            is_even = not is_even\n    return (lat_r[0], lat_r[1], lon_r[0], lon_r[1])",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "quadtree_bounding_box_contains",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "bool",
+    "summary": "Quadtree axis-aligned bounding box (AABB) 2D point containment test.",
+    "pseudocode": "1. Determine min and max box coordinates on X axis.\n2. Determine min and max box coordinates on Y axis.\n3. Test if point (px, py) lies within both intervals.\n4. Return boolean containment result.",
+    "invariants": [
+      "Commutative with respect to corner order: handles inverted bounds seamlessly.",
+      "Returns True if and only if min_x <= px <= max_x and min_y <= py <= max_y."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return bx1 <= px <= bx2 and by1 <= py <= by2",
+        "failure_mechanism": "Fails when box corners are passed in non-sorted order (bx1 > bx2).",
+        "counterexample_input": "bx1=10.0, by1=10.0, bx2=0.0, by2=0.0, px=5.0, py=5.0",
+        "verified_fix": "Compute min and max for both axes: min(bx1, bx2) <= px <= max(bx1, bx2)."
+      }
+    ],
+    "source_code": "def quadtree_bounding_box_contains(bx1: float, by1: float, bx2: float, by2: float, px: float, py: float, tol: float = 0.0) -> bool:\n    min_x = min(float(bx1), float(bx2)) - abs(float(tol))\n    max_x = max(float(bx1), float(bx2)) + abs(float(tol))\n    min_y = min(float(by1), float(by2)) - abs(float(tol))\n    max_y = max(float(by1), float(by2)) + abs(float(tol))\n    p_x = float(px)\n    p_y = float(py)\n    res = min_x <= p_x <= max_x and min_y <= p_y <= max_y\n    return res\n",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "quadtree_bounding_box_intersects",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "bool",
+    "summary": "2D axis-aligned bounding box (AABB) intersection predicate between two boxes.",
+    "pseudocode": "1. Normalize min/max bounds for box A on both axes.\n2. Normalize min/max bounds for box B on both axes.\n3. Test separating axis theorem on X and Y.\n4. Return True if boxes overlap on both axes.",
+    "invariants": [
+      "Symmetric: intersects(A, B) == intersects(B, A).",
+      "Returns True if and only if intersection region has non-empty 2D extent."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return not (a_max_x < b_min_x or a_max_y < b_min_y)",
+        "failure_mechanism": "Only checks one direction of separation, missing cases where A is entirely right/above B.",
+        "counterexample_input": "a_min_x=10.0, a_min_y=0.0, a_max_x=20.0, a_max_y=10.0, b_min_x=0.0, b_min_y=0.0, b_max_x=5.0, b_max_y=10.0",
+        "verified_fix": "Check all 4 separating axis conditions: left, right, top, bottom."
+      }
+    ],
+    "source_code": "def quadtree_bounding_box_intersects(a_min_x: float, a_min_y: float, a_max_x: float, a_max_y: float, b_min_x: float, b_min_y: float, b_max_x: float, b_max_y: float) -> bool:\n    ax1 = min(float(a_min_x), float(a_max_x))\n    ax2 = max(float(a_min_x), float(a_max_x))\n    ay1 = min(float(a_min_y), float(a_max_y))\n    ay2 = max(float(a_min_y), float(a_max_y))\n    bx1 = min(float(b_min_x), float(b_max_x))\n    bx2 = max(float(b_min_x), float(b_max_x))\n    by1 = min(float(b_min_y), float(b_max_y))\n    by2 = max(float(b_min_y), float(b_max_y))\n    separated = ax2 < bx1 or ax1 > bx2 or ay2 < by1 or (ay1 > by2)\n    res = not separated\n    return res",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "spherical_polygon_excess_area",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Girard's theorem spherical excess area E = (sum(interior_angles) - (N - 2) * pi) * R^2.",
+    "pseudocode": "1. Check polygon has at least 3 interior angles.\n2. Convert angles to radians if in degrees.\n3. Compute spherical excess E = sum(angles) - (N - 2) * pi.\n4. Return max(0.0, E * R^2).",
+    "invariants": [
+      "Exact surface area on a sphere.",
+      "Spherical excess is strictly positive for valid non-degenerate spherical polygons."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (sum(angles) - (len(angles) - 2) * 180.0) * (radius ** 2)",
+        "failure_mechanism": "Fails to convert degree excess to steradians, resulting in area 57.3x too large.",
+        "counterexample_input": "angles=[90.0, 90.0, 90.0], radius=6371.0",
+        "verified_fix": "Multiply excess in radians by radius squared."
+      }
+    ],
+    "source_code": "def spherical_polygon_excess_area(angles: list[float], radius: float) -> float:\n    n = len(angles)\n    if n < 3:\n        return 0.0\n    r = max(0.0, float(radius))\n    sum_angles = 0.0\n    rad = 0.01745329\n    for a in angles:\n        val = float(a)\n        if val > 6.2831853:\n            val = val * rad\n        sum_angles += val\n    pi_val = 3.1415927\n    excess = sum_angles - float(n - 2) * pi_val\n    area = max(0.0, excess) * r * r\n    return area",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "heading_angle_difference",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Calculates smallest signed turn angle difference in degrees from heading 1 to heading 2.",
+    "pseudocode": "1. Compute raw difference h2 - h1.\n2. Wrap difference modulo 360 into range [0, 360).\n3. If difference > 180, subtract 360 to map into (-180, 180].\n4. Return signed turn angle in degrees.",
+    "invariants": [
+      "Result is bounded in range [-180.0, 180.0].",
+      "Positive indicates right/clockwise turn, negative indicates left/counter-clockwise."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return heading2 - heading1",
+        "failure_mechanism": "Crossing the 0/360 compass boundary results in 350 degrees turn instead of -10 degrees.",
+        "counterexample_input": "heading1=5.0, heading2=355.0",
+        "verified_fix": "Wrap angle: (diff + 180) % 360 - 180."
+      }
+    ],
+    "source_code": "def heading_angle_difference(heading1: float, heading2: float) -> float:\n    h1 = float(heading1)\n    h2 = float(heading2)\n    diff = (h2 - h1 + 180.0) % 360.0 - 180.0\n    if diff <= -180.0:\n        diff += 360.0\n    return diff",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "tangent_plane_stereographic_projection",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Oblique stereographic conformal projection from sphere onto tangent plane from opposite pole.",
+    "pseudocode": "1. Convert lat/lon and projection origin to radians.\n2. Compute cosine of angular distance cos_c.\n3. Compute stereographic scale factor k = 2 / (1 + cos_c).\n4. Return tangent plane coordinates (x, y).",
+    "invariants": [
+      "Conformal: circles on the sphere project to circles or straight lines on the plane.",
+      "True scale at projection tangent origin."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "k = 2.0 / (1.0 + cos_c)",
+        "failure_mechanism": "Antipodal point at opposite pole causes division by zero.",
+        "counterexample_input": "lat=-45.0, lon=190.0, lat0=45.0, lon0=10.0, r=6371.0",
+        "verified_fix": "Add epsilon to denominator: 2.0 / max(1e-12, 1.0 + cos_c)."
+      }
+    ],
+    "source_code": "def tangent_plane_stereographic_projection(lat: float, lon: float, lat0: float, lon0: float, r: float) -> tuple[float, float]:\n    rad = 0.01745329\n    phi = float(lat) * rad\n    lam = float(lon) * rad\n    phi0 = float(lat0) * rad\n    lam0 = float(lon0) * rad\n    radius = max(1.0, float(r))\n    dlam = lam - lam0\n    sin_phi = math.sin(phi)\n    cos_phi = math.cos(phi)\n    sin_phi0 = math.sin(phi0)\n    cos_phi0 = math.cos(phi0)\n    cos_dlam = math.cos(dlam)\n    cos_c = sin_phi0 * sin_phi + cos_phi0 * cos_phi * cos_dlam\n    k = 2.0 * radius / max(1e-12, 1.0 + cos_c)\n    x = k * cos_phi * math.sin(dlam)\n    y = k * (cos_phi0 * sin_phi - sin_phi0 * cos_phi * cos_dlam)\n    return (x, y)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "lambert_conformal_conic_forward",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Lambert Conformal Conic (LCC) forward aeronautical projection mapping sphere to cone.",
+    "pseudocode": "1. Convert standard parallels and coordinates to radians.\n2. Compute cone constant n and scale constant F.\n3. Compute polar radius rho for origin and point.\n4. Return Lambert projected (x, y) coordinates.",
+    "invariants": [
+      "Conformal projection: preserves angles across regional aeronautical navigation charts.",
+      "Zero scale distortion along both standard parallels."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "n = math.log(m1 / m2) / math.log(t1 / t2)",
+        "failure_mechanism": "Identical standard parallels lat1 == lat2 cause 0 / 0 division by zero.",
+        "counterexample_input": "lat=40.0, lon=-100.0, lat0=30.0, lon0=-100.0, lat1=33.0, lat2=33.0, radius=6371000.0",
+        "verified_fix": "When lat1 == lat2, set cone constant n = sin(lat1)."
+      }
+    ],
+    "source_code": "def lambert_conformal_conic_forward(lat: float, lon: float, lat0: float, lon0: float, lat1: float, lat2: float, radius: float) -> tuple[float, float]:\n    rad = 0.01745329\n    phi = lat * rad\n    lam = lon * rad\n    phi0 = lat0 * rad\n    lam0 = lon0 * rad\n    phi1 = lat1 * rad\n    phi2 = lat2 * rad\n    r_val = max(1.0, radius)\n    t0 = math.tan(0.785398 - 0.5 * phi0)\n    t1 = math.tan(0.785398 - 0.5 * phi1)\n    t2 = math.tan(0.785398 - 0.5 * phi2)\n    t = math.tan(0.785398 - 0.5 * phi)\n    if abs(phi1 - phi2) < 1e-12:\n        n_cone = math.sin(phi1)\n    else:\n        num = math.log(max(1e-12, math.cos(phi1)) / max(1e-12, math.cos(phi2)))\n        den = math.log(max(1e-12, t1) / max(1e-12, t2))\n        n_cone = num / den if den != 0.0 else math.sin(phi1)\n    f_const = math.cos(phi1) / (n_cone * t1 ** n_cone) if n_cone != 0.0 else 1.0\n    rho0 = r_val * f_const * t0 ** n_cone\n    rho = r_val * f_const * t ** n_cone\n    theta = n_cone * (lam - lam0)\n    x = rho * math.sin(theta)\n    y = rho0 - rho * math.cos(theta)\n    return (x, y)",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "orthodromic_distance_haversine_exact",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Exact orthodromic great-circle distance with antipodal clamping using the Haversine formula.",
+    "pseudocode": "1. Convert latitudes and longitudes from degrees to radians.\n2. Compute haversine differences for latitude and longitude.\n3. Compute central angle c = 2 * atan2(sqrt(h), sqrt(1 - h)).\n4. Return radius * c.",
+    "invariants": [
+      "Distance is bounded in range [0.0, pi * radius].",
+      "Zero if and only if coordinates are identical."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "c = 2 * math.asin(math.sqrt(h))",
+        "failure_mechanism": "Float precision errors causing h slightly > 1.0 trigger ValueError in sqrt/asin.",
+        "counterexample_input": "lat1=0.0, lon1=0.0, lat2=0.0, lon2=181e-10, radius=6371.0",
+        "verified_fix": "Clamp h = max(0.0, min(1.0, h))."
+      }
+    ],
+    "source_code": "def orthodromic_distance_haversine_exact(lat1: float, lon1: float, lat2: float, lon2: float, radius: float) -> float:\n    rad = 0.01745329\n    phi1 = float(lat1) * rad\n    phi2 = float(lat2) * rad\n    dphi = phi2 - phi1\n    dlam = (float(lon2) - float(lon1)) * rad\n    r = max(0.0, float(radius))\n    sin_half_phi = math.sin(dphi * 0.5)\n    sin_half_lam = math.sin(dlam * 0.5)\n    h = sin_half_phi * sin_half_phi + math.cos(phi1) * math.cos(phi2) * (sin_half_lam * sin_half_lam)\n    clamped_h = max(0.0, min(1.0, h))\n    c = 2.0 * math.atan2(math.sqrt(clamped_h), math.sqrt(1.0 - clamped_h))\n    dist = r * c\n    return dist",
+    "domain": "geodesy_and_spatial"
+  },
+  {
+    "name": "rhumb_line_distance_mercator",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Rhumb line (loxodrome) navigation distance along a path of constant compass bearing.",
+    "pseudocode": "1. Convert coordinates to radians.\n2. Compute projected isometric latitude difference delta_psi.\n3. If course along parallel of latitude, use parallel distance.\n4. Else compute rhumb distance along loxodrome arc.",
+    "invariants": [
+      "Rhumb line distance is always >= great-circle orthodromic distance.",
+      "Allows navigation with fixed compass heading without continuous heading adjustments."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "q = dphi / dpsi",
+        "failure_mechanism": "When lat1 == lat2 (course along parallel), dpsi == 0 causing division by zero.",
+        "counterexample_input": "lat1=40.0, lon1=10.0, lat2=40.0, lon2=20.0, radius=6371.0",
+        "verified_fix": "Branch for dpsi == 0 to compute parallel distance: q = cos(lat1)."
+      }
+    ],
+    "source_code": "def rhumb_line_distance_mercator(lat1: float, lon1: float, lat2: float, lon2: float, radius: float) -> float:\n    rad = 0.01745329\n    phi1 = float(lat1) * rad\n    phi2 = float(lat2) * rad\n    dphi = phi2 - phi1\n    dlam = abs(float(lon2) - float(lon1)) * rad\n    if dlam > 3.1415927:\n        dlam = 2.0 * 3.1415927 - dlam\n    r = max(0.0, float(radius))\n    psi1 = math.log(max(1e-12, math.tan(0.7853982 + 0.5 * phi1)))\n    psi2 = math.log(max(1e-12, math.tan(0.7853982 + 0.5 * phi2)))\n    dpsi = psi2 - psi1\n    if abs(dpsi) < 1e-12:\n        q = math.cos(phi1)\n    else:\n        q = dphi / dpsi\n    dist = math.sqrt(dphi * dphi + q * q * dlam * dlam) * r\n    return dist",
+    "domain": "geodesy_and_spatial"
+  }
+]

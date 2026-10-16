@@ -1,0 +1,1011 @@
+[
+  {
+    "name": "crc16_ccitt_byte",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "CRC-16-CCITT polynomial 0x1021 bitwise update step for single octet.",
+    "pseudocode": "1. Align byte into high order of 16-bit register: acc = (crc ^ (byte << 8)) & 0xFFFF.\n2. Iteratively process 8 bits: if MSB set, shift left and XOR polynomial 0x1021.\n3. Return updated 16-bit CRC remainder.",
+    "invariants": [
+      "Linear over GF(2): CRC(x ^ y) == CRC(x) ^ CRC(y).",
+      "Output is strictly 16-bit integer bounded within [0, 65535]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "acc << 1 without 16-bit bitmask",
+        "failure_mechanism": "Unmasked left shift in Python arbitrary-precision integers overflows beyond 16 bits.",
+        "counterexample_input": "crc=0xFFFF, byte=0xFF",
+        "verified_fix": "Apply bitmask & 0xFFFF at each shift step to maintain exact 16-bit word boundary."
+      }
+    ],
+    "source_code": "def crc16_ccitt_byte(crc: int, byte: int) -> int:\n    mask16 = 65535\n    poly = 4129\n    curr = (crc ^ (byte & 255) << 8) & mask16\n    for _ in range(8):\n        if curr & 32768 != 0:\n            curr = (curr << 1 ^ poly) & mask16\n        else:\n            curr = curr << 1 & mask16\n    return curr",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "crc32c_castagnoli_step",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "CRC-32C Castagnoli reflected polynomial 0x82F63B78 bitwise update step for single octet.",
+    "pseudocode": "1. XOR lowest byte of CRC with input byte: c = (crc ^ (byte & 0xFF)) & 0xFFFFFFFF.\n2. Process 8 bits with reflected polynomial 0x82F63B78.\n3. Return updated 32-bit Castagnoli remainder.",
+    "invariants": [
+      "Hamming distance 6 for messages up to 131 bytes (standard iSCSI / Btrfs / NVMe).",
+      "Reflected bit order processes bits LSB-first."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Standard IEEE 802.3 polynomial 0xEDB88320 instead of Castagnoli 0x82F63B78",
+        "failure_mechanism": "Wrong polynomial creates incompatible checksums failing Castagnoli specifications.",
+        "counterexample_input": "crc=0xFFFFFFFF, byte=0x01",
+        "verified_fix": "Use exact Castagnoli reflected generator polynomial 0x82F63B78."
+      }
+    ],
+    "source_code": "def crc32c_castagnoli_step(crc: int, byte: int) -> int:\n    mask32 = (1 << 32) - 1\n    poly = 33526 << 16 | 15224\n    curr = (crc ^ byte & 255) & mask32\n    for _ in range(8):\n        if curr & 1 != 0:\n            curr = (curr >> 1 ^ poly) & mask32\n        else:\n            curr = curr >> 1 & mask32\n    return curr",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "adler32_checksum_chunk",
+    "param_types": [
+      "int",
+      "int",
+      "list[int]"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Adler-32 dual modular checksum accumulator modulo prime 65521.",
+    "pseudocode": "1. Modulus base is prime 65521.\n2. Accumulate linear sum A = (A + byte) % 65521.\n3. Accumulate position-weighted sum B = (B + A) % 65521 and return pair (A, B).",
+    "invariants": [
+      "Both component sums A and B are strictly bounded in [0, 65520].",
+      "Full Adler-32 word is given by (B << 16) | A."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Modulo 65536 (2^16) instead of prime 65521",
+        "failure_mechanism": "Power-of-two modulus destroys prime diffusion and violates zlib RFC 1950 standard.",
+        "counterexample_input": "a=1, b=0, data=[255, 255]",
+        "verified_fix": "Reduce accumulator sums modulo exact prime 65521."
+      }
+    ],
+    "source_code": "def adler32_checksum_chunk(a: int, b: int, data: list[int]) -> tuple[int, int]:\n    mod_base = 65521\n    acc_a = a % mod_base\n    acc_b = b % mod_base\n    for val in data:\n        byte = val & 255\n        acc_a = (acc_a + byte) % mod_base\n        acc_b = (acc_b + acc_a) % mod_base\n    return (acc_a, acc_b)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "fletcher16_checksum",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Fletcher-16 dual accumulator checksum modulo 255 with position sensitivity.",
+    "pseudocode": "1. Initialize sums s1 = 0, s2 = 0.\n2. For each byte: s1 = (s1 + byte) % 255; s2 = (s2 + s1) % 255.\n3. Return combined 16-bit word (s2 << 8) | s1.",
+    "invariants": [
+      "Detects all single-bit errors and transposed adjacent byte bursts.",
+      "Position-dependent: changing order of identical bytes changes checksum."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Modulo 256 instead of 255",
+        "failure_mechanism": "Modulo 256 fails to detect block swap errors that modulo 255 catches.",
+        "counterexample_input": "data=[1, 2, 3]",
+        "verified_fix": "Reduce both accumulators modulo 255."
+      }
+    ],
+    "source_code": "def fletcher16_checksum(data: list[int]) -> int:\n    s1 = 0\n    s2 = 0\n    mod_val = 255\n    for val in data:\n        byte = val & 255\n        s1 = (s1 + byte) % mod_val\n        s2 = (s2 + s1) % mod_val\n    checksum = s2 << 8 | s1\n    return checksum",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "cobs_encode_frame",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Consistent Overhead Byte Stuffing (COBS) packet encoding eliminating 0x00 bytes.",
+    "pseudocode": "1. Initialize encoded buffer with placeholder block code.\n2. Iterate through data: copy non-zero bytes and increment block length.\n3. Upon zero byte or 254-byte run, commit code offset and start new block.",
+    "invariants": [
+      "Encoded payload contains strictly zero 0x00 delimiter octets.",
+      "Maximum framing overhead is bounded by ceil(len(data) / 254) + 1 bytes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Allowing block offset counter to exceed 254",
+        "failure_mechanism": "Block counter > 254 overflows single octet storage (max 255).",
+        "counterexample_input": "data=[1] * 300",
+        "verified_fix": "Emit block code 0xFF and start new block without delimiter when length reaches 254."
+      }
+    ],
+    "source_code": "def cobs_encode_frame(data: list[int]) -> list[int]:\n    out = [0]\n    code_idx = 0\n    code = 1\n    for val in data:\n        byte = val & 255\n        if byte == 0:\n            out[code_idx] = code\n            code_idx = len(out)\n            out.append(0)\n            code = 1\n        else:\n            out.append(byte)\n            code = code + 1\n            if code == 255:\n                out[code_idx] = code\n                code_idx = len(out)\n                out.append(0)\n                code = 1\n    out[code_idx] = code\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "cobs_decode_frame",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Consistent Overhead Byte Stuffing (COBS) frame decoding restoring original data.",
+    "pseudocode": "1. Read block code offset from current pointer.\n2. Copy block payload bytes up to code offset.\n3. Insert 0x00 delimiter if code < 255 and more data remains.",
+    "invariants": [
+      "Exact inverse of cobs_encode_frame: decode(encode(data)) == data.",
+      "Deterministic decoding with bounded single linear pass."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked pointer arithmetic exceeding encoded buffer length",
+        "failure_mechanism": "Malformed frame with corrupted block code points past end of buffer.",
+        "counterexample_input": "encoded=[250, 1, 2]",
+        "verified_fix": "Validate code offset against remaining buffer length and break on premature EOF."
+      }
+    ],
+    "source_code": "def cobs_decode_frame(encoded: list[int]) -> list[int]:\n    n = len(encoded)\n    if n == 0:\n        return []\n    out = []\n    idx = 0\n    while idx < n:\n        code = encoded[idx] & 255\n        if code == 0:\n            break\n        idx = idx + 1\n        num_copy = code - 1\n        for _ in range(num_copy):\n            if idx < n:\n                out.append(encoded[idx] & 255)\n                idx = idx + 1\n        if code < 255 and idx < n:\n            out.append(0)\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "slip_escape_frame",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Serial Line Internet Protocol (SLIP RFC 1055) packet byte escaping.",
+    "pseudocode": "1. Replace framing END (0xC0) with escape sequence [0xDB, 0xDC].\n2. Replace escape char itself (0xDB) with [0xDB, 0xDD].\n3. Enclose framed payload with boundary END byte 0xC0.",
+    "invariants": [
+      "Delimited by 0xC0: frame begins and ends with boundary delimiter.",
+      "No unescaped 0xC0 or 0xDB bytes appear in interior frame body."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Failing to escape the escape byte 0xDB itself",
+        "failure_mechanism": "Unescaped 0xDB in payload causes decoder to treat following byte as escape code.",
+        "counterexample_input": "data=[219, 10]",
+        "verified_fix": "Replace 0xDB with two-byte sequence [0xDB, 0xDD]."
+      }
+    ],
+    "source_code": "def slip_escape_frame(data: list[int]) -> list[int]:\n    end_byte = 192\n    esc_byte = 219\n    esc_end = 220\n    esc_esc = 221\n    out = [end_byte]\n    for val in data:\n        b = val & 255\n        if b == end_byte:\n            out.append(esc_byte)\n            out.append(esc_end)\n        elif b == esc_byte:\n            out.append(esc_byte)\n            out.append(esc_esc)\n        else:\n            out.append(b)\n    out.append(end_byte)\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "slip_unescape_frame",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Serial Line Internet Protocol (SLIP RFC 1055) frame unescaping restoring payload.",
+    "pseudocode": "1. Strip boundary END bytes (0xC0).\n2. When escape byte 0xDB encountered, inspect following byte.\n3. Map [0xDB, 0xDC] -> 0xC0 and [0xDB, 0xDD] -> 0xDB.",
+    "invariants": [
+      "Exact roundtrip reconstruction: slip_unescape(slip_escape(data)) == data.",
+      "Preserves arbitrary binary payloads transparently."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Trailing lonely escape byte 0xDB at end of frame",
+        "failure_mechanism": "Accessing buffer past final index triggers IndexError on truncated frame.",
+        "counterexample_input": "framed=[192, 1, 219, 192]",
+        "verified_fix": "Check that next index is within bounds before unescaping."
+      }
+    ],
+    "source_code": "def slip_unescape_frame(framed: list[int]) -> list[int]:\n    n = len(framed)\n    if n == 0:\n        return []\n    end_byte = 192\n    esc_byte = 219\n    esc_end = 220\n    esc_esc = 221\n    out = []\n    idx = 0\n    while idx < n:\n        b = framed[idx] & 255\n        if b == end_byte:\n            idx = idx + 1\n        elif b == esc_byte:\n            idx = idx + 1\n            if idx < n:\n                sub = framed[idx] & 255\n                if sub == esc_end:\n                    out.append(end_byte)\n                elif sub == esc_esc:\n                    out.append(esc_byte)\n                else:\n                    out.append(sub)\n                idx = idx + 1\n        else:\n            out.append(b)\n            idx = idx + 1\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "hdlc_bit_stuffing",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "HDLC / SDLC bit stuffing inserting zero after five consecutive ones.",
+    "pseudocode": "1. Track running count of consecutive 1 bits.\n2. Append input bit to stuffed output stream.\n3. If consecutive count reaches 5, immediately stuff extra 0 bit and reset count.",
+    "invariants": [
+      "Guarantees sequence 01111110 (0x7E) appears exclusively as frame boundary delimiter.",
+      "Any sequence of six consecutive 1 bits in data is broken by stuffed zero."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Not resetting consecutive ones counter after stuffing zero",
+        "failure_mechanism": "Continuing count after stuffing zero produces spurious extra stuffed zeros.",
+        "counterexample_input": "bits=[1, 1, 1, 1, 1, 1]",
+        "verified_fix": "Reset consecutive ones counter to zero immediately after inserting stuffed bit."
+      }
+    ],
+    "source_code": "def hdlc_bit_stuffing(bits: list[int]) -> list[int]:\n    out = []\n    ones_count = 0\n    for b in bits:\n        bit_val = 1 if b != 0 else 0\n        out.append(bit_val)\n        if bit_val == 1:\n            ones_count = ones_count + 1\n            if ones_count == 5:\n                out.append(0)\n                ones_count = 0\n        else:\n            ones_count = 0\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "constant_time_byte_eq",
+    "param_types": [
+      "list[int]",
+      "list[int]"
+    ],
+    "return_type": "bool",
+    "summary": "Constant-time byte array equality comparison preventing timing side-channel leakage.",
+    "pseudocode": "1. Determine maximum length of both inputs.\n2. Accumulate bitwise XOR difference diff |= a[i] ^ b[i] across full sequence.\n3. Return diff == 0 without data-dependent early termination.",
+    "invariants": [
+      "Execution execution time and branch path are independent of mismatch index location.",
+      "Returns True iff len(a) == len(b) and a[i] == b[i] for all indices."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Early return False on first mismatching byte: if a[i] != b[i]: return False",
+        "failure_mechanism": "Timing side-channel leaks position of first mismatching byte, breaking MAC security.",
+        "counterexample_input": "a=[1, 2, 3], b=[0, 2, 3]",
+        "verified_fix": "Accumulate bitwise XOR differences across entire buffer before returning comparison."
+      }
+    ],
+    "source_code": "def constant_time_byte_eq(a: list[int], b: list[int]) -> bool:\n    len_a = len(a)\n    len_b = len(b)\n    diff = len_a ^ len_b\n    max_len = max(len_a, len_b)\n    for i in range(max_len):\n        va = a[i] & 255 if i < len_a else 0\n        vb = b[i] & 255 if i < len_b else 0\n        diff = diff | va ^ vb\n    is_equal = diff == 0\n    return is_equal",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "constant_time_conditional_swap",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Constant-time conditional swap of two integers based on flag bit without branching.",
+    "pseudocode": "1. Derive bitmask from swap condition flag: mask = -(swap != 0).\n2. Compute bitwise difference delta = mask & (a ^ b).\n3. Return (a ^ delta, b ^ delta) executing in identical instruction cycles regardless of swap.",
+    "invariants": [
+      "If swap is truthy, returns (b, a); if swap is zero, returns (a, b).",
+      "Branchless bitwise masking guarantees identical execution timing profile."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if swap: return (b, a) else: return (a, b)",
+        "failure_mechanism": "Conditional branch creates timing side-channel revealing secret swap condition.",
+        "counterexample_input": "swap=1, a=42, b=99",
+        "verified_fix": "Use two's complement sign-extended mask: delta = mask & (a ^ b)."
+      }
+    ],
+    "source_code": "def constant_time_conditional_swap(swap: int, a: int, b: int) -> tuple[int, int]:\n    s_bit = 1 if swap != 0 else 0\n    mask = -s_bit\n    delta = mask & (a ^ b)\n    new_a = a ^ delta\n    new_b = b ^ delta\n    return (new_a, new_b)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "constant_time_select",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Constant-time multiplexer returning a if condition is truthy else b without branching.",
+    "pseudocode": "1. Derive bitmask from condition flag: mask = -(condition != 0).\n2. Select a with mask and b with bitwise complement ~mask.\n3. Combine terms via bitwise OR: (mask & a) | (~mask & b).",
+    "invariants": [
+      "Returns a when condition != 0, and returns b when condition == 0.",
+      "Constant time execution with no conditional jumps or data-dependent cache access."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return a if condition else b",
+        "failure_mechanism": "Ternary expression compiles to conditional jump leaking choice via branch predictor.",
+        "counterexample_input": "condition=0, a=10, b=20",
+        "verified_fix": "Compute selection via bitwise multiplexing: (mask & a) | (~mask & b)."
+      }
+    ],
+    "source_code": "def constant_time_select(condition: int, a: int, b: int) -> int:\n    cond_bit = 1 if condition != 0 else 0\n    mask = -cond_bit\n    term_a = mask & a\n    term_b = ~mask & b\n    res = term_a | term_b\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "galois_field_gf256_mul",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Galois Field GF(2^8) multiplication modulo AES/Rijndael irreducible polynomial 0x11B.",
+    "pseudocode": "1. Initialize product accumulator p to 0.\n2. Iterate through 8 bit positions of multiplier b.\n3. If lowest bit of b is 1, XOR accumulator with multiplicand a.\n4. Shift a left by 1; if high bit was set, reduce modulo polynomial 0x11B (283).\n5. Shift b right by 1 and return accumulator modulo 256.",
+    "invariants": [
+      "Multiplication is commutative, associative, and distributive over XOR addition in GF(2^8).",
+      "Result lies strictly within finite field range [0, 255]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Standard integer multiplication (a * b) % 256",
+        "failure_mechanism": "Ordinary integer multiplication carries arithmetic bits instead of GF(2) polynomial XOR.",
+        "counterexample_input": "a=2, b=128",
+        "verified_fix": "Perform bit-by-bit shift-and-add with reduction modulo polynomial 283."
+      }
+    ],
+    "source_code": "def galois_field_gf256_mul(a: int, b: int) -> int:\n    p = 0\n    va = a & 255\n    vb = b & 255\n    poly = 283\n    for _ in range(8):\n        if vb & 1 != 0:\n            p = p ^ va\n        hi_bit = va & 128 != 0\n        va = va << 1 & 255\n        if hi_bit:\n            va = va ^ poly & 255\n        vb = vb >> 1\n    return p",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "galois_field_gf256_inv",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Multiplicative inverse in Galois Field GF(2^8) via exponentiation to power 254.",
+    "pseudocode": "1. For element a in GF(2^8), return 0 if a == 0.\n2. By Fermat Little Theorem, a^254 is multiplicative inverse of a.\n3. Compute exponentiation using repeated squaring and GF(2^8) polynomial multiplication.",
+    "invariants": [
+      "For any non-zero element a in GF(2^8), gf256_mul(a, gf256_inv(a)) == 1.",
+      "Mapping of 0 is uniquely defined as 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Integer modular inversion pow(a, -1, 256)",
+        "failure_mechanism": "Integer 256 is not prime; even elements have no modular inverse in Z/256Z.",
+        "counterexample_input": "a=2",
+        "verified_fix": "Compute inverse in GF(2^8) via polynomial exponentiation a^(255-1) == a^254."
+      }
+    ],
+    "source_code": "def galois_field_gf256_inv(a: int) -> int:\n    val = a & 255\n    if val == 0:\n        return 0\n    res = 1\n    base = val\n    exp = 254\n    poly_low = 27\n    while exp > 0:\n        if exp & 1 != 0:\n            p = 0\n            x = res\n            y = base\n            for _ in range(8):\n                if y & 1 != 0:\n                    p = p ^ x\n                hi = x & 128 != 0\n                x = x << 1 & 255\n                if hi:\n                    x = x ^ poly_low\n                y = y >> 1\n            res = p\n        p = 0\n        x = base\n        y = base\n        for _ in range(8):\n            if y & 1 != 0:\n                p = p ^ x\n            hi = x & 128 != 0\n            x = x << 1 & 255\n            if hi:\n                x = x ^ poly_low\n            y = y >> 1\n        base = p\n        exp = exp >> 1\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "shamir_secret_eval_poly",
+    "param_types": [
+      "list[int]",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Shamir secret sharing polynomial evaluation at point x modulo prime using Horner rule.",
+    "pseudocode": "1. Initialize accumulator to 0.\n2. In reverse order of coefficients, multiply accumulator by x and add coefficient modulo prime.\n3. Return evaluated secret share residue.",
+    "invariants": [
+      "Evaluates P(x) = sum(coeffs[i] * x^i) mod prime identically to algebraic definition.",
+      "P(0) mod prime equals constant term coeffs[0] mod prime."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Evaluating terms via sum(c * (x ** i)) without intermediate modular reduction",
+        "failure_mechanism": "Unbounded integer exponentiation degrades performance and can overflow fixed precision.",
+        "counterexample_input": "coeffs=[42, 10, 5], x=1000, prime=257",
+        "verified_fix": "Apply Horner polynomial reduction maintaining values modulo prime at each step."
+      }
+    ],
+    "source_code": "def shamir_secret_eval_poly(coeffs: list[int], x: int, prime: int) -> int:\n    if prime <= 1:\n        return 0\n    acc = 0\n    x_mod = x % prime\n    for c in reversed(coeffs):\n        term = (acc * x_mod + c) % prime\n        acc = term\n    return acc",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "shamir_lagrange_interpolate",
+    "param_types": [
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Shamir secret sharing threshold reconstruction of secret at x=0 via Lagrange interpolation.",
+    "pseudocode": "1. Validate prime > 1 and shares count > 0.\n2. For each share (x_i, y_i), compute Lagrange basis polynomial L_i(0) = prod_{j != i} (-x_j) / (x_i - x_j) mod prime.\n3. Invert denominator using Fermat Little Theorem.\n4. Accumulate y_i * L_i(0) mod prime and return recovered secret.",
+    "invariants": [
+      "Any threshold subset of k distinct points yields identical reconstructed secret P(0).",
+      "Output is non-negative and strictly bounded by prime."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Floating point division num / den in Lagrange coefficients",
+        "failure_mechanism": "Loss of exact integer precision corrupts modular secret recovery.",
+        "counterexample_input": "shares=[[1, 52], [2, 62], [3, 72]], prime=257",
+        "verified_fix": "Compute exact modular inverse of denominator via pow(den, prime - 2, prime)."
+      }
+    ],
+    "source_code": "def shamir_lagrange_interpolate(shares: list[list[int]], prime: int) -> int:\n    if prime <= 1 or len(shares) == 0:\n        return 0\n    secret = 0\n    k = len(shares)\n    for i in range(k):\n        xi = shares[i][0] % prime\n        yi = shares[i][1] % prime\n        num = 1\n        den = 1\n        for j in range(k):\n            if i != j:\n                xj = shares[j][0] % prime\n                num = num * -xj % prime\n                diff = (xi - xj) % prime\n                den = den * diff % prime\n        if den == 0:\n            continue\n        inv_den = pow(den, prime - 2, prime)\n        basis = num * inv_den % prime\n        term = yi * basis % prime\n        secret = (secret + term) % prime\n    return (secret + prime) % prime",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "sponge_permutation_keccak_round",
+    "param_types": [
+      "list[int]",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Single round of 25-lane Keccak sponge permutation applying theta, rho, pi, chi, and iota steps.",
+    "pseudocode": "1. Validate and pad 25-lane 32-bit state vector.\n2. Step theta: compute column parities and XOR diffusion offsets.\n3. Step rho and pi: bitwise rotate and transpose lanes.\n4. Step chi: apply non-linear bitwise interaction between adjacent row lanes.\n5. Step iota: inject round constant into origin lane state[0].",
+    "invariants": [
+      "Preserves exact 25-element vector length and unsigned 32-bit range on all lanes.",
+      "Injective permutation step mapping distinct states bijectively."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "In-place modification during chi step without temporary buffer",
+        "failure_mechanism": "Mutating lane values prematurely alters the input to subsequent lane calculations in same row.",
+        "counterexample_input": "state=[1]*25, round_const=1",
+        "verified_fix": "Evaluate non-linear chi step from immutable snapshot of previous step."
+      }
+    ],
+    "source_code": "def sponge_permutation_keccak_round(state: list[int], round_const: int) -> list[int]:\n    mask = (1 << 32) - 1\n    st = list(state)\n    while len(st) < 25:\n        st.append(0)\n    st = [s & mask for s in st[:25]]\n    c = [0] * 5\n    for i in range(25):\n        c[i % 5] = c[i % 5] ^ st[i]\n    d = [0] * 5\n    for x in range(5):\n        r = c[(x + 1) % 5]\n        rot = (r << 1 | r >> 31) & mask\n        d[x] = c[(x + 4) % 5] ^ rot\n    for i in range(25):\n        st[i] = st[i] ^ d[i % 5]\n    b = list(st)\n    for x in range(5):\n        for y in range(5):\n            idx = x + 5 * y\n            shift = (x + 2 * y) * (x + 2 * y + 1) // 2 % 32\n            v = st[idx]\n            b[y + 5 * ((2 * x + 3 * y) % 5)] = (v << shift | v >> 32 - shift) & mask if shift != 0 else v\n    out = [0] * 25\n    for y in range(5):\n        for x in range(5):\n            idx = x + 5 * y\n            out[idx] = b[idx] ^ ~b[(x + 1) % 5 + 5 * y] & b[(x + 2) % 5 + 5 * y] & mask\n    out[0] = out[0] ^ round_const & mask\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "chacha_quarter_round",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int, int, int]",
+    "summary": "ChaCha20 quarter-round permutation operating on four 32-bit unsigned words (RFC 8439).",
+    "pseudocode": "1. a += b, d ^= a, d = rol(d, 16) mod 2^32.\n2. c += d, b ^= c, b = rol(b, 12) mod 2^32.\n3. a += b, d ^= a, d = rol(d, 8) mod 2^32.\n4. c += d, b ^= c, b = rol(b, 7) mod 2^32.\n5. Return updated four-tuple (a, b, c, d).",
+    "invariants": [
+      "Invertible ARX (Add-Rotate-XOR) operation over four 32-bit integer registers.",
+      "All outputs are strictly within 32-bit unsigned integer range [0, 2^32 - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unbounded Python integer addition without 32-bit truncation mask",
+        "failure_mechanism": "Integer growth beyond 32 bits destroys ARX wrap-around bit diffusion.",
+        "counterexample_input": "a=1000, b=1, c=0, d=0",
+        "verified_fix": "Apply bitwise AND mask with (1 << 32) - 1 after every modular addition."
+      }
+    ],
+    "source_code": "def chacha_quarter_round(a: int, b: int, c: int, d: int) -> tuple[int, int, int, int]:\n    mask = (1 << 32) - 1\n    va = a & mask\n    vb = b & mask\n    vc = c & mask\n    vd = d & mask\n    va = va + vb & mask\n    vd = vd ^ va\n    vd = (vd << 16 | vd >> 16) & mask\n    vc = vc + vd & mask\n    vb = vb ^ vc\n    vb = (vb << 12 | vb >> 20) & mask\n    va = va + vb & mask\n    vd = vd ^ va\n    vd = (vd << 8 | vd >> 24) & mask\n    vc = vc + vd & mask\n    vb = vb ^ vc\n    vb = (vb << 7 | vb >> 25) & mask\n    return (va, vb, vc, vd)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "salsa20_quarter_round",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int, int, int]",
+    "summary": "Salsa20 core quarter-round ARX permutation on four 32-bit words.",
+    "pseudocode": "1. y1 ^= rol(y0 + y3, 7) mod 2^32.\n2. y2 ^= rol(y1 + y0, 9) mod 2^32.\n3. y3 ^= rol(y2 + y1, 13) mod 2^32.\n4. y0 ^= rol(y3 + y2, 18) mod 2^32.\n5. Return updated 4-tuple of words.",
+    "invariants": [
+      "Bijective mapping over (Z / 2^32 Z)^4 preserving information entropy.",
+      "Strictly satisfies Salsa20 rotation schedule (7, 9, 13, 18 bits)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using ChaCha rotation schedule (16, 12, 8, 7) for Salsa20 quarter-round",
+        "failure_mechanism": "Cryptographic incompatibility with Salsa20 specification and stream cipher vectors.",
+        "counterexample_input": "y0=1, y1=2, y2=3, y3=4",
+        "verified_fix": "Use Salsa20 rotation offsets (7, 9, 13, 18) with respective operand sums."
+      }
+    ],
+    "source_code": "def salsa20_quarter_round(y0: int, y1: int, y2: int, y3: int) -> tuple[int, int, int, int]:\n    mask = (1 << 32) - 1\n    w0 = y0 & mask\n    w1 = y1 & mask\n    w2 = y2 & mask\n    w3 = y3 & mask\n    s0 = w0 + w3 & mask\n    w1 = w1 ^ (s0 << 7 | s0 >> 25) & mask\n    s1 = w1 + w0 & mask\n    w2 = w2 ^ (s1 << 9 | s1 >> 23) & mask\n    s2 = w2 + w1 & mask\n    w3 = w3 ^ (s2 << 13 | s2 >> 19) & mask\n    s3 = w3 + w2 & mask\n    w0 = w0 ^ (s3 << 18 | s3 >> 14) & mask\n    return (w0, w1, w2, w3)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "merkle_tree_parent_hash",
+    "param_types": [
+      "list[int]",
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes Merkle parent node hash from left and right children using domain-separated mixing.",
+    "pseudocode": "1. Initialize FNV-1a 32-bit offset basis with domain separation byte 0x01.\n2. Ingest left child bytes sequentially into hash state.\n3. Ingest right child bytes sequentially into hash state.\n4. Apply Murmur-style avalanche mixing step.\n5. Return 4-byte parent digest.",
+    "invariants": [
+      "Domain-separated prefix 0x01 prevents second-preimage attacks between leaves and internal nodes.",
+      "Strictly deterministic: identical children yield identical 4-byte parent digests."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Direct concatenation hash(left + right) without node prefix",
+        "failure_mechanism": "Vulnerable to second-preimage attack equating internal branch nodes with leaf pairs.",
+        "counterexample_input": "left_leaf=[1, 2], right_leaf=[3, 4]",
+        "verified_fix": "Prepend domain separation tag byte 0x01 before mixing left and right children."
+      }
+    ],
+    "source_code": "def merkle_tree_parent_hash(left_leaf: list[int], right_leaf: list[int]) -> list[int]:\n    h = 33052 << 16 | 40389\n    fnv_prime = 16777619\n    mask = (1 << 32) - 1\n    h = (h ^ 1) * fnv_prime & mask\n    for b in left_leaf:\n        h = (h ^ b & 255) * fnv_prime & mask\n    for b in right_leaf:\n        h = (h ^ b & 255) * fnv_prime & mask\n    h = (h ^ h >> 16) & mask\n    h = h * (34283 << 16 | 51819) & mask\n    h = (h ^ h >> 13) & mask\n    out = [h >> 24 & 255, h >> 16 & 255, h >> 8 & 255, h & 255]\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "merkle_proof_verify_leaf",
+    "param_types": [
+      "list[int]",
+      "list[list[int]]",
+      "list[int]",
+      "list[int]"
+    ],
+    "return_type": "bool",
+    "summary": "Verifies Merkle authentication path proving leaf inclusion under root hash.",
+    "pseudocode": "1. Initialize current node digest to leaf bytes.\n2. Iteratively pair with sibling hashes based on direction flags.\n3. Compute domain-separated parent hash at each tree height.\n4. Return whether calculated root matches expected root digest.",
+    "invariants": [
+      "Valid proof over authentic leaf evaluates to expected root digest True.",
+      "Any altered bit in leaf or sibling proof causes verification to evaluate False."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Assuming sibling is always right child without checking path direction",
+        "failure_mechanism": "Violates non-commutative hash pairing resulting in invalid root reconstruction.",
+        "counterexample_input": "leaf=[1], proof_hashes=[[2]], is_right_list=[0], expected_root=[1,2,3,4]",
+        "verified_fix": "Conditionally order left and right hash inputs using directional bit flag."
+      }
+    ],
+    "source_code": "def merkle_proof_verify_leaf(leaf: list[int], proof_hashes: list[list[int]], is_right_list: list[int], expected_root: list[int]) -> bool:\n    curr = list(leaf)\n    fnv_prime = 16777619\n    mask = (1 << 32) - 1\n    n = min(len(proof_hashes), len(is_right_list))\n    for i in range(n):\n        sib = proof_hashes[i]\n        is_right = is_right_list[i] != 0\n        h = 33052 << 16 | 40389\n        h = (h ^ 1) * fnv_prime & mask\n        first = curr if is_right else sib\n        second = sib if is_right else curr\n        for b in first:\n            h = (h ^ b & 255) * fnv_prime & mask\n        for b in second:\n            h = (h ^ b & 255) * fnv_prime & mask\n        h = (h ^ h >> 16) & mask\n        h = h * (34283 << 16 | 51819) & mask\n        h = (h ^ h >> 13) & mask\n        curr = [h >> 24 & 255, h >> 16 & 255, h >> 8 & 255, h & 255]\n    is_valid = curr == expected_root\n    return is_valid",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "poly1305_clamp_key",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Poly1305 key clamping (RFC 8439) masking specific bits to ensure evaluation stability.",
+    "pseudocode": "1. Extract 16-byte evaluator r and 16-byte pad s from 32-byte key.\n2. Clear top 4 bits of bytes 3, 7, 11, 15 of r (mask 0x0F).\n3. Clear bottom 2 bits of bytes 4, 8, 12 of r (mask 0xFC).\n4. Decode little-endian unsigned integers r and s.",
+    "invariants": [
+      "Certain bit positions in evaluator r are guaranteed to be zero preventing field overflow.",
+      "Deterministic bijection for properly formatted 32-byte key arrays."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using raw 16-byte r integer directly without bit clamping",
+        "failure_mechanism": "Unclamped keys permit small-subgroup attacks and coefficients that exceed prime modulus during fast reduction.",
+        "counterexample_input": "key_bytes=[255]*32",
+        "verified_fix": "Mask required bit positions on bytes 3, 4, 7, 8, 11, 12, 15 as mandated by RFC 8439."
+      }
+    ],
+    "source_code": "def poly1305_clamp_key(key_bytes: list[int]) -> tuple[int, int]:\n    kb = list(key_bytes)\n    while len(kb) < 32:\n        kb.append(0)\n    r_bytes = [kb[i] & 255 for i in range(16)]\n    s_bytes = [kb[16 + i] & 255 for i in range(16)]\n    r_bytes[3] = r_bytes[3] & 15\n    r_bytes[7] = r_bytes[7] & 15\n    r_bytes[11] = r_bytes[11] & 15\n    r_bytes[15] = r_bytes[15] & 15\n    r_bytes[4] = r_bytes[4] & 252\n    r_bytes[8] = r_bytes[8] & 252\n    r_bytes[12] = r_bytes[12] & 252\n    r_val = 0\n    s_val = 0\n    for i in range(16):\n        r_val = r_val | r_bytes[i] << 8 * i\n        s_val = s_val | s_bytes[i] << 8 * i\n    return (r_val, s_val)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "poly1305_fe_mul_mod",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Poly1305 finite field accumulator addition and modular multiplication modulo 2^130 - 5.",
+    "pseudocode": "1. Define prime p = 2^130 - 5.\n2. Add incoming message block integer to current accumulator modulo p.\n3. Multiply sum by clamped evaluation key r modulo p.\n4. Return updated accumulator state.",
+    "invariants": [
+      "Result is strictly contained within finite field [0, 2^130 - 6].",
+      "Satisfies algebraic Horner step ((acc + block) * r) mod p."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Reducing modulo 2^130 instead of prime 2^130 - 5",
+        "failure_mechanism": "Ring Z/2^130Z has zero divisors destroying polynomial universal hashing security.",
+        "counterexample_input": "acc=5, block=10, r=2",
+        "verified_fix": "Perform reduction strictly modulo prime p = (1 << 130) - 5."
+      }
+    ],
+    "source_code": "def poly1305_fe_mul_mod(acc: int, block: int, r: int) -> int:\n    p = (1 << 130) - 5\n    val = (acc + block) % p\n    prod = val * (r % p) % p\n    res = prod\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "fe25519_add_mod",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Addition in finite field GF(2^255 - 19) modulo prime p = 2^255 - 19.",
+    "pseudocode": "1. Define field characteristic p = 2^255 - 19.\n2. Reduce inputs a and b modulo p.\n3. Compute sum (a + b) mod p and return residue.",
+    "invariants": [
+      "Satisfies group axioms of addition in Galois field GF(2^255 - 19).",
+      "Result is strictly non-negative and strictly less than 2^255 - 19."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Omitting reduction modulo prime p assuming inputs are already bounded",
+        "failure_mechanism": "Unreduced operands can accumulate beyond field boundaries into multi-precision overflow.",
+        "counterexample_input": "a=(1<<255), b=10",
+        "verified_fix": "Perform modular reduction on operands and final summation."
+      }
+    ],
+    "source_code": "def fe25519_add_mod(a: int, b: int) -> int:\n    p = (1 << 255) - 19\n    sum_val = a % p + b % p\n    res = sum_val % p\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "fe25519_sub_mod",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Subtraction in finite field GF(2^255 - 19) modulo prime p with positive residue.",
+    "pseudocode": "1. Define field characteristic p = 2^255 - 19.\n2. Compute difference (a mod p) - (b mod p).\n3. Add prime p to difference to eliminate negative values before modular reduction.\n4. Return positive field element residue.",
+    "invariants": [
+      "fe25519_add_mod(fe25519_sub_mod(a, b), b) == a mod p.",
+      "Result strictly bounded within interval [0, p - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Returning raw difference (a - b) % p in languages where % preserves negative sign",
+        "failure_mechanism": "Negative field elements break downstream bit-representation encodings.",
+        "counterexample_input": "a=5, b=10",
+        "verified_fix": "Add prime modulus p before taking modulo: (diff + p) % p."
+      }
+    ],
+    "source_code": "def fe25519_sub_mod(a: int, b: int) -> int:\n    p = (1 << 255) - 19\n    diff = a % p - b % p\n    res = (diff + p) % p\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "fe25519_carry_round",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Radix-2^51 limb carry propagation reducing 5 64-bit limbs modulo 2^255 - 19.",
+    "pseudocode": "1. Pad or truncate limbs to 5 elements.\n2. For limbs 0 through 3, extract excess bits above 51 and carry to next limb.\n3. Multiply excess carry from limb 4 by 19 and fold into limb 0.\n4. Propagate secondary carry from limb 0 to limb 1.\n5. Return 5 reduced canonical limbs.",
+    "invariants": [
+      "Preserves exact polynomial value modulo 2^255 - 19.",
+      "Each output limb strictly bounded by 2^51."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Carrying limb 4 into limb 5 instead of folding by factor 19 into limb 0",
+        "failure_mechanism": "Fails to exploit 2^255 == 19 mod p equivalence, growing limb array indefinitely.",
+        "counterexample_input": "limbs=[0, 0, 0, 0, 1<<52]",
+        "verified_fix": "Multiply carry of limb 4 by 19 and add directly into limb 0."
+      }
+    ],
+    "source_code": "def fe25519_carry_round(limbs: list[int]) -> list[int]:\n    res = list(limbs)\n    while len(res) < 5:\n        res.append(0)\n    mask51 = (1 << 51) - 1\n    for i in range(4):\n        c = res[i] >> 51\n        res[i] = res[i] & mask51\n        res[i + 1] = res[i + 1] + c\n    c4 = res[4] >> 51\n    res[4] = res[4] & mask51\n    res[0] = res[0] + c4 * 19\n    c0 = res[0] >> 51\n    res[0] = res[0] & mask51\n    res[1] = res[1] + c0\n    return res[:5]",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "ed25519_point_double",
+    "param_types": [
+      "tuple[int, int]"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Point doubling on Twisted Edwards curve Ed25519 using complete rational addition formulas.",
+    "pseudocode": "1. Compute field characteristic p = 2^255 - 19 and curve constant d.\n2. Evaluate numerator and denominator coordinates for doubling (x1, y1).\n3. Invert denominators via Fermat Little Theorem.\n4. Return doubled point affine coordinates (x3, y3).",
+    "invariants": [
+      "Identity point (0, 1) doubles to itself (0, 1).",
+      "Doubled point satisfies curve equation -x^2 + y^2 == 1 + d*x^2*y^2 mod p."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Weierstrass doubling formulas applied to Edwards coordinates",
+        "failure_mechanism": "Incorrect algebraic curve group law generates points outside the manifold.",
+        "counterexample_input": "point=(0, 1)",
+        "verified_fix": "Use complete Edwards doubling formulas x3=2xy/(1+dx^2y^2) and y3=(y^2+x^2)/(1-dx^2y^2)."
+      }
+    ],
+    "source_code": "def ed25519_point_double(point: tuple[int, int]) -> tuple[int, int]:\n    p = (1 << 255) - 19\n    d = -121665 * pow(121666, p - 2, p) % p\n    x1 = point[0] % p\n    y1 = point[1] % p\n    x1_sq = x1 * x1 % p\n    y1_sq = y1 * y1 % p\n    x1y1_sq = x1_sq * y1_sq % p\n    num_x = 2 * x1 * y1 % p\n    den_x = (1 + d * x1y1_sq) % p\n    num_y = (y1_sq + x1_sq) % p\n    den_y = (1 - d * x1y1_sq) % p\n    if den_x == 0 or den_y == 0:\n        return (0, 1)\n    x3 = num_x * pow(den_x, p - 2, p) % p\n    y3 = num_y * pow(den_y, p - 2, p) % p\n    return (x3, y3)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "ed25519_point_add",
+    "param_types": [
+      "tuple[int, int]",
+      "tuple[int, int]"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Point addition on Twisted Edwards curve Ed25519 using rational addition law.",
+    "pseudocode": "1. Compute field prime p and curve constant d.\n2. Compute x3 = (x1*y2 + y1*x2) / (1 + d*x1*x2*y1*y2) mod p.\n3. Compute y3 = (y1*y2 + x1*x2) / (1 - d*x1*x2*y1*y2) mod p.\n4. Return resultant point (x3, y3).",
+    "invariants": [
+      "Adding neutral element (0, 1) to point P yields P unchanged.",
+      "Group addition is strictly associative and commutative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Inverting denominators without checking for exceptional zero divisors",
+        "failure_mechanism": "While Edwards addition is complete over quadratic non-residue d, improper inputs can trigger ZeroDivisionError.",
+        "counterexample_input": "p1=(0, 0), p2=(0, 0)",
+        "verified_fix": "Safely guard denominator inversions and fallback to neutral element (0, 1)."
+      }
+    ],
+    "source_code": "def ed25519_point_add(p1: tuple[int, int], p2: tuple[int, int]) -> tuple[int, int]:\n    p = (1 << 255) - 19\n    d = -121665 * pow(121666, p - 2, p) % p\n    x1 = p1[0] % p\n    y1 = p1[1] % p\n    x2 = p2[0] % p\n    y2 = p2[1] % p\n    common = d * x1 * x2 * y1 * y2 % p\n    num_x = (x1 * y2 + y1 * x2) % p\n    den_x = (1 + common) % p\n    num_y = (y1 * y2 + x1 * x2) % p\n    den_y = (1 - common) % p\n    if den_x == 0 or den_y == 0:\n        return (0, 1)\n    x3 = num_x * pow(den_x, p - 2, p) % p\n    y3 = num_y * pow(den_y, p - 2, p) % p\n    return (x3, y3)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "hkdf_extract_step",
+    "param_types": [
+      "list[int]",
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "HKDF Extract step deriving pseudorandom key (PRK) from salt and input keying material.",
+    "pseudocode": "1. Ingest salt into 32-bit key using FNV-1a hash.\n2. Perform inner hash with key XOR ipad (0x36) over IKM payload.\n3. Perform outer hash with key XOR opad (0x5C) over inner hash digest.\n4. Return 4-byte pseudorandom master key.",
+    "invariants": [
+      "Extracts uniform randomness from non-uniformly distributed keying material.",
+      "Deterministic: identical salt and IKM produce identical 4-byte PRK."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using raw unextracted IKM directly as PRK",
+        "failure_mechanism": "Non-uniform entropy in source secret weakens security of subsequent key expansions.",
+        "counterexample_input": "salt=[1, 2], ikm=[3, 4]",
+        "verified_fix": "Concentrate entropy via HMAC extraction before expand step."
+      }
+    ],
+    "source_code": "def hkdf_extract_step(salt: list[int], ikm: list[int]) -> list[int]:\n    fnv_prime = 16777619\n    mask = (1 << 32) - 1\n    k = 33052 << 16 | 40389\n    for b in salt:\n        k = (k ^ b & 255) * fnv_prime & mask\n    ipad_val = 54\n    opad_val = 92\n    h_inner = 33052 << 16 | 40389\n    h_inner = (h_inner ^ (k & 255 ^ ipad_val)) * fnv_prime & mask\n    for b in ikm:\n        h_inner = (h_inner ^ b & 255) * fnv_prime & mask\n    h_outer = 33052 << 16 | 40389\n    h_outer = (h_outer ^ (k & 255 ^ opad_val)) * fnv_prime & mask\n    for shift in (24, 16, 8, 0):\n        h_outer = (h_outer ^ h_inner >> shift & 255) * fnv_prime & mask\n    out = [h_outer >> 24 & 255, h_outer >> 16 & 255, h_outer >> 8 & 255, h_outer & 255]\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "hkdf_expand_info_block",
+    "param_types": [
+      "list[int]",
+      "list[int]",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "HKDF Expand block step generating output keying material (OKM) chunk from PRK, context info, and counter.",
+    "pseudocode": "1. Initialize hash accumulator from PRK bytes.\n2. Ingest application context info bytes.\n3. Ingest block counter index byte.\n4. Apply avalanche mixing step and return 4-byte keying chunk.",
+    "invariants": [
+      "Distinct counter block indices generate independent pseudorandom output blocks.",
+      "Context info binds generated subkeys to specific application protocol domains."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Omitting block counter byte during expansion rounds",
+        "failure_mechanism": "Generates identical repeating keystream chunks when expanding longer keys.",
+        "counterexample_input": "prk=[1,2,3,4], info=[5], block_index=1",
+        "verified_fix": "Append sequential counter byte to HMAC payload for every expanded block."
+      }
+    ],
+    "source_code": "def hkdf_expand_info_block(prk: list[int], info: list[int], block_index: int) -> list[int]:\n    fnv_prime = 16777619\n    mask = (1 << 32) - 1\n    h = 33052 << 16 | 40389\n    for b in prk:\n        h = (h ^ b & 255) * fnv_prime & mask\n    for b in info:\n        h = (h ^ b & 255) * fnv_prime & mask\n    h = (h ^ block_index & 255) * fnv_prime & mask\n    h = (h ^ h >> 16) & mask\n    h = h * (34283 << 16 | 51819) & mask\n    h = (h ^ h >> 13) & mask\n    out = [h >> 24 & 255, h >> 16 & 255, h >> 8 & 255, h & 255]\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "pbkdf2_f_round_step",
+    "param_types": [
+      "list[int]",
+      "list[int]",
+      "int",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "PBKDF2 F-function evaluation accumulating XOR-sum across iteration rounds.",
+    "pseudocode": "1. Initialize U_1 = PRF(password, salt || INT(block_index)).\n2. Iteratively compute U_k = PRF(password, U_{k-1}) for iterations rounds.\n3. Accumulate running XOR sum F = U_1 ^ U_2 ^ ... ^ U_c.\n4. Return 4-byte mixed key digest block.",
+    "invariants": [
+      "Increasing iterations linearly scales computational work factor against brute force.",
+      "Deterministic: identical inputs yield identical 4-byte keying chunk."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Returning only the final U_c without XOR accumulating intermediate iterations",
+        "failure_mechanism": "Fails RFC 2898 standard causing key incompatibility with PBKDF2 implementations.",
+        "counterexample_input": "password=[1], salt=[2], iterations=2, block_index=1",
+        "verified_fix": "Maintain running bitwise XOR accumulator across all iteration outputs."
+      }
+    ],
+    "source_code": "def pbkdf2_f_round_step(password: list[int], salt: list[int], iterations: int, block_index: int) -> list[int]:\n    fnv_prime = 16777619\n    mask = (1 << 32) - 1\n    c = min(max(1, iterations), 64)\n    h = 33052 << 16 | 40389\n    for b in password:\n        h = (h ^ b & 255) * fnv_prime & mask\n    for b in salt:\n        h = (h ^ b & 255) * fnv_prime & mask\n    h = (h ^ block_index & 255) * fnv_prime & mask\n    u = h\n    accum = h\n    for _ in range(1, c):\n        h2 = 33052 << 16 | 40389\n        for b in password:\n            h2 = (h2 ^ b & 255) * fnv_prime & mask\n        for shift in (24, 16, 8, 0):\n            h2 = (h2 ^ u >> shift & 255) * fnv_prime & mask\n        u = h2\n        accum = accum ^ u\n    out = [accum >> 24 & 255, accum >> 16 & 255, accum >> 8 & 255, accum & 255]\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "totp_timestamp_counter",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Time-based One-Time Password (TOTP RFC 6238) time-step counter calculation.",
+    "pseudocode": "1. Enforce minimum time-step interval (default 30 seconds).\n2. Compute elapsed seconds relative to initial epoch epoch_t0.\n3. Perform floor integer division by step interval to determine counter.\n4. Clamp negative counters to zero.",
+    "invariants": [
+      "Counter remains constant throughout each duration window [t, t + time_step).",
+      "Monotonically non-decreasing with increasing Unix epoch timestamps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Floating-point division unix_time / time_step",
+        "failure_mechanism": "Float precision drift causes boundary mismatch between client and authenticator.",
+        "counterexample_input": "unix_time=59, time_step=30, t0=0",
+        "verified_fix": "Use integer floor division: (unix_time - t0) // time_step."
+      }
+    ],
+    "source_code": "def totp_timestamp_counter(unix_time: int, time_step: int, t0: int) -> int:\n    step = time_step if time_step > 0 else 30\n    diff = unix_time - t0\n    counter = diff // step\n    valid_counter = counter if counter >= 0 else 0\n    return valid_counter",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "base64_encode_triplet",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "str",
+    "summary": "Base64 encoding of a 3-byte chunk into 4 ASCII characters with standard padding.",
+    "pseudocode": "1. Assemble 24-bit integer from up to 3 input bytes.\n2. Slice 24-bit word into four 6-bit index chunks.\n3. Map 6-bit values to standard Base64 alphabet table.\n4. Apply '=' padding characters for partial 1-byte or 2-byte inputs.",
+    "invariants": [
+      "Always produces exactly 4 printable ASCII characters.",
+      "Valid byte count determines '=' padding characters (1 byte -> '==', 2 bytes -> '=', 3 bytes -> no padding)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using direct integer to ASCII casting without character table lookup",
+        "failure_mechanism": "Direct integer casting generates non-standard Base64 control codes.",
+        "counterexample_input": "b0=0, b1=0, b2=0, valid_bytes=1",
+        "verified_fix": "Index strictly into standard 64-character table derived from uppercase, lowercase, digits, +, and /."
+      }
+    ],
+    "source_code": "def base64_encode_triplet(b0: int, b1: int, b2: int, valid_bytes: int) -> str:\n    alpha_upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'\n    alpha_lower = 'abcdefghijklmnopqrstuvwxyz'\n    digits_syms = '0123456789+/'\n    alphabet = alpha_upper + alpha_lower + digits_syms\n    v = min(max(1, valid_bytes), 3)\n    x0 = b0 & 255\n    x1 = b1 & 255 if v >= 2 else 0\n    x2 = b2 & 255 if v >= 3 else 0\n    triple = x0 << 16 | x1 << 8 | x2\n    c0 = alphabet[triple >> 18 & 63]\n    c1 = alphabet[triple >> 12 & 63]\n    c2 = alphabet[triple >> 6 & 63] if v >= 2 else '='\n    c3 = alphabet[triple & 63] if v >= 3 else '='\n    res = c0 + c1 + c2 + c3\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "base64_decode_quad",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "list[int]",
+    "summary": "Base64 decoding of a 4-character ASCII block into 1 to 3 payload bytes.",
+    "pseudocode": "1. Pad or truncate input string to 4 characters.\n2. Resolve 6-bit value of each character against Base64 alphabet table.\n3. Reassemble 24-bit word from four 6-bit indices.\n4. Unpack into 1, 2, or 3 output bytes depending on '=' padding count.",
+    "invariants": [
+      "Roundtrips base64_decode_quad(base64_encode_triplet(b0, b1, b2, v)) == [b0, b1, b2][:v].",
+      "All returned byte integers reside strictly in range [0, 255]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unconditionally unpacking 3 bytes regardless of trailing '=' padding",
+        "failure_mechanism": "Appends spurious trailing zero bytes corrupting original binary payloads.",
+        "counterexample_input": "quad='AA=='",
+        "verified_fix": "Count trailing '=' characters and truncate returned byte array accordingly."
+      }
+    ],
+    "source_code": "def base64_decode_quad(quad: str) -> list[int]:\n    alpha_upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'\n    alpha_lower = 'abcdefghijklmnopqrstuvwxyz'\n    digits_syms = '0123456789+/'\n    alphabet = alpha_upper + alpha_lower + digits_syms\n    s = quad.ljust(4, '=')[:4]\n    indices = []\n    pad_count = 0\n    for ch in s:\n        if ch == '=':\n            indices.append(0)\n            pad_count = pad_count + 1\n        elif ch in alphabet:\n            indices.append(alphabet.index(ch))\n        else:\n            indices.append(0)\n    v24 = indices[0] << 18 | indices[1] << 12 | indices[2] << 6 | indices[3]\n    b0 = v24 >> 16 & 255\n    b1 = v24 >> 8 & 255\n    b2 = v24 & 255\n    if pad_count >= 2:\n        return [b0]\n    elif pad_count == 1:\n        return [b0, b1]\n    return [b0, b1, b2]",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "base58_encode_integer",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "str",
+    "summary": "Base58 encoding of positive integer using Bitcoin alphabet omitting ambiguous characters.",
+    "pseudocode": "1. Return leading character '1' for non-positive inputs.\n2. Repeatedly extract modulo 58 remainder and map to Bitcoin Base58 alphabet.\n3. Divide integer by 58 until zero.\n4. Reverse collected character list and return joined string.",
+    "invariants": [
+      "Excludes visually ambiguous characters (0, O, I, l) to avoid transcription errors.",
+      "Injective encoding mapping distinct positive integers to unique Base58 strings."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using standard alphanumeric Base62 alphabet containing 0, O, I, l",
+        "failure_mechanism": "Breaks Bitcoin Base58 standard and causes user transcription ambiguity.",
+        "counterexample_input": "num=0",
+        "verified_fix": "Use Bitcoin 58-character alphabet excluding '0', 'O', 'I', and 'l'."
+      }
+    ],
+    "source_code": "def base58_encode_integer(num: int) -> str:\n    p1 = '123456789ABCDEFGHJK'\n    p2 = 'LMNPQRSTUVWXYZ'\n    p3 = 'abcdefghijkmnopqrstuvwxyz'\n    alphabet = p1 + p2 + p3\n    if num <= 0:\n        return alphabet[0]\n    n = num\n    out_chars = []\n    while n > 0:\n        rem = n % 58\n        out_chars.append(alphabet[rem])\n        n = n // 58\n    rev = list(reversed(out_chars))\n    res = ''.join(rev)\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "base58_decode_string",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "int",
+    "summary": "Base58 decoding of Bitcoin-alphabet encoded string back to positive integer.",
+    "pseudocode": "1. Initialize accumulator to 0.\n2. Iterate through characters in input string.\n3. Multiply accumulator by 58 and add character index in Base58 alphabet.\n4. Return decoded integer value.",
+    "invariants": [
+      "Roundtrips base58_decode_string(base58_encode_integer(n)) == n for positive integers.",
+      "Returns 0 for empty or unrecognised string inputs."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Assuming 0 value for characters omitted from Base58 such as '0' or 'O'",
+        "failure_mechanism": "Silent acceptance of invalid characters produces corrupted integer values.",
+        "counterexample_input": "s='000'",
+        "verified_fix": "Strictly check character membership in Bitcoin Base58 alphabet table."
+      }
+    ],
+    "source_code": "def base58_decode_string(s: str) -> int:\n    p1 = '123456789ABCDEFGHJK'\n    p2 = 'LMNPQRSTUVWXYZ'\n    p3 = 'abcdefghijkmnopqrstuvwxyz'\n    alphabet = p1 + p2 + p3\n    res = 0\n    for ch in s:\n        if ch in alphabet:\n            idx = alphabet.index(ch)\n            res = res * 58 + idx\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "varint_protobuf_encode",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Protocol Buffers variable-length integer (varint) encoding in 7-bit chunks with MSB continuation.",
+    "pseudocode": "1. Clamp negative inputs to 0.\n2. Extract lowest 7 bits of integer.\n3. Shift integer right by 7 bits.\n4. If remaining integer is non-zero, set MSB bit 7 (0x80) as continuation flag.\n5. Append byte to stream and repeat until integer is 0.",
+    "invariants": [
+      "Encodes integers into minimal byte sequences (values < 128 occupy exactly 1 byte).",
+      "MSB bit 7 serves strictly as continuation flag indicating more bytes follow."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Emitting fixed 4 or 8 bytes for small integer values",
+        "failure_mechanism": "Wastes network bandwidth and violates Protobuf wire format specification.",
+        "counterexample_input": "val=1",
+        "verified_fix": "Stop emitting bytes immediately once remaining shifted value reaches zero."
+      }
+    ],
+    "source_code": "def varint_protobuf_encode(val: int) -> list[int]:\n    v = val if val >= 0 else 0\n    out = []\n    while True:\n        byte = v & 127\n        v = v >> 7\n        if v != 0:\n            out.append(byte | 128)\n        else:\n            out.append(byte)\n            break\n    return out",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "varint_protobuf_decode",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Protocol Buffers variable-length integer (varint) decoding from byte sequence.",
+    "pseudocode": "1. Initialize decoded result, bit shift offset, and bytes consumed count to 0.\n2. Iterate through incoming bytes, masking low 7 bits.\n3. Shift 7-bit payload left by current offset and accumulate into result.\n4. Check MSB continuation flag; terminate loop when MSB is 0 or safety limit reached.\n5. Return tuple (decoded_integer, bytes_consumed).",
+    "invariants": [
+      "Exact roundtrip: varint_protobuf_decode(varint_protobuf_encode(x))[0] == x.",
+      "Returns number of bytes consumed enabling streaming deserialization of packed messages."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Looping indefinitely without shift bounds check on malformed endless continuation bytes",
+        "failure_mechanism": "Denial of service / infinite memory consumption on stream of 0x80 bytes.",
+        "counterexample_input": "bytes_list=[128]*100",
+        "verified_fix": "Enforce maximum shift boundary check (shift >= 70) to prevent integer runaway."
+      }
+    ],
+    "source_code": "def varint_protobuf_decode(bytes_list: list[int]) -> tuple[int, int]:\n    res = 0\n    shift = 0\n    consumed = 0\n    for b in bytes_list:\n        byte_val = b & 255\n        res = res | (byte_val & 127) << shift\n        consumed = consumed + 1\n        shift = shift + 7\n        if byte_val & 128 == 0 or shift >= 70:\n            break\n    return (res, consumed)",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "bech32_polymod_checksum",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "BIP-0173 Bech32 BCH error-detecting polynomial checksum calculation over 5-bit integers.",
+    "pseudocode": "1. Initialize 30-bit polynomial accumulator c to 1.\n2. Iterate through 5-bit integer input sequence.\n3. Extract top 5 bits of accumulator as feedback index.\n4. Update c = ((c & 0x1FFFFFF) << 5) ^ val.\n5. XOR generator polynomial terms for each bit set in feedback.\n6. Return final 30-bit polynomial residue.",
+    "invariants": [
+      "Guarantees detection of up to 4 character errors anywhere in encoded address.",
+      "Checksum residue is strictly bounded within 30-bit unsigned integer range [0, 2^30 - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using standard CRC32 polynomial instead of Bech32 BCH generator",
+        "failure_mechanism": "Incompatible with BIP-0173 specification, failing native SegWit Bitcoin address verification.",
+        "counterexample_input": "values=[1, 2, 3, 4, 5]",
+        "verified_fix": "Use BIP-0173 generator coefficients: 0x3b2d38bf, 0x2f0ea219, 0x3e070e70, 0x3903052f, 0x3da88e2e."
+      }
+    ],
+    "source_code": "def bech32_polymod_checksum(values: list[int]) -> int:\n    gen = [992819391, 789488153, 1040649840, 956499247, 1034456622]\n    c = 1\n    for v in values:\n        c0 = c >> 25\n        c = (c & 33554431) << 5 ^ v & 31\n        for i in range(5):\n            if c0 >> i & 1 != 0:\n                c = c ^ gen[i]\n    return c",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "bitmask_hamming_distance",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Hamming distance counting differing bits between two integers via Brian Kernighan bit trick.",
+    "pseudocode": "1. Compute bitwise XOR difference between a and b, masking to 32 bits.\n2. Loop while difference is non-zero, clearing lowest set bit with diff & (diff - 1).\n3. Increment bit count at each iteration.\n4. Return total count of differing bit positions.",
+    "invariants": [
+      "Satisfies metric space distance axioms (identity of indiscernibles, symmetry, triangle inequality).",
+      "Count strictly bounded in interval [0, 32]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Iterating through all 32 bits sequentially even when only 1 bit is set",
+        "failure_mechanism": "Unnecessary instruction overhead in hot loop comparisons.",
+        "counterexample_input": "a=0, b=1",
+        "verified_fix": "Apply Brian Kernighan bit trick diff & (diff - 1) running in time proportional only to set bits."
+      }
+    ],
+    "source_code": "def bitmask_hamming_distance(a: int, b: int) -> int:\n    mask = (1 << 32) - 1\n    diff = (a ^ b) & mask\n    count = 0\n    while diff > 0:\n        diff = diff & diff - 1\n        count = count + 1\n    return count",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "right_rotate_32bit",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Circular right rotation (ROR) of 32-bit unsigned integer by specified bit offset.",
+    "pseudocode": "1. Reduce shift count modulo 32.\n2. Mask operand to 32-bit unsigned integer.\n3. Shift operand right by offset.\n4. Shift operand left by (32 - offset) modulo 2^32.\n5. Combine chunks via bitwise OR and return rotated word.",
+    "invariants": [
+      "Lossless circular bijection: right_rotate_32bit(left_rotate_32bit(x, s), s) == x & 0xFFFFFFFF.",
+      "Rotation by 0 or 32 returns identical unsigned 32-bit integer."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Failing to mask left-shift term by 0xFFFFFFFF in Python unbounded integers",
+        "failure_mechanism": "Left shift term overflows 32 bits, poisoning top bits with high garbage values.",
+        "counterexample_input": "val=1, shift=1",
+        "verified_fix": "Apply bitwise mask (1 << 32) - 1 to left-shifted component."
+      }
+    ],
+    "source_code": "def right_rotate_32bit(val: int, shift: int) -> int:\n    mask = (1 << 32) - 1\n    s = shift & 31\n    v = val & mask\n    hi = v >> s\n    lo = v << 32 - s & mask\n    res = hi | lo\n    return res",
+    "domain": "cryptography_and_framing"
+  },
+  {
+    "name": "left_rotate_32bit",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Circular left rotation (ROL) of 32-bit unsigned integer by specified bit offset.",
+    "pseudocode": "1. Reduce shift count modulo 32.\n2. Mask operand to 32-bit unsigned integer.\n3. Shift operand left by offset modulo 2^32.\n4. Shift operand right by (32 - offset).\n5. Combine chunks via bitwise OR and return rotated word.",
+    "invariants": [
+      "Lossless circular bijection: left_rotate_32bit(right_rotate_32bit(x, s), s) == x & 0xFFFFFFFF.",
+      "Preserves total Hamming weight (popcount) of rotated integer register."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unmasked left-shift in Python (val << shift) without wrap-around bit recovery",
+        "failure_mechanism": "Bits shifted past position 31 grow unbounded instead of rotating into low bits.",
+        "counterexample_input": "val=1, shift=31",
+        "verified_fix": "Recover wrapped bits via (val >> (32 - shift)) and OR into masked left-shifted word."
+      }
+    ],
+    "source_code": "def left_rotate_32bit(val: int, shift: int) -> int:\n    mask = (1 << 32) - 1\n    s = shift & 31\n    v = val & mask\n    hi = v << s & mask\n    lo = v >> 32 - s\n    res = hi | lo\n    return res",
+    "domain": "cryptography_and_framing"
+  }
+]

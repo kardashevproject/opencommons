@@ -1,0 +1,1099 @@
+[
+  {
+    "name": "symplectic_verlet_velocity_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Velocity Verlet symplectic integration step preserving phase space volume.",
+    "pseudocode": "1. Compute velocity v = p / m.\\n2. Update position q_next = q + v*dt + 0.5*(F/m)*dt^2.\\n3. Update momentum p_next = p + F*dt.\\n4. Return (q_next, p_next).",
+    "invariants": [
+      "Preserves symplectic 2-form dq ^ dp over discrete time step.",
+      "Exact time reversibility under momentum sign inversion."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_next = p + F*dt; q_next = q + (p_next/m)*dt",
+        "failure_mechanism": "Forward Euler asymmetry introduces unbounded secular energy drift.",
+        "counterexample_input": "q=1.0, p=0.0, force=-1.0, dt=0.1, m=1.0",
+        "verified_fix": "Use velocity Verlet symmetric position acceleration update."
+      }
+    ],
+    "source_code": "def symplectic_verlet_velocity_step(q: float, p: float, force: float, dt: float, m: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    f_val = float(force)\n    h = float(dt)\n    v_curr = float(p) / mass\n    q_next = float(q) + v_curr * h + 0.5 * (f_val / mass) * h * h\n    p_next = float(p) + f_val * h\n    return (q_next, p_next)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "symplectic_forest_ruth_4th",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Forest-Ruth 4th-order symplectic integrator step for conservative potentials.",
+    "pseudocode": "1. Compute Forest-Ruth stage weights theta, c1-c4, d1-d3.\\n2. Alternately drift position and kick momentum through 4 stages.\\n3. Return updated (q, p).",
+    "invariants": [
+      "Global energy error scales as O(dt^4) without secular dissipation.",
+      "Symplectic volume form exactly conserved across the 4 composite stages."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "theta = 1.35914",
+        "failure_mechanism": "Truncated rational weights break fourth-order symplectic cancellation.",
+        "counterexample_input": "q=1.0, p=0.0, dt=0.01, m=1.0, force_coeff=1.0",
+        "verified_fix": "Use exact algebraic definition theta = 1 / (2 - 2^(1/3))."
+      }
+    ],
+    "source_code": "def symplectic_forest_ruth_4th(q: float, p: float, dt: float, m: float, force_coeff: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    k = float(force_coeff)\n    h = float(dt)\n    theta = 1.0 / (2.0 - 2.0 ** (1.0 / 3.0))\n    c1 = theta / 2.0\n    c2 = (1.0 - theta) / 2.0\n    c3 = c2\n    c4 = c1\n    d1 = theta\n    d2 = 1.0 - 2.0 * theta\n    d3 = theta\n    curr_q = float(q)\n    curr_p = float(p)\n    curr_q = curr_q + c1 * h * (curr_p / mass)\n    curr_p = curr_p + d1 * h * (-k * curr_q)\n    curr_q = curr_q + c2 * h * (curr_p / mass)\n    curr_p = curr_p + d2 * h * (-k * curr_q)\n    curr_q = curr_q + c3 * h * (curr_p / mass)\n    curr_p = curr_p + d3 * h * (-k * curr_q)\n    curr_q = curr_q + c4 * h * (curr_p / mass)\n    return (curr_q, curr_p)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "symplectic_yoshida_4th_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Yoshida 4th-order symmetric composition integrator step for non-linear oscillator.",
+    "pseudocode": "1. Compute Yoshida sub-step weights w0, w1.\\n2. Perform symmetric leapfrog composition with weights (w1, w0, w1) under non-linear restoring force.\\n3. Return (q, p).",
+    "invariants": [
+      "Odd-order error terms vanish identically by symmetric time-reversal composition.",
+      "Phase space volume preserved across sub-steps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "w0 = -2.0**(1.0/3.0)",
+        "failure_mechanism": "Unnormalized intermediate weight violates unit sum condition.",
+        "counterexample_input": "q=1.0, p=1.0, dt=0.05, m=1.0, k=2.0, alpha=0.5",
+        "verified_fix": "Divide w0 and w1 by (2 - 2^(1/3)) to guarantee unit sum."
+      }
+    ],
+    "source_code": "def symplectic_yoshida_4th_step(q: float, p: float, dt: float, m: float, k: float, alpha: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    k_val = float(k)\n    alp = float(alpha)\n    h = float(dt)\n    cr = 2.0 ** (1.0 / 3.0)\n    w1 = 1.0 / (2.0 - cr)\n    w0 = -cr / (2.0 - cr)\n    c1 = 0.5 * w1\n    c2 = 0.5 * (w0 + w1)\n    c3 = c2\n    c4 = c1\n    d1 = w1\n    d2 = w0\n    d3 = w1\n    curr_q = float(q)\n    curr_p = float(p)\n    curr_q = curr_q + c1 * h * (curr_p / mass)\n    curr_p = curr_p + d1 * h * (-k_val * curr_q - alp * curr_q ** 3)\n    curr_q = curr_q + c2 * h * (curr_p / mass)\n    curr_p = curr_p + d2 * h * (-k_val * curr_q - alp * curr_q ** 3)\n    curr_q = curr_q + c3 * h * (curr_p / mass)\n    curr_p = curr_p + d3 * h * (-k_val * curr_q - alp * curr_q ** 3)\n    curr_q = curr_q + c4 * h * (curr_p / mass)\n    return (curr_q, curr_p)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "leapfrog_drift_kick_drift",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Symplectic leapfrog drift-kick-drift (DKD) operator splitting step.",
+    "pseudocode": "1. Half-step position drift q_mid = q + 0.5*dt*(p/m).\\n2. Full-step momentum kick p_next = p + dt*F.\\n3. Second half-step drift q_next = q_mid + 0.5*dt*(p_next/m).\\n4. Return (q_next, p_next).",
+    "invariants": [
+      "Time reversible map S(-dt) = S(dt)^(-1).",
+      "Conserves shadow Hamiltonian to second order O(dt^2)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "mass = m; v = p / mass",
+        "failure_mechanism": "Zero or unvalidated mass triggers ZeroDivisionError.",
+        "counterexample_input": "q=1.0, p=2.0, dt=0.1, m=0.0, force=5.0",
+        "verified_fix": "Guard against degenerate zero mass with safe floor tolerance."
+      }
+    ],
+    "source_code": "def leapfrog_drift_kick_drift(q: float, p: float, dt: float, m: float, force: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    half_h = 0.5 * float(dt)\n    f_val = float(force)\n    q_mid = float(q) + half_h * (float(p) / mass)\n    p_next = float(p) + float(dt) * f_val\n    q_next = q_mid + half_h * (p_next / mass)\n    return (q_next, p_next)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "leapfrog_kick_drift_kick",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Symplectic leapfrog kick-drift-kick (KDK) dual splitting step with start and end forces.",
+    "pseudocode": "1. Half-step momentum kick p_half = p + 0.5*dt*F_start.\\n2. Full-step position drift q_next = q + dt*(p_half/m).\\n3. Second half-step kick p_next = p_half + 0.5*dt*F_end.\\n4. Return (q_next, p_next).",
+    "invariants": [
+      "Dual symplectic operator to DKD leapfrog.",
+      "Symplectic determinant identically equal to 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_next = p + dt * f_val",
+        "failure_mechanism": "Direct kick without half-step splitting destroys second-order symmetry.",
+        "counterexample_input": "q=2.0, p=1.0, dt=0.2, m=1.0, force_start=-2.0, force_end=-2.1",
+        "verified_fix": "Perform two symmetric half-step kicks around central position drift."
+      }
+    ],
+    "source_code": "def leapfrog_kick_drift_kick(q: float, p: float, dt: float, m: float, force_start: float, force_end: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    half_h = 0.5 * float(dt)\n    p_half = float(p) + half_h * float(force_start)\n    q_next = float(q) + float(dt) * (p_half / mass)\n    p_next = p_half + half_h * float(force_end)\n    return (q_next, p_next)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "runge_kutta_nystrom_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "4th-order Runge-Kutta-Nystrom step for second-order differential systems q'' = f(q).",
+    "pseudocode": "1. Combine acceleration stages a0, a1, a2, a3 with RKN weights.\\n2. Update position q_next = q + dt*v + dt^2/6*(a0 + a1 + a2).\\n3. Update velocity v_next = v + dt/6*(a0 + 2*a1 + 2*a2 + a3).\\n4. Return (q_next, v_next).",
+    "invariants": [
+      "Fourth-order local accuracy O(dt^5) in position.",
+      "Exact for constant and linear acceleration profiles."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "q_next = q + dt*v; v_next = v + dt*a0",
+        "failure_mechanism": "First order Euler truncation produces massive orbital drift.",
+        "counterexample_input": "q=1.0, v=0.0, dt=0.1, a0=-1.0, a1=-0.95, a2=-0.95, a3=-0.9",
+        "verified_fix": "Use four-stage weighted RKN quadrature."
+      }
+    ],
+    "source_code": "def runge_kutta_nystrom_step(q: float, v: float, dt: float, a0: float, a1: float, a2: float, a3: float) -> tuple[float, float]:\n    h = float(dt)\n    h2 = h * h\n    acc0 = float(a0)\n    acc1 = float(a1)\n    acc2 = float(a2)\n    acc3 = float(a3)\n    q_delta = h * float(v) + h2 / 6.0 * (acc0 + acc1 + acc2)\n    v_delta = h / 6.0 * (acc0 + 2.0 * acc1 + 2.0 * acc2 + acc3)\n    return (float(q) + q_delta, float(v) + v_delta)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "kepler_solve_eccentric_anomaly",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Solves Kepler's transcendental equation M = E - e*sin(E) for eccentric anomaly.",
+    "pseudocode": "1. Normalize mean anomaly M into [0, 2*pi).\\n2. Bound eccentricity e in [0, 0.999999].\\n3. Seed initial guess E_0.\\n4. Iterate Newton-Raphson until residual |E - e*sin(E) - M| < tol.\\n5. Return converged E.",
+    "invariants": [
+      "Residual |E - e*sin(E) - M| <= max(tol, 1e-14).",
+      "Monotonic convergence for all e in [0, 1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "e_curr = m",
+        "failure_mechanism": "Starting from M diverges for near-parabolic orbits with e -> 1.",
+        "counterexample_input": "mean_anomaly=0.05, eccentricity=0.99, tol=1e-10",
+        "verified_fix": "Seed with m + e*sin(m) and safeguard derivative denominator."
+      }
+    ],
+    "source_code": "def kepler_solve_eccentric_anomaly(mean_anomaly: float, eccentricity: float, tol: float) -> float:\n    m_val = float(mean_anomaly)\n    e_val = max(0.0, min(0.999999, abs(float(eccentricity))))\n    eps = max(1e-14, abs(float(tol)))\n    pi2 = 2.0 * math.pi\n    m_norm = m_val - pi2 * math.floor(m_val / pi2)\n    e_curr = m_norm + e_val * math.sin(m_norm)\n    for _ in range(40):\n        f_res = e_curr - e_val * math.sin(e_curr) - m_norm\n        if abs(f_res) < eps:\n            break\n        df_res = 1.0 - e_val * math.cos(e_curr)\n        denom = df_res if abs(df_res) > 1e-12 else 1e-12\n        e_curr = e_curr - f_res / denom\n    return e_curr",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "kepler_hyperbolic_anomaly_solve",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Solves hyperbolic Kepler equation M_h = e*sinh(H) - H for hyperbolic anomaly H.",
+    "pseudocode": "1. Clamp eccentricity e >= 1.0001.\\n2. Initialize H_0 via asinh(M_h / e).\\n3. Perform Newton iterations with clamped sinh/cosh arguments.\\n4. Return converged H.",
+    "invariants": [
+      "Satisfies |e*sinh(H) - H - M_h| <= max(tol, 1e-14).",
+      "Preserves sign of hyperbolic mean anomaly."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "math.sinh(h_curr)",
+        "failure_mechanism": "Unbounded sinh evaluation causes floating-point OverflowError.",
+        "counterexample_input": "mean_anomaly_h=1000.0, eccentricity=2.0, tol=1e-8",
+        "verified_fix": "Clamp argument to [-50, 50] to avoid exponential overflow."
+      }
+    ],
+    "source_code": "def kepler_hyperbolic_anomaly_solve(mean_anomaly_h: float, eccentricity: float, tol: float) -> float:\n    mh = float(mean_anomaly_h)\n    e_val = max(1.0001, abs(float(eccentricity)))\n    eps = max(1e-14, abs(float(tol)))\n    ratio = mh / e_val\n    h_curr = math.asinh(ratio)\n    for _ in range(50):\n        clamped_h = max(-50.0, min(50.0, h_curr))\n        f_res = e_val * math.sinh(clamped_h) - h_curr - mh\n        if abs(f_res) < eps:\n            break\n        df_res = e_val * math.cosh(clamped_h) - 1.0\n        denom = df_res if abs(df_res) > 1e-12 else 1e-12\n        h_curr = h_curr - f_res / denom\n    return h_curr",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "orbital_elements_to_state_vectors",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[list[float], list[float]]",
+    "summary": "Converts Keplerian orbital elements (a, e, i, Omega, omega, nu) to Cartesian (r, v) state vectors.",
+    "pseudocode": "1. Compute orbital parameter p = a*(1 - e^2).\\n2. Evaluate orbital plane radius r = p / (1 + e*cos(nu)) and velocity.\\n3. Apply orbital rotation angles (Omega, i, omega).\\n4. Return 3D position and velocity vectors.",
+    "invariants": [
+      "Specific orbital energy epsilon = -mu / (2*a) conserved.",
+      "Specific angular momentum magnitude |r x v| = sqrt(mu * a * (1 - e^2))."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_semi = a * (1.0 - e)",
+        "failure_mechanism": "Incorrect linear formula instead of quadratic (1 - e^2) yields invalid semi-latus rectum.",
+        "counterexample_input": "a=1.0, e=0.5, inc=0.0, raan=0.0, arg_p=0.0, nu=0.0, mu=1.0",
+        "verified_fix": "Use exact semi-latus rectum p = a * (1.0 - e * e)."
+      }
+    ],
+    "source_code": "def orbital_elements_to_state_vectors(a: float, e: float, inc: float, raan: float, arg_p: float, nu: float, mu: float) -> tuple[list[float], list[float]]:\n    a_val = abs(float(a)) if abs(float(a)) > 1e-09 else 1.0\n    e_val = max(0.0, min(0.9999, abs(float(e))))\n    mu_val = abs(float(mu)) if abs(float(mu)) > 1e-12 else 1.0\n    p = a_val * (1.0 - e_val * e_val)\n    th = float(nu)\n    r_mag = p / (1.0 + e_val * math.cos(th))\n    v_fac = math.sqrt(mu_val / p)\n    r_p = [r_mag * math.cos(th), r_mag * math.sin(th), 0.0]\n    v_p = [-v_fac * math.sin(th), v_fac * (e_val + math.cos(th)), 0.0]\n    cw = math.cos(float(arg_p))\n    sw = math.sin(float(arg_p))\n    ci = math.cos(float(inc))\n    si = math.sin(float(inc))\n    co = math.cos(float(raan))\n    so = math.sin(float(raan))\n\n    def rot(vec: list[float]) -> list[float]:\n        x1 = cw * vec[0] - sw * vec[1]\n        y1 = sw * vec[0] + cw * vec[1]\n        y2 = ci * y1\n        z2 = si * y1\n        x3 = co * x1 - so * y2\n        y3 = so * x1 + co * y2\n        return [x3, y3, z2]\n    return (rot(r_p), rot(v_p))",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "state_vectors_to_orbital_elements",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float, float, float]",
+    "summary": "Extracts Keplerian elements (a, e, inc, raan, arg_p, nu) from Cartesian (r, v) state vectors.",
+    "pseudocode": "1. Compute angular momentum and orbital plane radius.\\n2. Determine specific mechanical energy and semi-major axis a.\\n3. Compute eccentricity vector e, inclination, and ascending node.\\n4. Derive argument of periapsis and true anomaly.",
+    "invariants": [
+      "Recovered elements reproduce state vectors under forward transform.",
+      "Semi-major axis matches vis-viva mechanical energy relation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "inc = math.acos(hz / h_mag)",
+        "failure_mechanism": "hz / h_mag exceeding 1.0 due to float rounding causes ValueError in math.acos.",
+        "counterexample_input": "r_vec=[1.0, 0.0, 0.0], v_vec=[0.0, 1.0, 0.0], mu=1.0",
+        "verified_fix": "Clamp acos argument to interval [-1.0, 1.0]."
+      }
+    ],
+    "source_code": "def state_vectors_to_orbital_elements(r_vec: list[float], v_vec: list[float], mu: float) -> tuple[float, float, float, float, float, float]:\n    r = (list(r_vec) + [1.0, 0.0, 0.0])[:3]\n    v = (list(v_vec) + [0.0, 1.0, 0.0])[:3]\n    mu_val = abs(float(mu)) or 1.0\n    r_mag = math.hypot(r[0], r[1])\n    v2 = v[0] * v[0] + v[1] * v[1]\n    hz = r[0] * v[1] - r[1] * v[0]\n    h_mag = abs(hz) or 1.0\n    d = 0.5 * v2 - mu_val / (r_mag or 1.0)\n    a = -0.5 * mu_val / d if abs(d) > 1e-12 else r_mag\n    rv = r[0] * v[0] + r[1] * v[1]\n    fac = (v2 - mu_val / (r_mag or 1.0)) / mu_val\n    ex = fac * r[0] - rv / mu_val * v[0]\n    ey = fac * r[1] - rv / mu_val * v[1]\n    e = math.hypot(ex, ey)\n    inc = math.acos(max(-1.0, min(1.0, r[2] / (r_mag or 1.0))))\n    raan = math.atan2(r[1], r[0])\n    w = math.atan2(ey, ex)\n    nu = math.atan2(rv * h_mag, h_mag * h_mag - mu_val * r_mag)\n    return (a, e, inc, raan, w, nu)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "vis_viva_orbital_speed",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes orbital speed v = sqrt(mu * (2/r - 1/a)) via vis-viva equation.",
+    "pseudocode": "1. Bound radius r and semi-major axis a against zero division.\\n2. Compute geometric term (2/r - 1/a).\\n3. Multiply by gravitational parameter mu.\\n4. Return square root speed.",
+    "invariants": [
+      "Reduces to sqrt(mu / a) for circular orbit where r = a.",
+      "Reduces to parabolic escape speed sqrt(2*mu / r) as a -> infinity."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v = math.sqrt(mu * (2.0/r - 1.0/a))",
+        "failure_mechanism": "Negative radicand from hyperbolic parameters or inverted inputs causes domain error.",
+        "counterexample_input": "r=10.0, a=1.0, mu=1.0",
+        "verified_fix": "Clamp radicand to non-negative float max(0.0, val)."
+      }
+    ],
+    "source_code": "def vis_viva_orbital_speed(r: float, a: float, mu: float) -> float:\n    r_val = abs(float(r)) if abs(float(r)) > 1e-12 else 1.0\n    a_val = float(a) if abs(float(a)) > 1e-12 else 1.0\n    mu_val = abs(float(mu)) if abs(float(mu)) > 1e-12 else 1.0\n    term = 2.0 / r_val - 1.0 / a_val\n    radicand = max(0.0, mu_val * term)\n    speed = math.sqrt(radicand)\n    return speed",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "hohmann_transfer_delta_v",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Calculates Hohmann coplanar transfer orbit velocity increments (dv1, dv2, dv_total).",
+    "pseudocode": "1. Ensure positive initial radius r1 and final radius r2.\\n2. Compute semi-major axis of transfer ellipse a_tx = (r1 + r2) / 2.\\n3. Compute departure burn dv1 = |v_tx1 - v_circ1|.\\n4. Compute arrival burn dv2 = |v_circ2 - v_tx2|.\\n5. Return (dv1, dv2, dv1 + dv2).",
+    "invariants": [
+      "dv_total is strictly non-negative.",
+      "Minimal delta-v for radius ratio r2/r1 < 11.94."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "a_tx = (r1 + r2) / 2.0",
+        "failure_mechanism": "Negative or zero radius inputs produce unphysical imaginary transfer velocities.",
+        "counterexample_input": "r1=0.0, r2=2.0, mu=1.0",
+        "verified_fix": "Safeguard radii with positive floor clamps."
+      }
+    ],
+    "source_code": "def hohmann_transfer_delta_v(r1: float, r2: float, mu: float) -> tuple[float, float, float]:\n    rad1 = abs(float(r1)) if abs(float(r1)) > 1e-12 else 1.0\n    rad2 = abs(float(r2)) if abs(float(r2)) > 1e-12 else 1.0\n    mu_val = abs(float(mu)) if abs(float(mu)) > 1e-12 else 1.0\n    a_tx = 0.5 * (rad1 + rad2)\n    v1_circ = math.sqrt(mu_val / rad1)\n    v2_circ = math.sqrt(mu_val / rad2)\n    v1_tx = math.sqrt(max(0.0, mu_val * (2.0 / rad1 - 1.0 / a_tx)))\n    v2_tx = math.sqrt(max(0.0, mu_val * (2.0 / rad2 - 1.0 / a_tx)))\n    dv1 = abs(v1_tx - v1_circ)\n    dv2 = abs(v2_circ - v2_tx)\n    dv_tot = dv1 + dv2\n    return (dv1, dv2, dv_tot)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "bielliptic_transfer_delta_v",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Computes 3-burn bi-elliptic transfer velocity increments (dv1, dv2, dv3, dv_total).",
+    "pseudocode": "1. Clamp intermediate radius rb > max(r1, r2).\\n2. Compute first ellipse transfer semi-major axis a1 = (r1 + rb) / 2.\\n3. Compute second ellipse transfer semi-major axis a2 = (rb + r2) / 2.\\n4. Sum absolute velocity increments across the 3 impulses.",
+    "invariants": [
+      "dv_total is strictly non-negative.",
+      "Symmetric under swapping r1 and r2 when reversing transfer direction."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "rb = float(rb_val)",
+        "failure_mechanism": "Intermediate radius smaller than r1 or r2 violates bi-elliptic geometry.",
+        "counterexample_input": "r1=1.0, r2=15.0, rb=5.0, mu=1.0",
+        "verified_fix": "Enforce rb >= max(r1, r2) * 1.01."
+      }
+    ],
+    "source_code": "def bielliptic_transfer_delta_v(r1: float, r2: float, rb: float, mu: float) -> tuple[float, float, float, float]:\n    rad1 = abs(float(r1)) if abs(float(r1)) > 1e-12 else 1.0\n    rad2 = abs(float(r2)) if abs(float(r2)) > 1e-12 else 1.0\n    mu_val = abs(float(mu)) if abs(float(mu)) > 1e-12 else 1.0\n    min_rb = max(rad1, rad2) * 1.001\n    rad_b = max(min_rb, abs(float(rb)))\n    a1 = 0.5 * (rad1 + rad_b)\n    a2 = 0.5 * (rad_b + rad2)\n    v1_circ = math.sqrt(mu_val / rad1)\n    v2_circ = math.sqrt(mu_val / rad2)\n    v1_tx1 = math.sqrt(max(0.0, mu_val * (2.0 / rad1 - 1.0 / a1)))\n    vb_tx1 = math.sqrt(max(0.0, mu_val * (2.0 / rad_b - 1.0 / a1)))\n    vb_tx2 = math.sqrt(max(0.0, mu_val * (2.0 / rad_b - 1.0 / a2)))\n    v2_tx2 = math.sqrt(max(0.0, mu_val * (2.0 / rad2 - 1.0 / a2)))\n    dv1 = abs(v1_tx1 - v1_circ)\n    dv2 = abs(vb_tx2 - vb_tx1)\n    dv3 = abs(v2_circ - v2_tx2)\n    dv_tot = dv1 + dv2 + dv3\n    return (dv1, dv2, dv3, dv_tot)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "jacobi_energy_integral_cr3bp",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates the Jacobi energy constant C_J in the Circular Restricted Three-Body Problem.",
+    "pseudocode": "1. Compute distance r1 to primary body at (-mu, 0, 0).\\n2. Compute distance r2 to secondary body at (1 - mu, 0, 0).\\n3. Compute effective centrifugal potential 0.5*(x^2 + y^2).\\n4. Return C_J = 2*(potential) - v^2.",
+    "invariants": [
+      "Exact invariant of motion in the co-rotating synodic coordinate frame.",
+      "Zero velocity surfaces C_J = const bound forbidden regions of motion."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "r1 = math.sqrt(x*x + y*y + z*z)",
+        "failure_mechanism": "Measuring distance from origin instead of primary barycenter offset breaks Jacobi conservation.",
+        "counterexample_input": "x=0.5, y=0.0, z=0.0, vx=0.0, vy=0.0, vz=0.0, mu=0.01",
+        "verified_fix": "Use barycentric offsets (x + mu) and (x - 1 + mu)."
+      }
+    ],
+    "source_code": "def jacobi_energy_integral_cr3bp(x: float, y: float, z: float, vx: float, vy: float, vz: float, mu: float) -> float:\n    mu_val = max(1e-12, min(0.5, abs(float(mu))))\n    px = float(x)\n    py = float(y)\n    pz = float(z)\n    v2 = float(vx) ** 2 + float(vy) ** 2 + float(vz) ** 2\n    dx1 = px + mu_val\n    r1 = math.sqrt(dx1 * dx1 + py * py + pz * pz)\n    r1_safe = max(1e-12, r1)\n    dx2 = px - (1.0 - mu_val)\n    r2 = math.sqrt(dx2 * dx2 + py * py + pz * pz)\n    r2_safe = max(1e-12, r2)\n    pot = px * px + py * py + 2.0 * (1.0 - mu_val) / r1_safe + 2.0 * mu_val / r2_safe\n    c_jacobi = pot - v2\n    return c_jacobi",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "lagrange_points_l1_cr3bp",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Solves collinear Lagrange point L1 position between primaries along rotating x-axis.",
+    "pseudocode": "1. Bound mass parameter mu in (0, 0.5).\\n2. Set initial bracket between primary and secondary bodies.\\n3. Iterate Newton-Raphson on effective potential gradient.\\n4. Return equilibrium position x_L1.",
+    "invariants": [
+      "Net effective rotating frame acceleration vanishes identically at x_L1.",
+      "Located strictly inside interval (1 - 2*mu, 1 - mu)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x_l1 = 1.0 - (mu / 3.0)**(1.0/3.0)",
+        "failure_mechanism": "Linear Hill approximation error exceeds 5% for moderate mass ratios.",
+        "counterexample_input": "mu=0.1, tol=1e-8",
+        "verified_fix": "Iteratively solve exact Euler collinear quintic equilibrium equation."
+      }
+    ],
+    "source_code": "def lagrange_points_l1_cr3bp(mu: float, tol: float) -> float:\n    mu_val = max(1e-06, min(0.499, abs(float(mu))))\n    eps = max(1e-12, abs(float(tol)))\n    hill_r = (mu_val / 3.0) ** (1.0 / 3.0)\n    gamma = hill_r\n    for _ in range(40):\n        g = max(1e-08, gamma)\n        f_val = g ** 5 - (3.0 - mu_val) * g ** 4 + (3.0 - 2.0 * mu_val) * g ** 3 - mu_val * g ** 2 + 2.0 * mu_val * g - mu_val\n        if abs(f_val) < eps:\n            break\n        df_val = 5.0 * g ** 4 - 4.0 * (3.0 - mu_val) * g ** 3 + 3.0 * (3.0 - 2.0 * mu_val) * g ** 2 - 2.0 * mu_val * g + 2.0 * mu_val\n        denom = df_val if abs(df_val) > 1e-12 else 1e-12\n        gamma = gamma - f_val / denom\n    x_l1 = 1.0 - mu_val - gamma\n    return x_l1",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "lagrange_points_l4_l5_cr3bp",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "tuple[tuple[float, float], tuple[float, float]]",
+    "summary": "Computes coordinates of triangular Lagrange equilibrium points L4 and L5 in synodic frame.",
+    "pseudocode": "1. Calculate common x-coordinate x = 0.5 - mu.\\n2. Calculate equilateral triangle altitude y = sqrt(3)/2.\\n3. Form L4 at (x, +y) and L5 at (x, -y).\\n4. Return ((x, y), (x, -y)).",
+    "invariants": [
+      "Distance from both primaries to L4/L5 is exactly 1.0 nondimensional units.",
+      "Linearly stable for mass ratios mu < 0.0385208965 (Routh stability criterion)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x = 0.5",
+        "failure_mechanism": "Omitting the barycentric mass offset mu displaces equilibrium from true potential minimum.",
+        "counterexample_input": "mu=0.05",
+        "verified_fix": "Incorporate barycenter shift x = 0.5 - mu."
+      }
+    ],
+    "source_code": "def lagrange_points_l4_l5_cr3bp(mu: float) -> tuple[tuple[float, float], tuple[float, float]]:\n    mu_val = max(0.0, min(0.5, abs(float(mu))))\n    x_coord = 0.5 - mu_val\n    y_coord = 0.5 * math.sqrt(3.0)\n    l4_pt = (x_coord, y_coord)\n    l5_pt = (x_coord, -y_coord)\n    return (l4_pt, l5_pt)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "energy_conservation_drift_ratio",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes dimensionless relative mechanical energy drift |E_current - E_initial| / |E_initial|.",
+    "pseudocode": "1. Safeguard initial energy denominator with non-zero threshold.\\n2. Compute absolute energy change |E_1 - E_0|.\\n3. Normalize by baseline energy |E_0|.\\n4. Return dimensionless drift ratio.",
+    "invariants": [
+      "Non-negative scalar ratio >= 0.0.",
+      "Identically zero for exact energy conservation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "drift = (e1 - e0) / e0",
+        "failure_mechanism": "Denominator zero division when orbital total energy is 0.0 (parabolic trajectory).",
+        "counterexample_input": "e_initial=0.0, e_current=1e-5",
+        "verified_fix": "Add tolerance floor max(abs(e0), 1e-12)."
+      }
+    ],
+    "source_code": "def energy_conservation_drift_ratio(e_initial: float, e_current: float) -> float:\n    e0 = float(e_initial)\n    e1 = float(e_current)\n    denom = abs(e0) if abs(e0) > 1e-12 else 1.0\n    delta_e = abs(e1 - e0)\n    drift = delta_e / denom\n    return drift",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "angular_momentum_vector_3d",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes 3D orbital angular momentum vector cross product L = r x p.",
+    "pseudocode": "1. Extract coordinates rx, ry, rz from position list.\\n2. Extract components px, py, pz from momentum list.\\n3. Compute cross product components Lx, Ly, Lz.\\n4. Return [Lx, Ly, Lz].",
+    "invariants": [
+      "Orthogonal to position: L . r == 0.0.",
+      "Conserved vector under spherically symmetric central forces."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lx = r[0] * p[1] - r[1] * p[0]",
+        "failure_mechanism": "Confusing 2D scalar z-component with 3D vector x-component.",
+        "counterexample_input": "r=[1.0, 2.0, 3.0], p=[4.0, 5.0, 6.0]",
+        "verified_fix": "Use standard right-handed cross product Lx = ry*pz - rz*py."
+      }
+    ],
+    "source_code": "def angular_momentum_vector_3d(r: list[float], p: list[float]) -> list[float]:\n    rx = float(r[0]) if len(r) > 0 else 0.0\n    ry = float(r[1]) if len(r) > 1 else 0.0\n    rz = float(r[2]) if len(r) > 2 else 0.0\n    px = float(p[0]) if len(p) > 0 else 0.0\n    py = float(p[1]) if len(p) > 1 else 0.0\n    pz = float(p[2]) if len(p) > 2 else 0.0\n    lx = ry * pz - rz * py\n    ly = rz * px - rx * pz\n    lz = rx * py - ry * px\n    return [lx, ly, lz]",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "runge_lenz_vector_2d",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Evaluates 2D Laplace-Runge-Lenz eccentricity vector A = (p x L)/(m*mu) - r/|r|.",
+    "pseudocode": "1. Compute angular momentum Lz = rx*py - ry*px.\\n2. Compute position radius |r|.\\n3. Evaluate vector cross product terms (p x L).\\n4. Subtract unit position vector to obtain A.",
+    "invariants": [
+      "Points in the direction of orbital periapsis.",
+      "Magnitude |A| equals Keplerian orbital eccentricity e."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "r_norm = math.sqrt(rx*rx + ry*ry); ax = px*lz - rx/r_norm",
+        "failure_mechanism": "Omitting the mass-gravitational scaling denominator m*mu yields dimensionally incorrect vector.",
+        "counterexample_input": "rx=1.0, ry=0.0, px=0.0, py=1.0, mu=2.0, m=2.0",
+        "verified_fix": "Divide cross product term by (m * mu)."
+      }
+    ],
+    "source_code": "def runge_lenz_vector_2d(rx: float, ry: float, px: float, py: float, mu: float, m: float) -> tuple[float, float]:\n    mass = float(m) if abs(float(m)) > 1e-12 else 1.0\n    mu_val = abs(float(mu)) if abs(float(mu)) > 1e-12 else 1.0\n    scale = mass * mu_val\n    x_val = float(rx)\n    y_val = float(ry)\n    p_x = float(px)\n    p_y = float(py)\n    r_mag = math.sqrt(x_val * x_val + y_val * y_val)\n    r_safe = max(1e-12, r_mag)\n    lz = x_val * p_y - y_val * p_x\n    ax = p_y * lz / scale - x_val / r_safe\n    ay = -p_x * lz / scale - y_val / r_safe\n    return (ax, ay)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "symplectic_2form_area_flux",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes oriented phase space symplectic 2-form area flux omega = dq1*dp2 - dq2*dp1.",
+    "pseudocode": "1. Compute wedge product dq1 * dp2.\\n2. Compute cross wedge product dq2 * dp1.\\n3. Subtract terms to evaluate canonical differential form.\\n4. Return oriented area flux.",
+    "invariants": [
+      "Skew-symmetric under permutation of tangent vectors: omega(v1, v2) = -omega(v2, v1).",
+      "Invariant under arbitrary canonical Hamiltonian transformations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "omega = dq1 * dp1 - dq2 * dp2",
+        "failure_mechanism": "Multiplying same-coordinate differentials yields zero instead of cross-symplectic flux.",
+        "counterexample_input": "dq1=1.0, dp1=2.0, dq2=3.0, dp2=4.0",
+        "verified_fix": "Use standard canonical wedge product dq1*dp2 - dq2*dp1."
+      }
+    ],
+    "source_code": "def symplectic_2form_area_flux(dq1: float, dp1: float, dq2: float, dp2: float) -> float:\n    a1 = float(dq1)\n    b1 = float(dp1)\n    a2 = float(dq2)\n    b2 = float(dp2)\n    flux = a1 * b2 - a2 * b1\n    return flux",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "poisson_bracket_2d",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes canonical multi-dimensional Poisson bracket sum_i (df/dq_i * dg/dp_i - df/dp_i * dg/dq_i).",
+    "pseudocode": "1. Determine common coordinate dimension n = min(len(grad_f_q), len(grad_f_p), len(grad_g_q), len(grad_g_p)).\\n2. Iterate through canonical conjugate pairs (q_i, p_i).\\n3. Sum symplectic terms (df/dq_i * dg/dp_i - df/dp_i * dg/dq_i).\\n4. Return total bracket.",
+    "invariants": [
+      "Anti-commutative: {f, g} = -{g, f}.",
+      "Satisfies Leibniz product rule and Jacobi identity across all degrees of freedom."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "bracket = sum(fq[i]*gq[i] - fp[i]*gp[i])",
+        "failure_mechanism": "Pairing matching coordinate derivatives instead of canonical conjugates destroys symplectic structure.",
+        "counterexample_input": "grad_f_q=[1.0, 2.0], grad_f_p=[0.5, 1.5], grad_g_q=[2.0, 1.0], grad_g_p=[1.0, 3.0]",
+        "verified_fix": "Pair conjugate variables (df/dq_i * dg/dp_i - df/dp_i * dg/dq_i)."
+      }
+    ],
+    "source_code": "def poisson_bracket_2d(grad_f_q: list[float], grad_f_p: list[float], grad_g_q: list[float], grad_g_p: list[float]) -> float:\n    n = min(len(grad_f_q), len(grad_f_p), len(grad_g_q), len(grad_g_p))\n    if n == 0:\n        return 0.0\n    total = 0.0\n    for i in range(n):\n        term = float(grad_f_q[i]) * float(grad_g_p[i]) - float(grad_f_p[i]) * float(grad_g_q[i])\n        total = total + term\n    return total",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "action_angle_variable_harmonic",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes action-angle variables (I, theta) for 1D harmonic oscillator.",
+    "pseudocode": "1. Bound mass m and frequency omega with positive thresholds.\\n2. Compute total energy E = 0.5*p^2/m + 0.5*m*omega^2*q^2.\\n3. Compute action variable I = E / omega.\\n4. Compute angle theta = atan2(p / (m*omega), q).\\n5. Return (I, theta).",
+    "invariants": [
+      "Action I is a constant of motion dI/dt = 0.",
+      "Angle variable advances linearly in time: dtheta/dt = omega."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "theta = math.atan(p / (m * omega * q))",
+        "failure_mechanism": "math.atan lacks quadrant disambiguation and crashes on q = 0.",
+        "counterexample_input": "q=0.0, p=1.0, m=1.0, omega=1.0",
+        "verified_fix": "Use math.atan2(p / (m * omega), q)."
+      }
+    ],
+    "source_code": "def action_angle_variable_harmonic(q: float, p: float, m: float, omega: float) -> tuple[float, float]:\n    mass = abs(float(m)) if abs(float(m)) > 1e-12 else 1.0\n    w = abs(float(omega)) if abs(float(omega)) > 1e-12 else 1.0\n    q_val = float(q)\n    p_val = float(p)\n    e_kin = 0.5 * (p_val * p_val) / mass\n    e_pot = 0.5 * mass * (w * w) * (q_val * q_val)\n    energy = e_kin + e_pot\n    action_i = energy / w\n    scaled_p = p_val / (mass * w)\n    angle_th = math.atan2(scaled_p, q_val)\n    return (action_i, angle_th)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "pendulum_exact_period_agm",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes large-amplitude pendulum exact period via Arithmetic-Geometric Mean (AGM).",
+    "pseudocode": "1. Clamp amplitude theta_max in [0, pi - 1e-6).\\n2. Initialize AGM iteration with a0 = 1, b0 = cos(theta_max / 2).\\n3. Iterate AGM until convergence |a - b| < 1e-14.\\n4. Compute period T = 2*pi*sqrt(L/g) / AGM(1, b0).",
+    "invariants": [
+      "Reduces to small-angle period 2*pi*sqrt(L/g) as theta_max -> 0.",
+      "Period increases monotonically with oscillation amplitude."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "t_period = 2.0 * math.pi * math.sqrt(length / g)",
+        "failure_mechanism": "Small angle formula underpredicts period by >15% at 90 degree amplitude.",
+        "counterexample_input": "length=1.0, g=9.81, theta_max=1.5707963",
+        "verified_fix": "Divide small-angle period by the complete elliptic AGM limit."
+      }
+    ],
+    "source_code": "def pendulum_exact_period_agm(length: float, g: float, theta_max: float) -> float:\n    l_val = abs(float(length)) if abs(float(length)) > 1e-12 else 1.0\n    g_val = abs(float(g)) if abs(float(g)) > 1e-12 else 9.80665\n    t0 = 2.0 * math.pi * math.sqrt(l_val / g_val)\n    th = max(0.0, min(3.14159, abs(float(theta_max))))\n    a_curr = 1.0\n    b_curr = math.cos(0.5 * th)\n    for _ in range(25):\n        if abs(a_curr - b_curr) < 1e-14:\n            break\n        a_next = 0.5 * (a_curr + b_curr)\n        b_next = math.sqrt(max(0.0, a_curr * b_curr))\n        a_curr = a_next\n        b_curr = b_next\n    agm_val = max(1e-12, a_curr)\n    period = t0 / agm_val\n    return period",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "duffing_oscillator_derivatives",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Evaluates phase-space derivatives (dx/dt, dv/dt) for Duffing non-linear oscillator.",
+    "pseudocode": "1. Set dx/dt = velocity v.\\n2. Compute restoring cubic force -alpha*x - beta*x^3.\\n3. Subtract damping delta*v.\\n4. Add harmonic driving force gamma*cos(omega*t).\\n5. Return (dx/dt, dv/dt).",
+    "invariants": [
+      "Reduces to linear damped oscillator when beta == 0.",
+      "Phase space volume contraction rate equals -delta."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dv = -alpha*x - beta*(x**3)",
+        "failure_mechanism": "Omitting damping or driving term ignores non-autonomous chaotic dynamics.",
+        "counterexample_input": "x=1.0, v=0.5, alpha=-1.0, beta=1.0, delta=0.2, gamma=0.3, omega=1.2, t=0.0",
+        "verified_fix": "Include all four linear, non-linear, dissipative, and drive components."
+      }
+    ],
+    "source_code": "def duffing_oscillator_derivatives(x: float, v: float, alpha: float, beta: float, delta: float, gamma: float, omega: float, t: float) -> tuple[float, float]:\n    pos = float(x)\n    vel = float(v)\n    a = float(alpha)\n    b = float(beta)\n    d = float(delta)\n    g = float(gamma)\n    w = float(omega)\n    time_val = float(t)\n    dx_dt = vel\n    dv_dt = -d * vel - a * pos - b * pos ** 3 + g * math.cos(w * time_val)\n    return (dx_dt, dv_dt)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "van_der_pol_derivatives",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes state derivatives (dx/dt, dv/dt) for the Van der Pol relaxation oscillator.",
+    "pseudocode": "1. Set dx/dt = velocity v.\\n2. Evaluate non-linear damping term mu*(1 - x^2)*v.\\n3. Subtract linear restoring force -x.\\n4. Return (dx/dt, dv/dt).",
+    "invariants": [
+      "Exhibits unique stable limit cycle attractor in phase plane.",
+      "Negative damping for |x| < 1 injects energy; positive damping for |x| > 1 dissipates energy."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dv_dt = mu * (1 - x) * v - x",
+        "failure_mechanism": "Using linear (1-x) instead of quadratic (1-x^2) destroys symmetry of limit cycle.",
+        "counterexample_input": "x=-1.5, v=0.2, mu=1.0",
+        "verified_fix": "Use quadratic factor (1.0 - x*x)."
+      }
+    ],
+    "source_code": "def van_der_pol_derivatives(x: float, v: float, mu: float) -> tuple[float, float]:\n    pos = float(x)\n    vel = float(v)\n    mu_val = float(mu)\n    dx_dt = vel\n    damping = mu_val * (1.0 - pos * pos) * vel\n    dv_dt = damping - pos\n    return (dx_dt, dv_dt)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "lorenz_attractor_rk4_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Performs single 4th-order Runge-Kutta integration step on the Lorenz chaotic attractor.",
+    "pseudocode": "1. Define vector field f(x, y, z) = [sigma*(y-x), x*(rho-z)-y, x*y - beta*z].\\n2. Compute standard RK4 stages k1, k2, k3, k4.\\n3. Sum weighted stages (k1 + 2*k2 + 2*k3 + k4) / 6.\\n4. Return updated (x, y, z).",
+    "invariants": [
+      "Bounded trajectory in phase space for standard parameters (10, 28, 8/3).",
+      "Volume contraction rate divergence div(f) = -(sigma + 1 + beta) < 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x_next = x + dt * sigma * (y - x)",
+        "failure_mechanism": "Euler step diverges rapidly due to chaotic sensitivity.",
+        "counterexample_input": "x=1.0, y=1.0, z=1.0, sigma=10.0, rho=28.0, beta=2.666667, dt=0.01",
+        "verified_fix": "Use 4th-order Runge-Kutta intermediate stages."
+      }
+    ],
+    "source_code": "def lorenz_attractor_rk4_step(x: float, y: float, z: float, sigma: float, rho: float, beta: float, dt: float) -> tuple[float, float, float]:\n    s = float(sigma)\n    r = float(rho)\n    b = float(beta)\n    h = float(dt)\n\n    def f_lorenz(px: float, py: float, pz: float) -> tuple[float, float, float]:\n        fx = s * (py - px)\n        fy = px * (r - pz) - py\n        fz = px * py - b * pz\n        return (fx, fy, fz)\n    k1x, k1y, k1z = f_lorenz(x, y, z)\n    k2x, k2y, k2z = f_lorenz(x + 0.5 * h * k1x, y + 0.5 * h * k1y, z + 0.5 * h * k1z)\n    k3x, k3y, k3z = f_lorenz(x + 0.5 * h * k2x, y + 0.5 * h * k2y, z + 0.5 * h * k2z)\n    k4x, k4y, k4z = f_lorenz(x + h * k3x, y + h * k3y, z + h * k3z)\n    xn = x + h / 6.0 * (k1x + 2.0 * k2x + 2.0 * k3x + k4x)\n    yn = y + h / 6.0 * (k1y + 2.0 * k2y + 2.0 * k3y + k4y)\n    zn = z + h / 6.0 * (k1z + 2.0 * k2z + 2.0 * k3z + k4z)\n    return (xn, yn, zn)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "henon_heiles_hamiltonian_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Symplectic Verlet step for the Henon-Heiles non-integrable galactic gravitational potential.",
+    "pseudocode": "1. Evaluate forces Fx = -x - 2*x*y and Fy = -y - x^2 + y^2.\\n2. Update momentum half-step px_half, py_half.\\n3. Update positions x_next, y_next with half-momenta.\\n4. Re-evaluate forces and complete momentum full-step.\\n5. Return (x_next, y_next, px_next, py_next).",
+    "invariants": [
+      "Preserves total Hamiltonian energy E = 0.5*(px^2 + py^2 + x^2 + y^2) + x^2*y - y^3/3.",
+      "Preserves 4D phase space symplectic 2-form dq ^ dp."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "fy = -y - x*x - y*y",
+        "failure_mechanism": "Sign error on y^2 potential derivative breaks energy conservation.",
+        "counterexample_input": "x=0.1, y=0.1, px=0.0, py=0.0, dt=0.05",
+        "verified_fix": "Use correct derivative dV/dy = y + x^2 - y^2 giving force -y - x^2 + y^2."
+      }
+    ],
+    "source_code": "def henon_heiles_hamiltonian_step(x: float, y: float, px: float, py: float, dt: float) -> tuple[float, float, float, float]:\n    h = float(dt)\n    half_h = 0.5 * h\n    fx0 = -float(x) - 2.0 * float(x) * float(y)\n    fy0 = -float(y) - float(x) * float(x) + float(y) * float(y)\n    px_half = float(px) + half_h * fx0\n    py_half = float(py) + half_h * fy0\n    x_next = float(x) + h * px_half\n    y_next = float(y) + h * py_half\n    fx1 = -x_next - 2.0 * x_next * y_next\n    fy1 = -y_next - x_next * x_next + y_next * y_next\n    px_next = px_half + half_h * fx1\n    py_next = py_half + half_h * fy1\n    return (x_next, y_next, px_next, py_next)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "rigid_body_euler_torque_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Integrates Euler rotational equations of motion for a torque-free triaxial rigid body.",
+    "pseudocode": "1. Guard principal moments of inertia I1, I2, I3 against zero.\\n2. Evaluate angular accelerations dw1 = (I2 - I3)/I1 * w2*w3.\\n3. Evaluate dw2 = (I3 - I1)/I2 * w3*w1 and dw3 = (I1 - I2)/I3 * w1*w2.\\n4. Advance angular velocity vector via RK2 step.",
+    "invariants": [
+      "Total rotational kinetic energy T = 0.5*(I1*w1^2 + I2*w2^2 + I3*w3^2) conserved.",
+      "Total angular momentum squared L^2 = I1^2*w1^2 + I2^2*w2^2 + I3^2*w3^2 conserved."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "i1 = float(i1_val)",
+        "failure_mechanism": "Zero moment of inertia causes ZeroDivisionError during acceleration evaluation.",
+        "counterexample_input": "w1=1.0, w2=0.0, w3=0.0, i1=0.0, i2=1.0, i3=1.0, dt=0.1",
+        "verified_fix": "Safeguard inertia denominators with positive floor threshold."
+      }
+    ],
+    "source_code": "def rigid_body_euler_torque_step(w1: float, w2: float, w3: float, i1: float, i2: float, i3: float, dt: float) -> tuple[float, float, float]:\n    j1 = abs(float(i1)) if abs(float(i1)) > 1e-12 else 1.0\n    j2 = abs(float(i2)) if abs(float(i2)) > 1e-12 else 1.0\n    j3 = abs(float(i3)) if abs(float(i3)) > 1e-12 else 1.0\n    h = float(dt)\n    dw1_dt = (j2 - j3) / j1 * float(w2) * float(w3)\n    dw2_dt = (j3 - j1) / j2 * float(w3) * float(w1)\n    dw3_dt = (j1 - j2) / j3 * float(w1) * float(w2)\n    w1_mid = float(w1) + 0.5 * h * dw1_dt\n    w2_mid = float(w2) + 0.5 * h * dw2_dt\n    w3_mid = float(w3) + 0.5 * h * dw3_dt\n    dw1_mid = (j2 - j3) / j1 * w2_mid * w3_mid\n    dw2_mid = (j3 - j1) / j2 * w3_mid * w1_mid\n    dw3_mid = (j1 - j2) / j3 * w1_mid * w2_mid\n    w1_next = float(w1) + h * dw1_mid\n    w2_next = float(w2) + h * dw2_mid\n    w3_next = float(w3) + h * dw3_mid\n    return (w1_next, w2_next, w3_next)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "quaternion_kinematics_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Integrates attitude quaternion kinematics under body angular rates with norm normalization.",
+    "pseudocode": "1. Compute quaternion time derivatives dq = 0.5 * q (x) [0, wx, wy, wz].\\n2. Integrate state via first-order kinematic update.\\n3. Re-normalize quaternion to strictly enforce unit norm constraint ||q|| = 1.\\n4. Return normalized (q0, q1, q2, q3).",
+    "invariants": [
+      "Quaternion unit norm condition ||q||_2 == 1.0 preserved within machine precision.",
+      "Singularity-free attitude representation for all rotations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (q0 + dq0, q1 + dq1, q2 + dq2, q3 + dq3)",
+        "failure_mechanism": "Omitting re-normalization causes progressive norm drift and attitude distortion.",
+        "counterexample_input": "q0=1.0, q1=0.0, q2=0.0, q3=0.0, wx=1.0, wy=1.0, wz=1.0, dt=0.1",
+        "verified_fix": "Divide updated components by sqrt(sum(q_i^2))."
+      }
+    ],
+    "source_code": "def quaternion_kinematics_step(q0: float, q1: float, q2: float, q3: float, wx: float, wy: float, wz: float, dt: float) -> tuple[float, float, float, float]:\n    h = float(dt)\n    w_x = float(wx)\n    w_y = float(wy)\n    w_z = float(wz)\n    dq0 = 0.5 * (-float(q1) * w_x - float(q2) * w_y - float(q3) * w_z)\n    dq1 = 0.5 * (float(q0) * w_x + float(q2) * w_z - float(q3) * w_y)\n    dq2 = 0.5 * (float(q0) * w_y - float(q1) * w_z + float(q3) * w_x)\n    dq3 = 0.5 * (float(q0) * w_z + float(q1) * w_y - float(q2) * w_x)\n    u0 = float(q0) + h * dq0\n    u1 = float(q1) + h * dq1\n    u2 = float(q2) + h * dq2\n    u3 = float(q3) + h * dq3\n    norm_sq = u0 * u0 + u1 * u1 + u2 * u2 + u3 * u3\n    inv_norm = 1.0 / math.sqrt(norm_sq) if norm_sq > 1e-14 else 1.0\n    return (u0 * inv_norm, u1 * inv_norm, u2 * inv_norm, u3 * inv_norm)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "rodrigues_rotation_formula_3d",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Rotates 3D vector v around arbitrary unit axis k by angle theta via Rodrigues formula.",
+    "pseudocode": "1. Normalize rotation axis vector k to unit length.\\n2. Compute cross product (k x v) and dot product (k . v).\\n3. Evaluate v_rot = v*cos(th) + (k x v)*sin(th) + k*(k . v)*(1 - cos(th)).\\n4. Return rotated 3D vector.",
+    "invariants": [
+      "Isometry: preserves vector length ||v_rot|| == ||v||.",
+      "Axis invariant: k remains unchanged under rotation around itself."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "kx = k[0]; ky = k[1]; kz = k[2]",
+        "failure_mechanism": "Using non-normalized rotation axis scales vector length incorrectly.",
+        "counterexample_input": "v=[1.0, 0.0, 0.0], k=[2.0, 0.0, 0.0], theta=1.5707963",
+        "verified_fix": "Normalize axis vector k by its Euclidean magnitude."
+      }
+    ],
+    "source_code": "def rodrigues_rotation_formula_3d(v: list[float], k: list[float], theta: float) -> list[float]:\n    vx = float(v[0]) if len(v) > 0 else 0.0\n    vy = float(v[1]) if len(v) > 1 else 0.0\n    vz = float(v[2]) if len(v) > 2 else 0.0\n    kx = float(k[0]) if len(k) > 0 else 0.0\n    ky = float(k[1]) if len(k) > 1 else 0.0\n    kz = float(k[2]) if len(k) > 2 else 1.0\n    k_mag = math.sqrt(kx * kx + ky * ky + kz * kz)\n    inv_k = 1.0 / k_mag if k_mag > 1e-12 else 1.0\n    ux = kx * inv_k\n    uy = ky * inv_k\n    uz = kz * inv_k\n    th = float(theta)\n    cos_th = math.cos(th)\n    sin_th = math.sin(th)\n    cross_x = uy * vz - uz * vy\n    cross_y = uz * vx - ux * vz\n    cross_z = ux * vy - uy * vx\n    dot_prod = ux * vx + uy * vy + uz * vz\n    omc = 1.0 - cos_th\n    rx = vx * cos_th + cross_x * sin_th + ux * dot_prod * omc\n    ry = vy * cos_th + cross_y * sin_th + uy * dot_prod * omc\n    rz = vz * cos_th + cross_z * sin_th + uz * dot_prod * omc\n    return [rx, ry, rz]",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "maxwell_boltzmann_speed_pdf",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates the Maxwell-Boltzmann molecular speed probability density function f(v).",
+    "pseudocode": "1. Clamp speed v >= 0.\\n2. Guard mass, temperature, and Boltzmann constant against non-positive values.\\n3. Compute prefactor 4*pi*(m / (2*pi*k_B*T))^(3/2).\\n4. Compute exponential kinetic factor exp(-m*v^2 / (2*k_B*T)).\\n5. Return PDF density.",
+    "invariants": [
+      "Probability density is non-negative for all real v.",
+      "Integrates to 1.0 over [0, infinity)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if v < 0: return math.nan",
+        "failure_mechanism": "Returning NaN on negative speed corrupts integration routines.",
+        "counterexample_input": "v=-5.0, m=1e-26, t=300.0, k_b=1.38e-23",
+        "verified_fix": "Return 0.0 for all negative speeds."
+      }
+    ],
+    "source_code": "def maxwell_boltzmann_speed_pdf(v: float, m: float, t: float, k_b: float) -> float:\n    speed = float(v)\n    if speed < 0.0:\n        return 0.0\n    mass = abs(float(m)) if abs(float(m)) > 1e-30 else 1.0\n    temp = abs(float(t)) if abs(float(t)) > 1e-12 else 300.0\n    kb = abs(float(k_b)) if abs(float(k_b)) > 1e-30 else 1.380649e-23\n    denom = 2.0 * kb * temp\n    prefactor = 4.0 * math.pi * (mass / (2.0 * math.pi * kb * temp)) ** 1.5\n    exponent = -(mass * speed * speed) / denom\n    clamped_exp = max(-700.0, min(700.0, exponent))\n    pdf_val = prefactor * (speed * speed) * math.exp(clamped_exp)\n    return pdf_val",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "boltzmann_entropy_phase_volume",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes statistical Boltzmann thermodynamic entropy S = k_B * ln(Omega).",
+    "pseudocode": "1. Clamp microstate count Omega >= 1.0.\\n2. Ensure positive Boltzmann constant k_B.\\n3. Evaluate natural logarithm ln(Omega).\\n4. Return entropy S.",
+    "invariants": [
+      "Entropy is non-negative S >= 0 for all microstate counts Omega >= 1.",
+      "Extensive property: S(Omega1 * Omega2) = S(Omega1) + S(Omega2)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "s = k_b * math.log(omega)",
+        "failure_mechanism": "Microstate count Omega < 1 or <= 0 causes ValueError in log or negative entropy.",
+        "counterexample_input": "omega=0.0, k_b=1.38e-23",
+        "verified_fix": "Clamp omega >= 1.0 to respect quantum phase-space floor."
+      }
+    ],
+    "source_code": "def boltzmann_entropy_phase_volume(omega: float, k_b: float) -> float:\n    kb = abs(float(k_b)) if abs(float(k_b)) > 1e-30 else 1.380649e-23\n    states = max(1.0, float(omega))\n    entropy = kb * math.log(states)\n    return entropy",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "equipartition_internal_energy",
+    "param_types": [
+      "int",
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes thermal internal energy U = 0.5 * dof * N * k_B * T via classical equipartition theorem.",
+    "pseudocode": "1. Clamp degrees of freedom dof >= 0 and particle count N >= 0.\\n2. Clamp absolute temperature T >= 0.\\n3. Multiply 0.5 * dof * N * k_B * T.\\n4. Return internal energy U.",
+    "invariants": [
+      "Internal energy is non-negative U >= 0 for all T >= 0.",
+      "Scales linearly with absolute temperature and particle count."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "u = 0.5 * dof * n * kb * t",
+        "failure_mechanism": "Negative temperature or particle count produces unphysical negative internal energy.",
+        "counterexample_input": "dof=3, n_particles=-10, t=300.0, k_b=1.38e-23",
+        "verified_fix": "Enforce non-negative bounds max(0, val) on physical quantities."
+      }
+    ],
+    "source_code": "def equipartition_internal_energy(dof: int, n_particles: int, t: float, k_b: float) -> float:\n    f_dof = max(0, int(dof))\n    n_count = max(0, int(n_particles))\n    temp = max(0.0, float(t))\n    kb = abs(float(k_b)) if abs(float(k_b)) > 1e-30 else 1.380649e-23\n    energy = 0.5 * float(f_dof) * float(n_count) * kb * temp\n    return energy",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "lennard_jones_force_pairwise",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes interatomic Lennard-Jones 12-6 potential energy and radial force.",
+    "pseudocode": "1. Safeguard interatomic distance r with core repulsion threshold.\\n2. Compute length ratio s_r = sigma / r.\\n3. Compute s6 = s_r^6 and s12 = s6^2.\\n4. Evaluate potential V = 4*eps*(s12 - s6).\\n5. Evaluate radial force F = 24*(eps/r)*(2*s12 - s6).\\n6. Return (V, F).",
+    "invariants": [
+      "Potential minimum V = -epsilon occurs at r = 2^(1/6) * sigma.",
+      "Force vanishes at equilibrium separation r0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sr = sigma / r",
+        "failure_mechanism": "Division by zero at r = 0 causes ZeroDivisionError during molecular collision.",
+        "counterexample_input": "r=0.0, epsilon=1.0, sigma=1.0",
+        "verified_fix": "Clamp r >= 0.1 * sigma to model hard core repulsion."
+      }
+    ],
+    "source_code": "def lennard_jones_force_pairwise(r: float, epsilon: float, sigma: float) -> tuple[float, float]:\n    sig = abs(float(sigma)) if abs(float(sigma)) > 1e-12 else 1.0\n    eps = abs(float(epsilon)) if abs(float(epsilon)) > 1e-12 else 1.0\n    r_safe = max(0.1 * sig, abs(float(r)))\n    s_over_r = sig / r_safe\n    s2 = s_over_r * s_over_r\n    s6 = s2 * s2 * s2\n    s12 = s6 * s6\n    potential = 4.0 * eps * (s12 - s6)\n    force_mag = 24.0 * eps / r_safe * (2.0 * s12 - s6)\n    return (potential, force_mag)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "debye_temperature_specific_heat",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates Debye low/high-temperature lattice specific heat capacity C_V(T).",
+    "pseudocode": "1. Guard Debye temperature theta_d with positive threshold.\\n2. Evaluate temperature ratio x = T / theta_d.\\n3. For low temperature x < 0.1, apply T^3 law C_V = (12*pi^4 / 5) * R * x^3.\\n4. For high temperature x >= 0.1, smoothly approach Dulong-Petit asymptote 3*R.\\n5. Return specific heat C_V.",
+    "invariants": [
+      "Approaches Dulong-Petit limit 3*R (approx 24.94 J/(mol K)) as T >> theta_d.",
+      "T^3 power law scaling as T -> 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cv = (12.0 * (math.pi**4) / 5.0) * 8.314 * ((t / theta_d)**3)",
+        "failure_mechanism": "Evaluating low-T power law at high temperatures diverges past classical Dulong-Petit ceiling.",
+        "counterexample_input": "t=1000.0, theta_d=100.0",
+        "verified_fix": "Smoothly interpolate with asymptotic Dulong-Petit ceiling."
+      }
+    ],
+    "source_code": "def debye_temperature_specific_heat(t: float, theta_d: float) -> float:\n    temp = max(0.0, float(t))\n    td = abs(float(theta_d)) if abs(float(theta_d)) > 1e-12 else 100.0\n    r_const = 8.314462618\n    dulong_petit = 3.0 * r_const\n    x = temp / td\n    if x < 0.1:\n        cv_low = 12.0 * math.pi ** 4 / 5.0 * r_const * x ** 3\n        return min(dulong_petit, cv_low)\n    cv_high = dulong_petit * (1.0 - 0.05 / (x * x + 1.0))\n    return cv_high",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "planck_blackbody_spectral_radiance",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes Planck blackbody spectral radiance B_lambda(T) = (2hc^2 / lambda^5) / (exp(hc/(lambda*kT)) - 1).",
+    "pseudocode": "1. Clamp wavelength lambda > 0 and temperature T >= 0.\\n2. Define Planck constant h, light speed c, and Boltzmann constant k.\\n3. Compute exponential factor hc / (lambda * k * T) clamped to <= 700 to prevent overflow.\\n4. Return spectral radiance.",
+    "invariants": [
+      "Radiance is non-negative for all physical wavelengths and temperatures.",
+      "Peak wavelength satisfies Wien's displacement law lambda_max * T = 2.89777e-3 m*K."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "exp_val = math.exp(hc / (lam * k * t))",
+        "failure_mechanism": "Small wavelength or temperature causes exp() overflow error.",
+        "counterexample_input": "wavelength=1e-10, t=1.0",
+        "verified_fix": "Clamp exponent argument to <= 700.0."
+      }
+    ],
+    "source_code": "def planck_blackbody_spectral_radiance(wavelength: float, t: float) -> float:\n    lam = abs(float(wavelength)) if abs(float(wavelength)) > 1e-15 else 1e-06\n    temp = max(0.0, float(t))\n    if temp < 1e-12:\n        return 0.0\n    h_planck = 6.62607015e-34\n    c_light = 299792458.0\n    k_boltz = 1.380649e-23\n    c1 = 2.0 * h_planck * c_light * c_light\n    c2 = h_planck * c_light / k_boltz\n    exponent = c2 / (lam * temp)\n    clamped_exp = min(700.0, exponent)\n    exp_factor = math.exp(clamped_exp) - 1.0\n    safe_denom = exp_factor if exp_factor > 1e-15 else 1e-15\n    radiance = c1 / (lam ** 5 * safe_denom)\n    return radiance",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "stefan_boltzmann_total_flux",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes total blackbody radiant emittance flux j* = sigma * T^4.",
+    "pseudocode": "1. Ensure non-negative absolute temperature T >= 0.\\n2. Guard Stefan-Boltzmann constant sigma.\\n3. Compute fourth power T^4.\\n4. Multiply sigma * T^4 to yield total emissive power.",
+    "invariants": [
+      "Radiant flux is strictly non-negative j* >= 0.",
+      "Monotonic quartic scaling with absolute temperature."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "flux = sigma * (t ** 4)",
+        "failure_mechanism": "Negative temperature in Kelvin produces unphysical thermal emission.",
+        "counterexample_input": "t=-50.0, sigma_sb=5.67e-8",
+        "verified_fix": "Clamp temperature to absolute zero floor max(0.0, t)."
+      }
+    ],
+    "source_code": "def stefan_boltzmann_total_flux(t: float, sigma_sb: float) -> float:\n    temp = max(0.0, float(t))\n    sigma = abs(float(sigma_sb)) if abs(float(sigma_sb)) > 1e-30 else 5.670374419e-08\n    t2 = temp * temp\n    t4 = t2 * t2\n    flux = sigma * t4\n    return flux",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "lorentz_factor_gamma",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Calculates special relativistic Lorentz factor gamma = 1 / sqrt(1 - v^2/c^2).",
+    "pseudocode": "1. Ensure positive light speed c.\\n2. Compute velocity ratio beta = v / c.\\n3. Clamp |beta| <= 0.99999999 to guard singularity at light barrier.\\n4. Return 1 / sqrt(1 - beta^2).",
+    "invariants": [
+      "Lorentz factor is bounded below by 1.0 (gamma >= 1.0).",
+      "Identically equal to 1.0 at rest (v = 0)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "gamma = 1.0 / math.sqrt(1.0 - (v/c)**2)",
+        "failure_mechanism": "Superluminal speeds |v| >= c produce math domain error or zero division.",
+        "counterexample_input": "v=3e8, c=3e8",
+        "verified_fix": "Clamp velocity ratio beta magnitude to strictly subluminal limit."
+      }
+    ],
+    "source_code": "def lorentz_factor_gamma(v: float, c: float) -> float:\n    c_speed = abs(float(c)) if abs(float(c)) > 1e-12 else 299792458.0\n    beta = float(v) / c_speed\n    clamped_beta = max(-0.99999999, min(0.99999999, beta))\n    b2 = clamped_beta * clamped_beta\n    denom = math.sqrt(max(1e-16, 1.0 - b2))\n    gamma = 1.0 / denom\n    return gamma",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "relativistic_momentum_vector",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Computes relativistic 3-momentum p = gamma * m0 * v.",
+    "pseudocode": "1. Calculate speed magnitude v = sqrt(vx^2 + vy^2 + vz^2).\\n2. Clamp speed strictly below light speed c.\\n3. Evaluate relativistic Lorentz factor gamma = 1 / sqrt(1 - v^2/c^2).\\n4. Return momentum components (gamma*m0*vx, gamma*m0*vy, gamma*m0*vz).",
+    "invariants": [
+      "Reduces to classical Newtonian momentum m0 * v in the limit v/c -> 0.",
+      "Momentum magnitude approaches infinity as v -> c."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p = (m0 * vx, m0 * vy, m0 * vz)",
+        "failure_mechanism": "Classical momentum underestimates particle momentum by >10% for v > 0.4c.",
+        "counterexample_input": "vx=2e8, vy=0.0, vz=0.0, m0=1.0, c=3e8",
+        "verified_fix": "Multiply classical momentum components by relativistic Lorentz factor."
+      }
+    ],
+    "source_code": "def relativistic_momentum_vector(vx: float, vy: float, vz: float, m0: float, c: float) -> tuple[float, float, float]:\n    c_speed = abs(float(c)) if abs(float(c)) > 1e-12 else 299792458.0\n    mass = abs(float(m0))\n    v_sq = float(vx) ** 2 + float(vy) ** 2 + float(vz) ** 2\n    c_sq = c_speed * c_speed\n    ratio_sq = min(0.99999999, v_sq / c_sq)\n    gamma = 1.0 / math.sqrt(max(1e-16, 1.0 - ratio_sq))\n    scale = gamma * mass\n    px = scale * float(vx)\n    py = scale * float(vy)\n    pz = scale * float(vz)\n    return (px, py, pz)",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "schwarzschild_radius_metric",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes Schwarzschild event horizon radius r_s = 2 * G * M / c^2.",
+    "pseudocode": "1. Ensure positive mass M, gravitational constant G, and light speed c.\\n2. Compute 2 * G * M.\\n3. Divide by c^2.\\n4. Return horizon radius r_s.",
+    "invariants": [
+      "Proportional to mass: r_s(2*M) = 2 * r_s(M).",
+      "Defines the event horizon coordinate singularity for non-rotating black holes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "rs = 2.0 * g * m / c",
+        "failure_mechanism": "Dividing by c instead of c^2 yields wrong physical units and invalid horizon radius.",
+        "counterexample_input": "m=1.989e30, g=6.674e-11, c=3e8",
+        "verified_fix": "Divide by c squared c^2."
+      }
+    ],
+    "source_code": "def schwarzschild_radius_metric(m: float, g: float, c: float) -> float:\n    mass = max(0.0, float(m))\n    g_const = abs(float(g)) if abs(float(g)) > 1e-20 else 6.6743e-11\n    c_speed = abs(float(c)) if abs(float(c)) > 1e-12 else 299792458.0\n    rs = 2.0 * g_const * mass / (c_speed * c_speed)\n    return rs",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "gravitational_time_dilation",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes gravitational time dilation factor dt_proper / dt_coord = sqrt(1 - 2GM/(r*c^2)).",
+    "pseudocode": "1. Compute Schwarzschild radius r_s = 2*G*M / c^2.\\n2. Clamp observation radius r >= r_s * 1.000001 outside horizon.\\n3. Evaluate square root sqrt(1 - r_s / r).\\n4. Return proper-to-coordinate time ratio.",
+    "invariants": [
+      "Dilation factor lies strictly in (0, 1] for r > r_s.",
+      "Approaches 1.0 as r -> infinity (flat spacetime limit)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "factor = math.sqrt(1.0 - rs / r)",
+        "failure_mechanism": "Radius inside event horizon r <= rs produces math domain error from negative radicand.",
+        "counterexample_input": "r=1000.0, m=1e31, g=6.674e-11, c=3e8",
+        "verified_fix": "Enforce observation radius strictly outside horizon floor."
+      }
+    ],
+    "source_code": "def gravitational_time_dilation(r: float, m: float, g: float, c: float) -> float:\n    mass = max(0.0, float(m))\n    g_const = abs(float(g)) if abs(float(g)) > 1e-20 else 6.6743e-11\n    c_speed = abs(float(c)) if abs(float(c)) > 1e-12 else 299792458.0\n    rs = 2.0 * g_const * mass / (c_speed * c_speed)\n    min_r = max(1e-12, rs * 1.00001)\n    r_val = max(min_r, abs(float(r)))\n    radicand = max(0.0, 1.0 - rs / r_val)\n    factor = math.sqrt(radicand)\n    return factor",
+    "domain": "hamiltonian_dynamics"
+  },
+  {
+    "name": "doppler_relativistic_frequency_shift",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates relativistic Doppler frequency shift f = f0 * sqrt(1 - v^2/c^2) / (1 - (v/c)*cos(theta)).",
+    "pseudocode": "1. Guard source rest frequency f0 >= 0.\\n2. Compute velocity ratio beta = v / c clamped to (-1, 1).\\n3. Compute numerator time dilation factor sqrt(1 - beta^2).\\n4. Compute denominator directional propagation factor 1 - beta*cos(theta).\\n5. Return observed frequency f.",
+    "invariants": [
+      "Reduces to transverse Doppler shift f0 * sqrt(1 - beta^2) at theta = pi/2.",
+      "Produces blue-shift for approaching source (theta = 0, beta > 0)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "f = f0 / (1.0 - (v / c) * math.cos(theta))",
+        "failure_mechanism": "Omitting the Lorentz time dilation numerator ignores transverse relativistic Doppler effect.",
+        "counterexample_input": "f0=1e9, v=1.5e8, theta=1.5707963, c=3e8",
+        "verified_fix": "Multiply by Lorentz factor numerator sqrt(1 - beta^2)."
+      }
+    ],
+    "source_code": "def doppler_relativistic_frequency_shift(f0: float, v: float, theta: float, c: float) -> float:\n    rest_f = max(0.0, float(f0))\n    c_speed = abs(float(c)) if abs(float(c)) > 1e-12 else 299792458.0\n    beta = float(v) / c_speed\n    clamped_beta = max(-0.99999999, min(0.99999999, beta))\n    th = float(theta)\n    numerator = math.sqrt(max(1e-16, 1.0 - clamped_beta * clamped_beta))\n    denominator = 1.0 - clamped_beta * math.cos(th)\n    safe_denom = denominator if abs(denominator) > 1e-12 else 1e-12\n    observed_f = rest_f * numerator / safe_denom\n    return observed_f",
+    "domain": "hamiltonian_dynamics"
+  }
+]

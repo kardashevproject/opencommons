@@ -1,0 +1,1033 @@
+[
+  {
+    "name": "dijkstra_shortest_path_costs",
+    "param_types": [
+      "int",
+      "list[list[tuple[int, float]]]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes single-source shortest path costs in a non-negative weighted graph.",
+    "pseudocode": "1. Initialize distance array with infinity, dist[source] = 0.0.\\n2. Maintain visited set and unvisited candidate pool.\\n3. Greedily extract minimum distance unvisited node.\\n4. Relax outgoing neighbor edges.\\n5. Return shortest path distance array.",
+    "invariants": [
+      "dist[source] is exactly 0.0.",
+      "All reachable node distances satisfy triangle inequality dist[v] <= dist[u] + w(u, v)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if weight < 0: relax()",
+        "failure_mechanism": "Negative edge weights can trap greedy exploration in non-terminating cycles or suboptimal paths.",
+        "counterexample_input": "edges with negative weights",
+        "verified_fix": "Enforce non-negative edge weights or use Bellman-Ford algorithm."
+      }
+    ],
+    "source_code": "def dijkstra_shortest_path_costs(n_nodes: int, adj_list: list[list[tuple[int, float]]], source: int) -> list[float]:\n    n = min(len(adj_list), max(0, int(n_nodes)))\n    if n == 0:\n        return []\n    src = max(0, min(n - 1, int(source)))\n    inf = 1e12\n    dist = [1e12] * n\n    dist[src] = 0.0\n    visited = [False] * n\n    for _ in range(n):\n        min_d = inf\n        u = -1\n        for i in range(n):\n            if not visited[i] and dist[i] < min_d:\n                min_d = dist[i]\n                u = i\n        if u == -1 or min_d >= inf:\n            break\n        visited[u] = True\n        if u < len(adj_list):\n            for edge in adj_list[u]:\n                if isinstance(edge, (list, tuple)) and len(edge) >= 2:\n                    v = int(edge[0])\n                    w = float(edge[1])\n                    if 0 <= v < n and not visited[v]:\n                        new_d = dist[u] + max(0.0, w)\n                        if new_d < dist[v]:\n                            dist[v] = new_d\n    return dist\n",
+    "domain": "general"
+  },
+  {
+    "name": "bellman_ford_negative_detect",
+    "param_types": [
+      "int",
+      "list[tuple[int, int, float]]",
+      "int"
+    ],
+    "return_type": "tuple[bool, list[float]]",
+    "summary": "Computes shortest paths and detects reachable negative weight cycles via Bellman-Ford relaxation.",
+    "pseudocode": "1. Initialize distances with infinity, dist[source] = 0.0.\\n2. Relax all edges |V| - 1 times.\\n3. Check if any edge can still be relaxed on V-th pass.\\n4. Return (has_negative_cycle, distances).",
+    "invariants": [
+      "If has_negative_cycle is False, distances are optimal shortest path lengths.",
+      "Detects any negative cycle reachable from the source node."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if dist[u] + w < dist[v]",
+        "failure_mechanism": "Relaxing from unreachable nodes (dist[u] == inf) creates phantom negative paths.",
+        "counterexample_input": "dist[u]=inf, w=-5.0",
+        "verified_fix": "Only relax edges where dist[u] is strictly less than infinity."
+      }
+    ],
+    "source_code": "def bellman_ford_negative_detect(n_nodes: int, edges: list[tuple[int, int, float]], source: int) -> tuple[bool, list[float]]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return (False, [])\n    src = max(0, min(n - 1, int(source)))\n    inf = 1e12\n    dist = [1e12] * n\n    dist[src] = 0.0\n    for _ in range(max(1, n - 1)):\n        updated = False\n        for u, v, w in edges:\n            if 0 <= u < n and 0 <= v < n and dist[u] < inf:\n                cand = dist[u] + float(w)\n                if cand < dist[v]:\n                    dist[v] = cand\n                    updated = True\n        if not updated:\n            break\n    has_neg_cycle = False\n    for u, v, w in edges:\n        if 0 <= u < n and 0 <= v < n and dist[u] < inf:\n            if dist[u] + float(w) < dist[v] - 1e-9:\n                has_neg_cycle = True\n                break\n    return (has_neg_cycle, dist)\n",
+    "domain": "general"
+  },
+  {
+    "name": "floyd_warshall_apsp_step",
+    "param_types": [
+      "list[list[float]]",
+      "int",
+      "int"
+    ],
+    "return_type": "list[list[float]]",
+    "summary": "Executes single dynamic programming update step for intermediate vertex k in Floyd-Warshall APSP.",
+    "pseudocode": "1. Copy input distance matrix.\\n2. For all pairs (i, j), compare direct path against path routed through k.\\n3. Update dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]).\\n4. Return updated matrix.",
+    "invariants": [
+      "dist[i][i] remains 0.0 unless a negative cycle exists.",
+      "Distance matrix values are monotonically non-increasing across steps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dist[i][j] = dist[i][k] + dist[k][j]",
+        "failure_mechanism": "Adding through unreachable intermediate nodes (where dist[i][k] == inf) creates spurious overflows.",
+        "counterexample_input": "dist[i][k]=1e12, dist[k][j]=1e12",
+        "verified_fix": "Only route through k if both dist[i][k] and dist[k][j] are strictly below infinity."
+      }
+    ],
+    "source_code": "def floyd_warshall_apsp_step(dist_matrix: list[list[float]], k: int, n: int) -> list[list[float]]:\n    dim = max(0, int(n))\n    if dim == 0 or len(dist_matrix) == 0:\n        return []\n    k_node = max(0, min(dim - 1, int(k)))\n    inf = 1e12\n    res = [[float(dist_matrix[i][j]) for j in range(dim)] for i in range(dim)]\n    for i in range(dim):\n        d_ik = res[i][k_node]\n        if d_ik < inf:\n            for j in range(dim):\n                d_kj = res[k_node][j]\n                if d_kj < inf:\n                    cand = d_ik + d_kj\n                    if cand < res[i][j]:\n                        res[i][j] = cand\n    return res\n",
+    "domain": "general"
+  },
+  {
+    "name": "johnson_reweighting_potentials",
+    "param_types": [
+      "list[tuple[int, int, float]]",
+      "list[float]"
+    ],
+    "return_type": "list[tuple[int, int, float]]",
+    "summary": "Reweights graph edge costs using vertex potentials w_hat(u, v) = w(u, v) + h(u) - h(v) >= 0.",
+    "pseudocode": "1. Iterate through directed edges (u, v, w).\\n2. Add potential h(u) and subtract potential h(v).\\n3. Clamp numerical precision drift at 0.0.\\n4. Return reweighted edges list.",
+    "invariants": [
+      "All reweighted edge weights are non-negative: w_hat(u, v) >= 0.",
+      "Shortest paths in reweighted graph are identical to shortest paths in original graph."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "w_hat = w + h[v] - h[u]",
+        "failure_mechanism": "Inverting potential signs creates negative edge weights, breaking Dijkstra's algorithm.",
+        "counterexample_input": "w=2.0, h[u]=5.0, h[v]=3.0",
+        "verified_fix": "Use exact reweighting definition: w_hat = w + h[u] - h[v]."
+      }
+    ],
+    "source_code": "def johnson_reweighting_potentials(edges: list[tuple[int, int, float]], potentials: list[float]) -> list[tuple[int, int, float]]:\n    n_pots = len(potentials)\n    reweighted = []\n    for edge in edges:\n        if isinstance(edge, (list, tuple)) and len(edge) >= 3:\n            u, v, w = int(edge[0]), int(edge[1]), float(edge[2])\n        elif isinstance(edge, (int, float)):\n            u, v, w = 0, 0, float(edge)\n        else:\n            continue\n        hu = potentials[u] if 0 <= u < n_pots else 0.0\n        hv = potentials[v] if 0 <= v < n_pots else 0.0\n        w_hat = float(w) + float(hu) - float(hv)\n        clamped_w = max(0.0, w_hat) if abs(w_hat) < 1e-12 else w_hat\n        reweighted.append((int(u), int(v), float(clamped_w)))\n    return reweighted\n",
+    "domain": "general"
+  },
+  {
+    "name": "a_star_heuristic_distance",
+    "param_types": [
+      "int",
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Calculates A* total evaluation cost function f(n) = g(n) + h(n).",
+    "pseudocode": "1. Verify non-negative actual cost g and heuristic cost h.\\n2. If current equals target, heuristic cost is 0.0.\\n3. Sum actual path cost g and admissible heuristic estimate h.\\n4. Return combined priority score f.",
+    "invariants": [
+      "f(n) >= g(n) for non-negative heuristic estimates.",
+      "f(target) equals exact cost g(target)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if h < 0: return g",
+        "failure_mechanism": "Negative heuristic values break admissibility and priority monotonicity.",
+        "counterexample_input": "g=10.0, h=-5.0",
+        "verified_fix": "Clamp heuristic estimate to non-negative values: max(0.0, h)."
+      }
+    ],
+    "source_code": "def a_star_heuristic_distance(current: int, target: int, g_cost: float, h_cost: float) -> float:\n    g = max(0.0, float(g_cost))\n    h = max(0.0, float(h_cost))\n    if int(current) == int(target):\n        return float(g)\n    f = g + h\n    return float(f)\n",
+    "domain": "general"
+  },
+  {
+    "name": "kruskal_minimum_spanning_tree",
+    "param_types": [
+      "int",
+      "list[tuple[int, int, float]]"
+    ],
+    "return_type": "tuple[float, list[tuple[int, int]]]",
+    "summary": "Computes Minimum Spanning Tree total weight and edge set via Kruskal's algorithm with DSU.",
+    "pseudocode": "1. Initialize Disjoint Set Union (parent and rank arrays).\\n2. Sort all edges ascending by weight.\\n3. Greedily add edges connecting distinct components.\\n4. Return (total_weight, mst_edges).",
+    "invariants": [
+      "Selected edge set contains no cycles.",
+      "Contains exactly min(n - 1, len(edges)) edges for connected graph."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "parent[root_u] = root_v",
+        "failure_mechanism": "Naive union without rank causes tree degeneration to O(N) chain depth.",
+        "counterexample_input": "Linear chain graph with 1000 nodes",
+        "verified_fix": "Use union-by-rank and path compression in Disjoint Set Union."
+      }
+    ],
+    "source_code": "def kruskal_minimum_spanning_tree(n_nodes: int, edges: list[tuple[int, int, float]]) -> tuple[float, list[tuple[int, int]]]:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return (0.0, [])\n    parent = [i for i in range(n)]\n    rank = [0] * n\n    def find(i):\n        curr = i\n        while parent[curr] != curr:\n            parent[curr] = parent[parent[curr]]\n            curr = parent[curr]\n        return curr\n    sorted_edges = sorted(edges, key=lambda e: float(e[2]))\n    total_weight = 0.0\n    mst_edges = []\n    for u, v, w in sorted_edges:\n        if 0 <= u < n and 0 <= v < n:\n            ru = find(u)\n            rv = find(v)\n            if ru != rv:\n                total_weight += float(w)\n                mst_edges.append((int(u), int(v)))\n                if rank[ru] < rank[rv]:\n                    parent[ru] = rv\n                elif rank[ru] > rank[rv]:\n                    parent[rv] = ru\n                else:\n                    parent[rv] = ru\n                    rank[ru] += 1\n                if len(mst_edges) == n - 1:\n                    break\n    return (float(total_weight), mst_edges)\n",
+    "domain": "general"
+  },
+  {
+    "name": "prim_minimum_spanning_tree",
+    "param_types": [
+      "int",
+      "list[list[tuple[int, float]]]",
+      "int"
+    ],
+    "return_type": "tuple[float, list[tuple[int, int]]]",
+    "summary": "Grows single connected Minimum Spanning Tree from start node via greedy cut edge selection.",
+    "pseudocode": "1. Initialize in_mst boolean array and minimum edge costs array.\\n2. Greedily extract lowest cost edge connecting MST to unvisited vertex.\\n3. Add vertex and relax outgoing boundary cuts.\\n4. Return total weight and tree edges.",
+    "invariants": [
+      "Constructs a connected tree spanning all reachable nodes.",
+      "Total weight is minimal among all spanning subgraphs."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "for v, w in adj[u]: add_to_mst()",
+        "failure_mechanism": "Adding edges without verifying whether neighbor is already in MST creates cycles.",
+        "counterexample_input": "Triangle graph with 3 nodes",
+        "verified_fix": "Only connect to nodes where in_mst[v] is currently False."
+      }
+    ],
+    "source_code": "def prim_minimum_spanning_tree(n_nodes: int, adj_list: list[list[tuple[int, float]]], start: int) -> tuple[float, list[tuple[int, int]]]:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return (0.0, [])\n    src = max(0, min(n - 1, int(start)))\n    inf = 1e12\n    min_cost = [1e12] * n\n    parent = [-1] * n\n    in_mst = [False] * n\n    min_cost[src] = 0.0\n    total_weight = 0.0\n    mst_edges = []\n    for _ in range(n):\n        u = -1\n        best = inf\n        for i in range(n):\n            if not in_mst[i] and min_cost[i] < best:\n                best = min_cost[i]\n                u = i\n        if u == -1 or best >= inf:\n            break\n        in_mst[u] = True\n        total_weight += best\n        if parent[u] != -1:\n            mst_edges.append((parent[u], u))\n        if u < len(adj_list):\n            for v, w in adj_list[u]:\n                if 0 <= v < n and not in_mst[v]:\n                    cost = float(w)\n                    if cost < min_cost[v]:\n                        min_cost[v] = cost\n                        parent[v] = u\n    return (float(total_weight), mst_edges)\n",
+    "domain": "general"
+  },
+  {
+    "name": "tarjan_strongly_connected_components",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "list[list[int]]",
+    "summary": "Decomposes directed graph into maximal strongly connected components using DFS discovery and low-link values.",
+    "pseudocode": "1. Initialize discovery time indices and low-link arrays.\\n2. Maintain active traversal stack and on_stack flags.\\n3. Recursively visit nodes, updating low-link on back-edges.\\n4. Root of SCC pops component members from stack.\\n5. Return partitioned list of SCCs.",
+    "invariants": [
+      "Partitions graph nodes into disjoint maximal strongly connected subsets.",
+      "Condensation graph of SCCs forms a Directed Acyclic Graph (DAG)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "low[u] = min(low[u], low[v])",
+        "failure_mechanism": "Updating low-link for cross-edges not on current stack merges distinct SCCs.",
+        "counterexample_input": "Cross edge to already finalized SCC",
+        "verified_fix": "Only update low-link if neighbor node v is currently on_stack."
+      }
+    ],
+    "source_code": "def tarjan_strongly_connected_components(n_nodes: int, adj_list: list[list[int]]) -> list[list[int]]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return []\n    disc = [-1] * n\n    low = [-1] * n\n    on_stack = [False] * n\n    stack = []\n    timer = 0\n    sccs = []\n    for root in range(n):\n        if disc[root] == -1:\n            call_stack = [(root, 0)]\n            while call_stack:\n                u, edge_idx = call_stack[-1]\n                if edge_idx == 0:\n                    disc[u] = timer\n                    low[u] = timer\n                    timer += 1\n                    stack.append(u)\n                    on_stack[u] = True\n                neighbors = adj_list[u] if u < len(adj_list) else []\n                if edge_idx < len(neighbors):\n                    v = neighbors[edge_idx]\n                    call_stack[-1] = (u, edge_idx + 1)\n                    if 0 <= v < n:\n                        if disc[v] == -1:\n                            call_stack.append((v, 0))\n                        elif on_stack[v]:\n                            if disc[v] < low[u]:\n                                low[u] = disc[v]\n                else:\n                    call_stack.pop()\n                    if call_stack:\n                        p, _ = call_stack[-1]\n                        if low[u] < low[p]:\n                            low[p] = low[u]\n                    if low[u] == disc[u]:\n                        comp = []\n                        while True:\n                            w = stack.pop()\n                            on_stack[w] = False\n                            comp.append(w)\n                            if w == u:\n                                break\n                        sccs.append(comp)\n    return sccs\n",
+    "domain": "general"
+  },
+  {
+    "name": "kosaraju_scc_two_pass",
+    "param_types": [
+      "int",
+      "list[list[int]]",
+      "list[list[int]]"
+    ],
+    "return_type": "list[list[int]]",
+    "summary": "Computes strongly connected components via Kosaraju's two-pass DFS on original and reversed graphs.",
+    "pseudocode": "1. Pass 1: Run DFS on original graph, ordering vertices by finish times.\\n2. Pass 2: Process vertices in reverse finish order on transposed graph.\\n3. Collect each DFS traversal tree as an individual SCC.\\n4. Return list of SCCs.",
+    "invariants": [
+      "Decomposes graph into identical SCC equivalence classes as Tarjan's algorithm.",
+      "Produces topological sorting of SCC condensation DAG."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "run_pass_2_on_original_graph()",
+        "failure_mechanism": "Failing to transpose edges in pass 2 traverses downstream components rather than true SCCs.",
+        "counterexample_input": "DAG with edge 0 -> 1",
+        "verified_fix": "Execute second DFS pass strictly on transposed (reversed) edge adjacency list."
+      }
+    ],
+    "source_code": "def kosaraju_scc_two_pass(n_nodes: int, adj_list: list[list[int]], rev_adj: list[list[int]]) -> list[list[int]]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return []\n    visited = [False] * n\n    order = []\n    for i in range(n):\n        if not visited[i]:\n            st = [(i, 0)]\n            visited[i] = True\n            while st:\n                u, idx = st[-1]\n                nbrs = adj_list[u] if u < len(adj_list) else []\n                if idx < len(nbrs):\n                    v = nbrs[idx]\n                    st[-1] = (u, idx + 1)\n                    if 0 <= v < n and not visited[v]:\n                        visited[v] = True\n                        st.append((v, 0))\n                else:\n                    st.pop()\n                    order.append(u)\n    visited2 = [False] * n\n    sccs = []\n    for u in reversed(order):\n        if not visited2[u]:\n            comp = []\n            q = [u]\n            visited2[u] = True\n            while q:\n                curr = q.pop()\n                comp.append(curr)\n                rev_nbrs = rev_adj[curr] if curr < len(rev_adj) else []\n                for v in rev_nbrs:\n                    if 0 <= v < n and not visited2[v]:\n                        visited2[v] = True\n                        q.append(v)\n            sccs.append(comp)\n    return sccs\n",
+    "domain": "general"
+  },
+  {
+    "name": "topological_sort_kahn_indegree",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes topological ordering of a Directed Acyclic Graph (DAG) via Kahn's in-degree queue.",
+    "pseudocode": "1. Compute in-degree for all vertices.\\n2. Initialize queue with vertices having in-degree 0.\\n3. Dequeue vertex, append to ordering, decrement neighbor in-degrees.\\n4. If final ordering length < n, graph contains a cycle.\\n5. Return topological order list.",
+    "invariants": [
+      "For every directed edge (u, v), u appears before v in the returned ordering.",
+      "Output contains all vertices if and only if the graph is acyclic."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return order",
+        "failure_mechanism": "Returning partial list on cyclic graphs misleads callers into treating it as a valid topological sort.",
+        "counterexample_input": "Directed cycle 0 -> 1 -> 0",
+        "verified_fix": "Detect len(order) < n and return empty list indicating cycle existence."
+      }
+    ],
+    "source_code": "def topological_sort_kahn_indegree(n_nodes: int, adj_list: list[list[int]]) -> list[int]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return []\n    in_deg = [0] * n\n    for u in range(min(n, len(adj_list))):\n        for v in adj_list[u]:\n            if 0 <= v < n:\n                in_deg[v] += 1\n    queue = [i for i in range(n) if in_deg[i] == 0]\n    order = []\n    head = 0\n    while head < len(queue):\n        u = queue[head]\n        head += 1\n        order.append(u)\n        if u < len(adj_list):\n            for v in adj_list[u]:\n                if 0 <= v < n:\n                    in_deg[v] -= 1\n                    if in_deg[v] == 0:\n                        queue.append(v)\n    if len(order) < n:\n        return []\n    return order\n",
+    "domain": "general"
+  },
+  {
+    "name": "cycle_detection_dfs_three_colors",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "bool",
+    "summary": "Detects directed graph cycles using White(0)/Gray(1)/Black(2) three-color DFS traversal.",
+    "pseudocode": "1. Initialize all nodes as White (unvisited = 0).\\n2. Start DFS, marking node Gray (active ancestor = 1).\\n3. If back-edge to a Gray node is encountered, a directed cycle exists.\\n4. Mark node Black (finished = 2) when all outgoing edges explored.\\n5. Return True if cycle found, else False.",
+    "invariants": [
+      "Returns True if and only if the directed graph contains at least one cycle.",
+      "Linear time complexity O(V + E)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if visited[v]: return True",
+        "failure_mechanism": "Treating already finished (Black) cross-edges as cycles flags false positives in DAG diamonds.",
+        "counterexample_input": "Diamond DAG: 0->1, 0->2, 1->3, 2->3",
+        "verified_fix": "Only report a cycle if neighbor node color is Gray (currently in recursion call stack)."
+      }
+    ],
+    "source_code": "def cycle_detection_dfs_three_colors(n_nodes: int, adj_list: list[list[int]]) -> bool:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return False\n    color = [0] * n\n    for start in range(n):\n        if color[start] == 0:\n            stack = [(start, 0)]\n            color[start] = 1\n            while stack:\n                u, idx = stack[-1]\n                nbrs = adj_list[u] if u < len(adj_list) else []\n                if idx < len(nbrs):\n                    v = nbrs[idx]\n                    stack[-1] = (u, idx + 1)\n                    if 0 <= v < n:\n                        if color[v] == 1:\n                            return True\n                        elif color[v] == 0:\n                            color[v] = 1\n                            stack.append((v, 0))\n                else:\n                    color[u] = 2\n                    stack.pop()\n    return False\n",
+    "domain": "general"
+  },
+  {
+    "name": "edmonds_karp_max_flow",
+    "param_types": [
+      "int",
+      "list[list[float]]",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes maximum network s-t flow via Edmonds-Karp BFS shortest augmenting paths.",
+    "pseudocode": "1. Initialize residual capacity matrix.\\n2. Run BFS from source to sink to find shortest augmenting path.\\n3. Track bottleneck capacity along augmenting path.\\n4. Augment flow and subtract from forward / add to reverse residual edges.\\n5. Repeat until no augmenting path exists. Return total max flow.",
+    "invariants": [
+      "Total flow equals capacity of minimum s-t cut (Max-Flow Min-Cut Theorem).",
+      "Conservation of flow holds for all intermediate nodes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if cap > 0: dfs()",
+        "failure_mechanism": "Using arbitrary DFS augmenting paths can require exponential iterations on fractional capacities.",
+        "counterexample_input": "Bad network with 1e6 capacities and central bridge",
+        "verified_fix": "Use BFS shortest augmenting paths guaranteeing O(V * E^2) polynomial termination."
+      }
+    ],
+    "source_code": "def edmonds_karp_max_flow(n_nodes: int, capacity: list[list[float]], source: int, sink: int, max_iters: int = 1000) -> float:\n    n = max(0, int(n_nodes))\n    if n < 2:\n        return 0.0\n    src = max(0, min(n - 1, int(source)))\n    dst = max(0, min(n - 1, int(sink)))\n    if src == dst:\n        return 0.0\n    limit = max(1, int(max_iters))\n    flow_grid = [[0.0] * n for _ in range(n)]\n    total_flow = 0.0\n    for _ in range(limit):\n        parent = [-1] * n\n        parent[src] = src\n        queue = [src]\n        head = 0\n        while head < len(queue) and parent[dst] == -1:\n            curr = queue[head]\n            head += 1\n            for nxt in range(n):\n                cap = float(capacity[curr][nxt]) if curr < len(capacity) and nxt < len(capacity[curr]) else 0.0\n                res = cap - flow_grid[curr][nxt]\n                if parent[nxt] == -1 and res > 1e-9:\n                    parent[nxt] = curr\n                    queue.append(nxt)\n        if parent[dst] == -1:\n            break\n        push = 1e18\n        curr = dst\n        while curr != src:\n            p = parent[curr]\n            cap = float(capacity[p][curr]) if p < len(capacity) and curr < len(capacity[p]) else 0.0\n            push = min(push, cap - flow_grid[p][curr])\n            curr = p\n        if push <= 1e-9:\n            break\n        curr = dst\n        while curr != src:\n            p = parent[curr]\n            flow_grid[p][curr] += push\n            flow_grid[curr][p] -= push\n            curr = p\n        total_flow += push\n    return float(total_flow)\n",
+    "domain": "general"
+  },
+  {
+    "name": "dinic_level_graph_max_flow",
+    "param_types": [
+      "int",
+      "list[list[float]]",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes maximum flow using Dinic's blocking flow algorithm with level-graph layering.",
+    "pseudocode": "1. Build BFS level graph from source to sink.\\n2. If sink is unreachable, terminate.\\n3. Push blocking flows through level graph along strictly increasing levels.\\n4. Repeat until no s-t path remains in residual network.",
+    "invariants": [
+      "Level of vertices strictly increases along augmenting paths in level graph.",
+      "Runs in O(V^2 * E) for general networks and O(E * sqrt(V)) for unit networks."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if level[v] >= level[u]: push()",
+        "failure_mechanism": "Allowing edges within same level creates cycles and deadlocks in blocking flow phase.",
+        "counterexample_input": "Equal level cross-edge in residual network",
+        "verified_fix": "Only permit flow augmentation along strictly increasing levels: level[v] == level[u] + 1."
+      }
+    ],
+    "source_code": "def dinic_level_graph_max_flow(n_nodes: int, capacity: list[list[float]], source: int, sink: int) -> float:\n    n = max(0, int(n_nodes))\n    if n < 2:\n        return 0.0\n    src = max(0, min(n - 1, int(source)))\n    dst = max(0, min(n - 1, int(sink)))\n    if src == dst:\n        return 0.0\n    res = [[max(0.0, float(capacity[i][j])) for j in range(n)] for i in range(n)]\n    total_flow = 0.0\n    for _ in range(500):\n        level = [-1] * n\n        level[src] = 0\n        q = [src]\n        head = 0\n        while head < len(q):\n            u = q[head]\n            head += 1\n            for v in range(n):\n                if level[v] == -1 and res[u][v] > 1e-9:\n                    level[v] = level[u] + 1\n                    q.append(v)\n        if level[dst] == -1:\n            break\n        for _ in range(n * 2):\n            st = [(src, 1e12, [src])]\n            pushed_any = False\n            while st:\n                curr, f_in, path = st.pop()\n                if curr == dst:\n                    for idx in range(len(path) - 1):\n                        p1 = path[idx]\n                        p2 = path[idx + 1]\n                        res[p1][p2] -= f_in\n                        res[p2][p1] += f_in\n                    total_flow += f_in\n                    pushed_any = True\n                    break\n                for nxt in range(n):\n                    if level[nxt] == level[curr] + 1 and res[curr][nxt] > 1e-9:\n                        st.append((nxt, min(f_in, res[curr][nxt]), path + [nxt]))\n            if not pushed_any:\n                break\n    return float(total_flow)\n",
+    "domain": "general"
+  },
+  {
+    "name": "hopcroft_karp_bipartite_matching",
+    "param_types": [
+      "int",
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "int",
+    "summary": "Computes maximum cardinality bipartite matching in O(E * sqrt(V)) time using Hopcroft-Karp algorithm.",
+    "pseudocode": "1. Initialize match arrays for left and right partitions.\\n2. Run BFS to construct level graph of shortest alternating augmenting paths.\\n3. Run DFS to find maximal set of vertex-disjoint augmenting paths.\\n4. Augment matching along paths until no augmenting path remains.",
+    "invariants": [
+      "Output is maximum cardinality matching (Berge's Lemma: no augmenting path exists).",
+      "Matching size is bounded by min(n_left, n_right)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if v in visited_right: skip",
+        "failure_mechanism": "Failing to search all shortest length augmenting paths simultaneously degrades performance to O(V*E).",
+        "counterexample_input": "Dense bipartite graph",
+        "verified_fix": "Use BFS phase to find minimum augmenting path distance before DFS phase."
+      }
+    ],
+    "source_code": "def hopcroft_karp_bipartite_matching(n_left: int, n_right: int, adj_left: list[list[int]]) -> int:\n    nl = max(0, int(n_left))\n    nr = max(0, int(n_right))\n    if nl == 0 or nr == 0:\n        return 0\n    pair_v = [-1] * nr\n    matching = 0\n    for u in range(nl):\n        visited = [False] * nr\n        st = [u]\n        parent = [-1] * nr\n        found = -1\n        while st and found == -1:\n            curr = st.pop()\n            nbrs = adj_left[curr] if curr < len(adj_left) else []\n            for v in nbrs:\n                if 0 <= v < nr and not visited[v]:\n                    visited[v] = True\n                    parent[v] = curr\n                    if pair_v[v] == -1:\n                        found = v\n                        break\n                    else:\n                        st.append(pair_v[v])\n        if found != -1:\n            curr_v = found\n            while curr_v != -1:\n                prev_u = parent[curr_v]\n                next_v = -1\n                for v2 in range(nr):\n                    if pair_v[v2] == prev_u:\n                        next_v = v2\n                        break\n                pair_v[curr_v] = prev_u\n                curr_v = next_v\n            matching += 1\n    return matching\n",
+    "domain": "general"
+  },
+  {
+    "name": "bipartite_graph_two_coloring",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "tuple[bool, list[int]]",
+    "summary": "Tests if graph is bipartite via BFS 2-coloring and returns valid vertex colors if 2-colorable.",
+    "pseudocode": "1. Initialize all node colors to -1 (uncolored).\\n2. For each unvisited component, color start node with 0.\\n3. Propagate alternating colors (1 - c) via BFS.\\n4. If neighbor has identical color, graph is not bipartite. Return (is_bipartite, colors).",
+    "invariants": [
+      "Graph is bipartite if and only if it contains no odd-length cycles.",
+      "Valid 2-coloring assigns different colors to every adjacent pair of vertices."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "run_bfs_only_from_node_0()",
+        "failure_mechanism": "Fails to inspect disconnected components, potentially missing an odd cycle in an isolated component.",
+        "counterexample_input": "Disconnected graph where component 2 has a triangle",
+        "verified_fix": "Loop outer BFS across all unvisited nodes to ensure complete component coverage."
+      }
+    ],
+    "source_code": "def bipartite_graph_two_coloring(n_nodes: int, adj_list: list[list[int]]) -> tuple[bool, list[int]]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return (True, [])\n    color = [-1] * n\n    for start in range(n):\n        if color[start] == -1:\n            color[start] = 0\n            q = [start]\n            head = 0\n            while head < len(q):\n                u = q[head]\n                head += 1\n                nbrs = adj_list[u] if u < len(adj_list) else []\n                for v in nbrs:\n                    if 0 <= v < n:\n                        if color[v] == -1:\n                            color[v] = 1 - color[u]\n                            q.append(v)\n                        elif color[v] == color[u]:\n                            return (False, [])\n    return (True, color)\n",
+    "domain": "general"
+  },
+  {
+    "name": "eulerian_circuit_hierholzer",
+    "param_types": [
+      "int",
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Constructs Eulerian circuit in a directed graph using Hierholzer's algorithm.",
+    "pseudocode": "1. Verify in-degree equals out-degree for all vertices.\\n2. Maintain current path stack and backtrack when dead-end is reached.\\n3. Push dead-end nodes onto circuit result list.\\n4. Reverse circuit to obtain forward Eulerian traversal.",
+    "invariants": [
+      "Eulerian circuit visits every directed edge in the graph exactly once.",
+      "Circuit start node equals circuit termination node."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if in_deg != out_deg: continue",
+        "failure_mechanism": "Proceeding without degree balance check produces incomplete or non-Eulerian paths.",
+        "counterexample_input": "Graph with unbalanced degree vertices",
+        "verified_fix": "Verify that in_degree equals out_degree for every vertex before executing circuit search."
+      }
+    ],
+    "source_code": "def eulerian_circuit_hierholzer(n_nodes: int, adj_list: list[list[int]], start_node: int) -> list[int]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return []\n    adj = [[v for v in (adj_list[i] if i < len(adj_list) else []) if 0 <= v < n] for i in range(n)]\n    in_deg = [0] * n\n    out_deg = [len(adj[i]) for i in range(n)]\n    for u in range(n):\n        for v in adj[u]:\n            in_deg[v] += 1\n    for i in range(n):\n        if in_deg[i] != out_deg[i]:\n            return []\n    start = max(0, min(n - 1, int(start_node)))\n    curr_path = [start]\n    circuit = []\n    while curr_path:\n        curr = curr_path[-1]\n        if adj[curr]:\n            nxt = adj[curr].pop()\n            curr_path.append(nxt)\n        else:\n            circuit.append(curr_path.pop())\n    circuit.reverse()\n    return circuit\n",
+    "domain": "general"
+  },
+  {
+    "name": "bridge_finding_tarjan_bridges",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "list[tuple[int, int]]",
+    "summary": "Identifies all bridge edges (critical cut edges) in an undirected graph using Tarjan's DFS.",
+    "pseudocode": "1. Initialize discovery time and low-link values.\\n2. Traverse DFS tree, tracking parent edge to avoid immediate reversal.\\n3. Condition for bridge (u, v): low[v] > disc[u].\\n4. Collect and return list of bridge edge pairs (min(u, v), max(u, v)).",
+    "invariants": [
+      "Removal of any bridge edge strictly increases the number of connected components.",
+      "Linear time complexity O(V + E)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if v == parent: low[u] = min(low[u], disc[v])",
+        "failure_mechanism": "Treating parent edge as a back-edge causes low[u] to erroneously update, missing bridges.",
+        "counterexample_input": "Single edge graph 0-1",
+        "verified_fix": "Skip the direct parent edge when exploring neighbor edges in undirected DFS."
+      }
+    ],
+    "source_code": "def bridge_finding_tarjan_bridges(n_nodes: int, adj_list: list[list[int]]) -> list[tuple[int, int]]:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return []\n    disc = [-1] * n\n    low = [-1] * n\n    bridges = []\n    timer = 0\n    for start in range(n):\n        if disc[start] == -1:\n            st = [(start, -1, 0)]\n            while st:\n                u, p, e_idx = st[-1]\n                if e_idx == 0:\n                    disc[u] = timer\n                    low[u] = timer\n                    timer += 1\n                nbrs = adj_list[u] if u < len(adj_list) else []\n                if e_idx < len(nbrs):\n                    v = nbrs[e_idx]\n                    st[-1] = (u, p, e_idx + 1)\n                    if 0 <= v < n and v != p:\n                        if disc[v] != -1:\n                            if disc[v] < low[u]:\n                                low[u] = disc[v]\n                        else:\n                            st.append((v, u, 0))\n                else:\n                    st.pop()\n                    if st:\n                        parent_u = st[-1][0]\n                        if low[u] < low[parent_u]:\n                            low[parent_u] = low[u]\n                        if low[u] > disc[parent_u]:\n                            edge = (min(parent_u, u), max(parent_u, u))\n                            bridges.append(edge)\n    return bridges\n",
+    "domain": "general"
+  },
+  {
+    "name": "articulation_points_cut_vertices",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Finds all articulation points (cut vertices) whose removal increases graph connected component count.",
+    "pseudocode": "1. Initialize discovery and low-link arrays.\\n2. Root is articulation point if it has >= 2 DFS tree children.\\n3. Non-root u is articulation point if any child v has low[v] >= disc[u].\\n4. Return sorted unique list of articulation points.",
+    "invariants": [
+      "Removal of an articulation point increases the number of connected components.",
+      "Every articulation point has degree >= 2."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if low[v] >= disc[u]: is_art = True (for root)",
+        "failure_mechanism": "Applying child low-link condition to root marks root as articulation point even with 1 child.",
+        "counterexample_input": "Linear path graph 0-1-2 with root 0",
+        "verified_fix": "Check root articulation condition strictly by DFS tree child count (children >= 2)."
+      }
+    ],
+    "source_code": "def articulation_points_cut_vertices(n_nodes: int, adj_list: list[list[int]]) -> list[int]:\n    n = max(0, int(n_nodes))\n    if n <= 2:\n        return []\n    disc = [-1] * n\n    low = [-1] * n\n    is_cut = [False] * n\n    timer = 0\n    for start in range(n):\n        if disc[start] == -1:\n            st = [(start, -1, 0, 0)]\n            while st:\n                u, p, e_idx, children = st[-1]\n                if e_idx == 0:\n                    disc[u] = timer\n                    low[u] = timer\n                    timer += 1\n                nbrs = adj_list[u] if u < len(adj_list) else []\n                if e_idx < len(nbrs):\n                    v = nbrs[e_idx]\n                    st[-1] = (u, p, e_idx + 1, children)\n                    if 0 <= v < n and v != p:\n                        if disc[v] != -1:\n                            if disc[v] < low[u]:\n                                low[u] = disc[v]\n                        else:\n                            st[-1] = (u, p, e_idx + 1, children + 1)\n                            st.append((v, u, 0, 0))\n                else:\n                    curr_entry = st.pop()\n                    c_count = curr_entry[3]\n                    if p == -1:\n                        if c_count >= 2:\n                            is_cut[u] = True\n                    else:\n                        parent_u = st[-1][0]\n                        if low[u] < low[parent_u]:\n                            low[parent_u] = low[u]\n                        if low[u] >= disc[parent_u]:\n                            is_cut[parent_u] = True\n    return [i for i in range(n) if is_cut[i]]\n",
+    "domain": "general"
+  },
+  {
+    "name": "graph_diameter_bfs_unweighted",
+    "param_types": [
+      "int",
+      "list[list[int]]"
+    ],
+    "return_type": "int",
+    "summary": "Computes graph diameter (maximum shortest path distance) across all vertex pairs via BFS.",
+    "pseudocode": "1. Run BFS from each vertex i = 0..n-1.\\n2. Track shortest distance to all reachable vertices.\\n3. If any component is disconnected, return -1.\\n4. Return maximum observed shortest path distance.",
+    "invariants": [
+      "Diameter is non-negative for connected graphs.",
+      "Diameter is bounded above by n - 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "run_bfs_only_from_node_0()",
+        "failure_mechanism": "Single BFS from arbitrary node finds eccentricity, not graph diameter on general graphs.",
+        "counterexample_input": "Cycle graph with 5 vertices",
+        "verified_fix": "Evaluate all-pairs BFS to determine exact maximum shortest path diameter."
+      }
+    ],
+    "source_code": "def graph_diameter_bfs_unweighted(n_nodes: int, adj_list: list[list[int]]) -> int:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return 0\n    max_diam = 0\n    for start in range(n):\n        dist = [-1] * n\n        dist[start] = 0\n        q = [start]\n        head = 0\n        while head < len(q):\n            u = q[head]\n            head += 1\n            nbrs = adj_list[u] if u < len(adj_list) else []\n            for v in nbrs:\n                if 0 <= v < n and dist[v] == -1:\n                    dist[v] = dist[u] + 1\n                    if dist[v] > max_diam:\n                        max_diam = dist[v]\n                    q.append(v)\n        if any(d == -1 for d in dist):\n            return -1\n    return int(max_diam)\n",
+    "domain": "general"
+  },
+  {
+    "name": "closeness_centrality_unweighted",
+    "param_types": [
+      "int",
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes normalized closeness centrality score (n - 1) / sum(d(u, v)) for a specified vertex.",
+    "pseudocode": "1. Run BFS from target node to find shortest path distances to all vertices.\\n2. Sum distances to all reachable nodes.\\n3. Normalize by fraction of reachable nodes (Wasserman-Faust formula).\\n4. Return normalized closeness centrality in [0.0, 1.0].",
+    "invariants": [
+      "Closeness centrality is bounded in [0.0, 1.0].",
+      "Nodes closer on average to all other nodes receive higher centrality scores."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "centrality = (n - 1) / sum_dist",
+        "failure_mechanism": "Fails on disconnected graphs where sum_dist to unreachable nodes is undefined/infinite.",
+        "counterexample_input": "Disconnected graph with 2 components",
+        "verified_fix": "Scale by (reachable / total) * (reachable / sum_dist) per Wasserman-Faust convention."
+      }
+    ],
+    "source_code": "def closeness_centrality_unweighted(n_nodes: int, adj_list: list[list[int]], node: int) -> float:\n    n = max(0, int(n_nodes))\n    if n <= 1:\n        return 0.0\n    src = max(0, min(n - 1, int(node)))\n    dist = [-1] * n\n    dist[src] = 0\n    q = [src]\n    head = 0\n    while head < len(q):\n        u = q[head]\n        head += 1\n        nbrs = adj_list[u] if u < len(adj_list) else []\n        for v in nbrs:\n            if 0 <= v < n and dist[v] == -1:\n                dist[v] = dist[u] + 1\n                q.append(v)\n    reachable = [d for d in dist if d > 0]\n    if not reachable:\n        return 0.0\n    sum_d = float(sum(reachable))\n    k = float(len(reachable))\n    score = (k / float(n - 1)) * (k / sum_d)\n    return float(max(0.0, min(1.0, score)))\n",
+    "domain": "general"
+  },
+  {
+    "name": "betweenness_centrality_brandes_step",
+    "param_types": [
+      "int",
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Executes single-source dependency accumulation step in Brandes' betweenness centrality algorithm.",
+    "pseudocode": "1. Run BFS tracking shortest path counts sigma and predecessors P.\\n2. Traverse vertices in reverse BFS stack order.\\n3. Accumulate dependency delta_s(v) for all predecessors.\\n4. Return dependency vector for source vertex s.",
+    "invariants": [
+      "Source vertex has dependency delta_s(s) equal to 0.0.",
+      "All dependency values are non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sigma[v] = len(predecessors)",
+        "failure_mechanism": "Failing to sum path multiplicities sigma[u] underestimates paths passing through branching nodes.",
+        "counterexample_input": "Diamond graph with 2 parallel paths",
+        "verified_fix": "Accumulate path counts: sigma[v] += sigma[u] for each shortest predecessor edge."
+      }
+    ],
+    "source_code": "def betweenness_centrality_brandes_step(n_nodes: int, adj_list: list[list[int]], s: int) -> list[float]:\n    n = max(0, int(n_nodes))\n    if n == 0:\n        return []\n    src = max(0, min(n - 1, int(s)))\n    dist = [-1] * n\n    sigma = [0.0] * n\n    pred = [[] for _ in range(n)]\n    dist[src] = 0\n    sigma[src] = 1.0\n    q = [src]\n    head = 0\n    order = []\n    while head < len(q):\n        u = q[head]\n        head += 1\n        order.append(u)\n        nbrs = adj_list[u] if u < len(adj_list) else []\n        for v in nbrs:\n            if 0 <= v < n:\n                if dist[v] == -1:\n                    dist[v] = dist[u] + 1\n                    q.append(v)\n                if dist[v] == dist[u] + 1:\n                    sigma[v] += sigma[u]\n                    pred[v].append(u)\n    delta = [0.0] * n\n    for w in reversed(order):\n        for p in pred[w]:\n            c = (sigma[p] / max(1e-12, sigma[w])) * (1.0 + delta[w])\n            delta[p] += c\n    delta[src] = 0.0\n    return delta\n",
+    "domain": "general"
+  },
+  {
+    "name": "page_rank_power_iteration_step",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Executes single power iteration step for Google PageRank with damping factor and teleportation.",
+    "pseudocode": "1. Verify square adjacency transition matrix.\\n2. Redistribute dangling node probability mass uniformly.\\n3. Multiply transition matrix by current rank vector.\\n4. Apply damping factor d and add uniform teleportation (1 - d) / n.",
+    "invariants": [
+      "Output rank vector sums to 1.0.",
+      "All rank probabilities remain non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_new = d * A * p",
+        "failure_mechanism": "Omitting teleportation (1 - d) / n causes probability mass to leak away at dangling nodes.",
+        "counterexample_input": "Graph with sink node having zero outgoing links",
+        "verified_fix": "Add uniform teleportation term (1.0 - damping) / n and redistribute dangling node mass."
+      }
+    ],
+    "source_code": "def page_rank_power_iteration_step(adj_matrix: list[list[float]], p: list[float], damping: float) -> list[float]:\n    n = len(p)\n    if n == 0 or len(adj_matrix) != n:\n        return []\n    d = max(0.0, min(1.0, float(damping)))\n    teleport = (1.0 - d) / float(n)\n    out_p = [teleport for _ in range(n)]\n    dangling_mass = 0.0\n    for j in range(n):\n        col_sum = sum(max(0.0, float(adj_matrix[i][j])) for i in range(n))\n        if col_sum < 1e-12:\n            dangling_mass += p[j]\n        else:\n            for i in range(n):\n                w = max(0.0, float(adj_matrix[i][j])) / col_sum\n                out_p[i] += d * w * p[j]\n    dangling_contrib = (d * dangling_mass) / float(n)\n    for i in range(n):\n        out_p[i] += dangling_contrib\n    total = sum(out_p)\n    return [x / total for x in out_p] if total > 0.0 else [1.0 / float(n) for _ in range(n)]\n",
+    "domain": "general"
+  },
+  {
+    "name": "hits_authority_hub_update",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "tuple[list[float], list[float]]",
+    "summary": "Executes single Kleinberg HITS authority and hub score mutual reinforcement update step.",
+    "pseudocode": "1. Update authority scores: auth_i = sum(A_ji * hub_j).\\n2. Update hub scores: hub_i = sum(A_ij * auth_j).\\n3. Normalize authority and hub vectors by their Euclidean L2 norms.\\n4. Return normalized (new_auth, new_hub).",
+    "invariants": [
+      "Output authority and hub vectors have unit Euclidean L2 norm.",
+      "All score values are non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "hub = A * old_auth",
+        "failure_mechanism": "Updating hubs using old authority vector rather than updated authority vector slows convergence.",
+        "counterexample_input": "Directed link graph with 4 nodes",
+        "verified_fix": "Update authorities first, then update hubs using the freshly calculated authority scores."
+      }
+    ],
+    "source_code": "def hits_authority_hub_update(adj_matrix: list[list[float]], auth: list[float], hub: list[float]) -> tuple[list[float], list[float]]:\n    n = len(adj_matrix)\n    if n == 0 or len(auth) != n or len(hub) != n:\n        return ([], [])\n    new_auth = [0.0] * n\n    for i in range(n):\n        new_auth[i] = sum(max(0.0, float(adj_matrix[j][i])) * max(0.0, float(hub[j])) for j in range(n))\n    auth_norm = math.sqrt(sum(a * a for a in new_auth))\n    if auth_norm > 1e-12:\n        new_auth = [a / auth_norm for a in new_auth]\n    else:\n        new_auth = [1.0 / math.sqrt(float(n)) for _ in range(n)]\n    new_hub = [0.0] * n\n    for i in range(n):\n        new_hub[i] = sum(max(0.0, float(adj_matrix[i][j])) * new_auth[j] for j in range(n))\n    hub_norm = math.sqrt(sum(h * h for h in new_hub))\n    if hub_norm > 1e-12:\n        new_hub = [h / hub_norm for h in new_hub]\n    else:\n        new_hub = [1.0 / math.sqrt(float(n)) for _ in range(n)]\n    return (new_auth, new_hub)\n",
+    "domain": "general"
+  },
+  {
+    "name": "graph_adjacency_laplacian_spectrum",
+    "param_types": [
+      "int",
+      "list[list[float]]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes diagonal degree entries of unnormalized Graph Laplacian matrix L = D - A.",
+    "pseudocode": "1. Zero out self-loop diagonal entries of adjacency matrix.\\n2. Sum outgoing weights for each vertex to obtain degree d_i.\\n3. Construct diagonal entries of Laplacian L_ii = d_i.\\n4. Return degree sequence list.",
+    "invariants": [
+      "All diagonal Laplacian entries are non-negative row sums of non-negative adjacency weights.",
+      "Row sum of the complete Laplacian matrix L = D - A is exactly zero for all rows."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "d_i = sum(adj[i][j] for all j)",
+        "failure_mechanism": "Including non-zero diagonal self-loops in degree summation distorts graph Laplacian spectrum.",
+        "counterexample_input": "adj[i][i] = 1.0 (self-loop)",
+        "verified_fix": "Exclude self-loop diagonal entries j == i when evaluating row degree sums."
+      }
+    ],
+    "source_code": "def graph_adjacency_laplacian_spectrum(n_nodes: int, adj_matrix: list[list[float]]) -> list[float]:\n    n = len(adj_matrix) if len(adj_matrix) > 0 and len(adj_matrix) != int(n_nodes) else max(0, int(n_nodes))\n    if n == 0 or len(adj_matrix) < n:\n        return []\n    deg_diag = [0.0] * n\n    for i in range(n):\n        d = 0.0\n        row = adj_matrix[i]\n        for j in range(min(n, len(row))):\n            if i != j:\n                d += max(0.0, float(row[j]))\n        deg_diag[i] = d\n    return deg_diag\n",
+    "domain": "general"
+  },
+  {
+    "name": "knapsack_01_dp_optimal_value",
+    "param_types": [
+      "list[int]",
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes optimal value for 0/1 Knapsack problem using dynamic programming table.",
+    "pseudocode": "1. Verify positive capacity and matching item lengths.\\n2. Maintain single-row DP array dp[w] = max value for weight w.\\n3. Iterate backwards over weight capacity for each item.\\n4. Update dp[w] = max(dp[w], dp[w - weight] + value).\\n5. Return dp[capacity].",
+    "invariants": [
+      "Optimal value is monotonically non-decreasing with capacity.",
+      "Solution satisfies exact integer capacity constraint."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "for w in range(weight, capacity + 1):",
+        "failure_mechanism": "Forward iteration allows item to be reused multiple times, solving unbounded knapsack instead.",
+        "counterexample_input": "weights=[2], values=[10.0], capacity=4",
+        "verified_fix": "Iterate backwards from capacity down to item weight: range(capacity, weight - 1, -1)."
+      }
+    ],
+    "source_code": "def knapsack_01_dp_optimal_value(weights: list[int], values: list[float], capacity: int) -> float:\n    cap = max(0, int(capacity))\n    n = min(len(weights), len(values))\n    if cap == 0 or n == 0:\n        return 0.0\n    dp = [0.0] * (cap + 1)\n    for i in range(n):\n        w = int(weights[i])\n        v = float(values[i])\n        if w > 0 and v > 0.0:\n            for c in range(cap, w - 1, -1):\n                cand = dp[c - w] + v\n                if cand > dp[c]:\n                    dp[c] = cand\n    return float(dp[cap])\n",
+    "domain": "general"
+  },
+  {
+    "name": "knapsack_fractional_greedy",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes optimal value for fractional knapsack problem via greedy value-to-weight ratio.",
+    "pseudocode": "1. Pair items with value/weight efficiency ratio.\\n2. Sort items descending by value-to-weight ratio.\\n3. Greedily fill knapsack taking full item if capacity permits.\\n4. Take fractional slice of final item to exhaust remaining capacity.\\n5. Return total value.",
+    "invariants": [
+      "Provides provably optimal solution for divisible items.",
+      "Value serves as upper bound on 0/1 knapsack solution."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "items.sort(key=lambda x: x.value)",
+        "failure_mechanism": "Sorting by value rather than ratio v/w fails on heavy high-value items.",
+        "counterexample_input": "weights=[10, 1], values=[20, 5], capacity=1",
+        "verified_fix": "Sort greedily by value density ratio (value / weight)."
+      }
+    ],
+    "source_code": "def knapsack_fractional_greedy(weights: list[float], values: list[float], capacity: float) -> float:\n    rem_cap = max(0.0, float(capacity))\n    n = min(len(weights), len(values))\n    if rem_cap <= 0.0 or n == 0:\n        return 0.0\n    items = []\n    for i in range(n):\n        w = max(0.0, float(weights[i]))\n        v = max(0.0, float(values[i]))\n        if w > 1e-9:\n            items.append((v / w, w, v))\n    items.sort(key=lambda t: t[0], reverse=True)\n    total_val = 0.0\n    for ratio, w, v in items:\n        if rem_cap <= 0.0:\n            break\n        take_w = min(w, rem_cap)\n        total_val += take_w * ratio\n        rem_cap -= take_w\n    return float(total_val)\n",
+    "domain": "general"
+  },
+  {
+    "name": "longest_increasing_subsequence_patience",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Computes length of Longest Strictly Increasing Subsequence via patience sorting in O(N log N).",
+    "pseudocode": "1. Maintain tails array where tails[k] stores smallest tail of all LIS of length k+1.\\n2. For each element, find smallest tail >= element via binary search.\\n3. If element exceeds all tails, append to extend LIS length.\\n4. Otherwise update tail at search position.\\n5. Return length of tails array.",
+    "invariants": [
+      "Tails array is strictly increasing at all times.",
+      "Length of tails array equals exact length of LIS."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "pos = binary_search_right()",
+        "failure_mechanism": "Using upper_bound / bisect_right computes non-decreasing subsequence rather than strictly increasing.",
+        "counterexample_input": "arr=[1, 2, 2, 3]",
+        "verified_fix": "Use lower_bound / bisect_left to enforce strict inequality arr[i] < arr[j]."
+      }
+    ],
+    "source_code": "def longest_increasing_subsequence_patience(arr: list[int]) -> int:\n    n = len(arr)\n    if n <= 1:\n        return n\n    tails = []\n    for x in arr:\n        val = int(x)\n        low = 0\n        high = len(tails)\n        while low < high:\n            mid = (low + high) // 2\n            if tails[mid] < val:\n                low = mid + 1\n            else:\n                high = mid\n        if low == len(tails):\n            tails.append(val)\n        else:\n            tails[low] = val\n    return len(tails)\n",
+    "domain": "general"
+  },
+  {
+    "name": "coin_change_minimum_coins_dp",
+    "param_types": [
+      "list[int]",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Finds minimum number of coins needed to make change for specified target amount using DP.",
+    "pseudocode": "1. Initialize dp array with infinity, dp[0] = 0.\\n2. For each coin denomination, update dp[a] = min(dp[a], dp[a - c] + 1).\\n3. Return dp[amount] if reachable, else -1.",
+    "invariants": [
+      "dp[0] is exactly 0 coins.",
+      "Returns -1 if target amount cannot be composed from provided denominations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "coins.sort(reverse=True) and take greedily",
+        "failure_mechanism": "Greedy choice is non-optimal for non-canonical coinage systems.",
+        "counterexample_input": "coins=[1, 3, 4], amount=6 (greedy: 4+1+1=3 coins, optimal: 3+3=2 coins)",
+        "verified_fix": "Use dynamic programming table exploring all subproblem coin additions."
+      }
+    ],
+    "source_code": "def coin_change_minimum_coins_dp(coins: list[int], amount: int) -> int:\n    target = int(amount)\n    if target <= 0:\n        return 0\n    inf = 1000000\n    dp = [1000000] * (target + 1)\n    dp[0] = 0\n    for c in coins:\n        val = int(c)\n        if val > 0:\n            for a in range(val, target + 1):\n                if dp[a - val] + 1 < dp[a]:\n                    dp[a] = dp[a - val] + 1\n    return dp[target] if dp[target] < inf else -1\n",
+    "domain": "general"
+  },
+  {
+    "name": "matrix_chain_multiplication_cost",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Computes minimum scalar multiplication cost for optimal matrix chain parenthesization.",
+    "pseudocode": "1. Number of matrices n = len(p) - 1.\\n2. Build dynamic programming table m[i][j] by chain length len = 2..n.\\n3. Split chain at k in i..j-1 and evaluate cost = m[i][k] + m[k+1][j] + p[i-1]*p[k]*p[j].\\n4. Return m[1][n].",
+    "invariants": [
+      "Cost m[i][i] is exactly 0 for single matrix chains.",
+      "Optimal cost satisfies subproblem optimality property."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p[i]*p[k]*p[j]",
+        "failure_mechanism": "Index offset error in dimension array p produces incorrect multiplication dimensions.",
+        "counterexample_input": "p=[10, 20, 30]",
+        "verified_fix": "Carefully align dimension indices p[i-1], p[k], and p[j]."
+      }
+    ],
+    "source_code": "def matrix_chain_multiplication_cost(p: list[int]) -> int:\n    k_len = len(p)\n    if k_len < 3:\n        return 0\n    n = k_len - 1\n    inf = 1000000000\n    m = [[0] * (n + 1) for _ in range(n + 1)]\n    for l in range(2, n + 1):\n        for i in range(1, n - l + 2):\n            j = i + l - 1\n            m[i][j] = inf\n            for k in range(i, j):\n                cost = m[i][k] + m[k + 1][j] + int(p[i - 1]) * int(p[k]) * int(p[j])\n                if cost < m[i][j]:\n                    m[i][j] = cost\n    return int(m[1][n])\n",
+    "domain": "general"
+  },
+  {
+    "name": "rod_cutting_optimal_revenue",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes maximum revenue obtainable by cutting a rod of given length into integer segments.",
+    "pseudocode": "1. Initialize revenue table r[0] = 0.0.\\n2. For each length j = 1..length, find max cut: max(prices[i] + r[j - i - 1]).\\n3. Store optimal revenue r[j].\\n4. Return r[length].",
+    "invariants": [
+      "Optimal revenue is monotonically non-decreasing with rod length.",
+      "r[0] is exactly 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "r = prices[length - 1]",
+        "failure_mechanism": "Failing to consider cutting the rod into multiple smaller pieces misses higher composite revenue.",
+        "counterexample_input": "prices=[1.0, 5.0, 8.0, 9.0], length=4 (9.0 vs 2*5.0=10.0)",
+        "verified_fix": "Maximize over all cuts: r[j] = max(price[i] + r[j - 1 - i])."
+      }
+    ],
+    "source_code": "def rod_cutting_optimal_revenue(prices: list[float], length: int) -> float:\n    target = max(0, int(length))\n    if target == 0 or len(prices) == 0:\n        return 0.0\n    r = [0.0] * (target + 1)\n    n_prices = len(prices)\n    for j in range(1, target + 1):\n        max_val = 0.0\n        for i in range(min(j, n_prices)):\n            cand = float(prices[i]) + r[j - 1 - i]\n            if cand > max_val:\n                max_val = cand\n        r[j] = max_val\n    return float(r[target])\n",
+    "domain": "general"
+  },
+  {
+    "name": "interval_scheduling_earliest_finish",
+    "param_types": [
+      "list[tuple[float, float]]"
+    ],
+    "return_type": "list[tuple[float, float]]",
+    "summary": "Finds maximum cardinality mutually compatible interval set via greedy Earliest Finish Time (EFT).",
+    "pseudocode": "1. Filter valid intervals (start < finish).\\n2. Sort intervals ascending by finish time.\\n3. Greedily select next interval whose start time >= finish time of last chosen interval.\\n4. Return selected non-overlapping intervals.",
+    "invariants": [
+      "Selected intervals are mutually non-overlapping: end_i <= start_{i+1}.",
+      "Provides provably maximum cardinality set of compatible intervals."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sort(key=lambda x: x[0])",
+        "failure_mechanism": "Greedily picking earliest start time selects long intervals that block many short intervals.",
+        "counterexample_input": "intervals=[(0, 10), (1, 2), (3, 4)]",
+        "verified_fix": "Sort greedily by earliest finish time (EFT): key=lambda x: x[1]."
+      }
+    ],
+    "source_code": "def interval_scheduling_earliest_finish(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:\n    valid = []\n    for iv in intervals:\n        if isinstance(iv, (list, tuple)) and len(iv) >= 2:\n            s, e = float(iv[0]), float(iv[1])\n            if s < e:\n                valid.append((s, e))\n        elif isinstance(iv, (int, float)):\n            v = float(iv)\n            if v > 0.0:\n                valid.append((0.0, v))\n    if not valid:\n        return []\n    sorted_ivs = sorted(valid, key=lambda iv: iv[1])\n    selected = [sorted_ivs[0]]\n    last_end = sorted_ivs[0][1]\n    for idx in range(1, len(sorted_ivs)):\n        s, e = sorted_ivs[idx]\n        if s >= last_end:\n            selected.append((s, e))\n            last_end = e\n    return selected\n",
+    "domain": "general"
+  },
+  {
+    "name": "weighted_interval_scheduling_dp",
+    "param_types": [
+      "list[tuple[float, float, float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes maximum total weight of compatible intervals via DP with binary search for last compatible job.",
+    "pseudocode": "1. Sort intervals by finish time.\\n2. For each interval i, find latest compatible interval p(i) via binary search.\\n3. DP recurrence: dp[i] = max(dp[i-1], weight[i] + dp[p(i)]).\\n4. Return dp[n].",
+    "invariants": [
+      "Output total weight is optimal for any set of non-overlapping intervals.",
+      "Runs in O(N log N) using binary search."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "greedy earliest finish time",
+        "failure_mechanism": "Unweighted greedy EFT fails when a mutually exclusive interval has massive weight.",
+        "counterexample_input": "intervals=[(0, 5, 1.0), (1, 2, 100.0)]",
+        "verified_fix": "Use dynamic programming with memoized previous compatible job pointers."
+      }
+    ],
+    "source_code": "def weighted_interval_scheduling_dp(intervals: list[tuple[float, float, float]]) -> float:\n    valid = [iv for iv in intervals if float(iv[0]) < float(iv[1]) and float(iv[2]) > 0.0]\n    n = len(valid)\n    if n == 0:\n        return 0.0\n    sorted_ivs = sorted(valid, key=lambda iv: float(iv[1]))\n    dp = [0.0] * (n + 1)\n    for i in range(1, n + 1):\n        s_curr, _, w_curr = sorted_ivs[i - 1]\n        low = 0\n        high = i - 1\n        p_idx = 0\n        while low <= high:\n            mid = (low + high) // 2\n            if mid > 0 and float(sorted_ivs[mid - 1][1]) <= float(s_curr):\n                p_idx = mid\n                low = mid + 1\n            else:\n                high = mid - 1\n        incl = float(w_curr) + dp[p_idx]\n        excl = dp[i - 1]\n        dp[i] = max(incl, excl)\n    return float(dp[n])\n",
+    "domain": "general"
+  },
+  {
+    "name": "vertex_cover_2approx_greedy",
+    "param_types": [
+      "list[tuple[int, int]]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes a valid vertex cover within a factor of 2 of optimal via maximal matching greedy selection.",
+    "pseudocode": "1. Initialize empty vertex cover set.\\n2. Iterate through edges (u, v).\\n3. If neither u nor v is covered, add BOTH endpoints to cover.\\n4. Discard all incident edges.\\n5. Return sorted cover vertices list.",
+    "invariants": [
+      "Output is a valid vertex cover: every edge has at least one endpoint in cover.",
+      "Cover size |C| <= 2 * |C_opt| (provable 2-approximation bound)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cover.add(u) # only add one endpoint",
+        "failure_mechanism": "Adding single endpoint arbitrarily fails to bound cover size by maximal matching size.",
+        "counterexample_input": "Star graph K_1,n",
+        "verified_fix": "Add both endpoints of un-covered edge to guarantee 2-approximation ratio."
+      }
+    ],
+    "source_code": "def vertex_cover_2approx_greedy(edges: list[tuple[int, int]]) -> list[int]:\n    if not edges:\n        return []\n    covered_nodes = set()\n    for u, v in edges:\n        u_idx = int(u)\n        v_idx = int(v)\n        if u_idx != v_idx:\n            if u_idx not in covered_nodes and v_idx not in covered_nodes:\n                covered_nodes.add(u_idx)\n                covered_nodes.add(v_idx)\n    return sorted(list(covered_nodes))\n",
+    "domain": "general"
+  },
+  {
+    "name": "set_cover_greedy_log_approx",
+    "param_types": [
+      "list[int]",
+      "list[list[int]]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes set cover within H(|U|) logarithmic approximation factor via Chvatal's greedy algorithm.",
+    "pseudocode": "1. Maintain remaining uncovered universe elements.\\n2. In each round, pick subset covering maximum number of uncovered elements.\\n3. Record chosen subset index and mark elements as covered.\\n4. Return indices of selected subsets.",
+    "invariants": [
+      "Selected subsets cover all elements that are coverable in the universe.",
+      "Approximation ratio is bounded by ln(|U|) + 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "pick subset with largest total length",
+        "failure_mechanism": "Picking largest subset regardless of already covered elements causes redundant loops.",
+        "counterexample_input": "Universe={1, 2, 3}, Subsets=[{1, 2}, {1, 2, 3}]",
+        "verified_fix": "Select subset that maximizes count of NEW (uncovered) elements."
+      }
+    ],
+    "source_code": "def set_cover_greedy_log_approx(universe: list[int], subsets: list[list[int]]) -> list[int]:\n    uncovered = set(universe)\n    if not uncovered or not subsets:\n        return []\n    sub_sets = [set(s) for s in subsets]\n    chosen = []\n    for _ in range(len(subsets)):\n        best_idx = -1\n        best_cov = 0\n        for idx, s in enumerate(sub_sets):\n            cov_count = len(s.intersection(uncovered))\n            if cov_count > best_cov:\n                best_cov = cov_count\n                best_idx = idx\n        if best_idx == -1 or best_cov == 0:\n            break\n        chosen.append(best_idx)\n        uncovered.difference_update(sub_sets[best_idx])\n        if not uncovered:\n            break\n    return chosen\n",
+    "domain": "general"
+  },
+  {
+    "name": "travelling_salesperson_nearest_neighbor",
+    "param_types": [
+      "list[list[float]]",
+      "int"
+    ],
+    "return_type": "tuple[list[int], float]",
+    "summary": "Constructs initial TSP Hamiltonian cycle tour via greedy Nearest Neighbor heuristic.",
+    "pseudocode": "1. Start at start_node and mark as visited.\\n2. Repeatedly move to unvisited vertex with minimum distance.\\n3. Complete cycle by returning from final vertex to start_node.\\n4. Return (tour, total_distance).",
+    "invariants": [
+      "Constructs a valid Hamiltonian cycle visiting every vertex exactly once.",
+      "Tour length contains n + 1 vertices ending at start_node."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "omit return edge to start_node",
+        "failure_mechanism": "Constructs an open Hamiltonian path rather than a closed TSP cycle tour.",
+        "counterexample_input": "TSP metric distance matrix",
+        "verified_fix": "Add final closing edge dist[last_node][start_node] to total distance and tour."
+      }
+    ],
+    "source_code": "def travelling_salesperson_nearest_neighbor(dist_matrix: list[list[float]], start_node: int) -> tuple[list[int], float]:\n    n = len(dist_matrix)\n    if n == 0:\n        return ([], 0.0)\n    start = max(0, min(n - 1, int(start_node)))\n    visited = [False] * n\n    visited[start] = True\n    tour = [start]\n    curr = start\n    total_d = 0.0\n    for _ in range(n - 1):\n        best_d = 1e12\n        nxt = -1\n        for v in range(n):\n            if not visited[v]:\n                d = float(dist_matrix[curr][v])\n                if d < best_d:\n                    best_d = d\n                    nxt = v\n        if nxt == -1:\n            break\n        visited[nxt] = True\n        tour.append(nxt)\n        total_d += best_d\n        curr = nxt\n    total_d += float(dist_matrix[curr][start])\n    tour.append(start)\n    return (tour, float(total_d))\n",
+    "domain": "general"
+  },
+  {
+    "name": "tsp_2opt_edge_swap_gain",
+    "param_types": [
+      "list[list[float]]",
+      "list[int]",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes distance delta for 2-opt edge swap removing (i, i+1) and (j, j+1) and adding (i, j) and (i+1, j+1).",
+    "pseudocode": "1. Extract vertices u1 = tour[i], u2 = tour[i+1], v1 = tour[j], v2 = tour[j+1].\\n2. Current length = dist(u1, u2) + dist(v1, v2).\\n3. Candidate swapped length = dist(u1, v1) + dist(u2, v2).\\n4. Return delta = new_len - old_len (negative delta indicates improvement).",
+    "invariants": [
+      "Delta < 0 implies that performing the 2-opt swap strictly reduces total tour length.",
+      "Preserves Hamiltonian cycle validity when applied to tour."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if j == i + 1: swap()",
+        "failure_mechanism": "Swapping adjacent edges is a no-op that produces zero distance gain.",
+        "counterexample_input": "i=1, j=2",
+        "verified_fix": "Enforce j > i + 1 to ensure disjoint edges are swapped."
+      }
+    ],
+    "source_code": "def tsp_2opt_edge_swap_gain(dist_matrix: list[list[float]], tour: list[int], i: int, j: int) -> float:\n    m = len(tour)\n    if m < 2 or len(dist_matrix) == 0:\n        return 0.0\n    u1 = int(tour[int(i) % m])\n    u2 = int(tour[(int(i) + 1) % m])\n    v1 = int(tour[int(j) % m])\n    v2 = int(tour[(int(j) + 1) % m])\n    n = len(dist_matrix)\n    d = lambda a, b: float(dist_matrix[a % n][b % n]) if len(dist_matrix[a % n]) > 0 else 0.0\n    old_len = d(u1, u2) + d(v1, v2)\n    new_len = d(u1, v1) + d(u2, v2)\n    delta = new_len - old_len\n    return float(delta)\n",
+    "domain": "general"
+  },
+  {
+    "name": "graph_k_core_decomposition",
+    "param_types": [
+      "int",
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes k-core subgraph vertices via iterative degree pruning queue.",
+    "pseudocode": "1. Compute initial vertex degrees.\\n2. Enqueue all vertices with degree < k.\\n3. While queue non-empty, dequeue vertex and decrement neighbor degrees.\\n4. If neighbor degree drops below k, enqueue neighbor.\\n5. Return remaining vertices with degree >= k.",
+    "invariants": [
+      "Every vertex in k-core has degree >= k in the induced subgraph.",
+      "k-core subgraphs are nested: (k+1)-core is a subset of k-core."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if deg[u] < k: remove(u)",
+        "failure_mechanism": "Removing vertices in single pass misses secondary cascade removals when neighbor degrees drop.",
+        "counterexample_input": "Chain attached to a clique",
+        "verified_fix": "Use BFS-style queue to iteratively propagate degree reduction cascades."
+      }
+    ],
+    "source_code": "def graph_k_core_decomposition(n_nodes: int, adj_list: list[list[int]], k: int) -> list[int]:\n    n = max(0, int(n_nodes))\n    k_thresh = max(1, int(k))\n    if n == 0:\n        return []\n    adj = [[v for v in (adj_list[i] if i < len(adj_list) else []) if 0 <= v < n and v != i] for i in range(n)]\n    deg = [len(adj[i]) for i in range(n)]\n    removed = [False] * n\n    q = [i for i in range(n) if deg[i] < k_thresh]\n    for u in q:\n        removed[u] = True\n    head = 0\n    while head < len(q):\n        u = q[head]\n        head += 1\n        for v in adj[u]:\n            if not removed[v]:\n                deg[v] -= 1\n                if deg[v] < k_thresh:\n                    removed[v] = True\n                    q.append(v)\n    return [i for i in range(n) if not removed[i]]\n",
+    "domain": "general"
+  },
+  {
+    "name": "simulated_annealing_cooling_schedule",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes geometric simulated annealing temperature T = max(T_min, T_0 * alpha^step).",
+    "pseudocode": "1. Verify initial temperature T_0 > T_min > 0.\\n2. Clamp decay factor alpha in [0.8, 0.999].\\n3. Evaluate exponential decay T_0 * (alpha ** step).\\n4. Return temperature clamped above T_min.",
+    "invariants": [
+      "Temperature is strictly positive (T >= T_min > 0.0).",
+      "Monotonically non-increasing with respect to step count."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "T = T0 * (alpha ** step)",
+        "failure_mechanism": "Underflows to 0.0 on large step counts causing zero division in acceptance probability.",
+        "counterexample_input": "step=100000, alpha=0.9",
+        "verified_fix": "Clamp minimum temperature floor: max(t_min, temp)."
+      }
+    ],
+    "source_code": "def simulated_annealing_cooling_schedule(t_initial: float, t_min: float, alpha: float, step: int) -> float:\n    t0 = max(1e-6, float(t_initial))\n    t_floor = max(1e-9, min(t0, float(t_min)))\n    a = max(0.8, min(0.9999, float(alpha)))\n    s = max(0, int(step))\n    decay = a ** min(s, 500)\n    t = t0 * decay\n    return float(max(t_floor, t))\n",
+    "domain": "general"
+  },
+  {
+    "name": "genetic_algorithm_tournament_select",
+    "param_types": [
+      "list[float]",
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Selects winning individual index with maximum fitness among candidate tournament subset.",
+    "pseudocode": "1. Verify non-empty candidate indices list.\\n2. Loop through tournament indices.\\n3. Find candidate with highest fitness score.\\n4. Return winning individual index.",
+    "invariants": [
+      "Selected individual has fitness >= all other tournament participants.",
+      "Returned index is a member of the tournament indices subset."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if not tournament_indices: return -1",
+        "failure_mechanism": "Returning invalid negative index causes downstream array lookup errors.",
+        "counterexample_input": "tournament_indices=[]",
+        "verified_fix": "Validate non-empty tournament list and fallback to index 0."
+      }
+    ],
+    "source_code": "def genetic_algorithm_tournament_select(fitness_scores: list[float], tournament_indices: list[int]) -> int:\n    n = len(fitness_scores)\n    if n == 0 or not tournament_indices:\n        return 0\n    best_idx = tournament_indices[0]\n    best_fit = float(fitness_scores[best_idx]) if (0 <= best_idx < n) else -1e12\n    for idx in tournament_indices[1:]:\n        if 0 <= idx < n:\n            fit = float(fitness_scores[idx])\n            if fit > best_fit:\n                best_fit = fit\n                best_idx = idx\n    return int(max(0, min(n - 1, best_idx)))\n",
+    "domain": "general"
+  },
+  {
+    "name": "genetic_algorithm_one_point_crossover",
+    "param_types": [
+      "list[int]",
+      "list[int]",
+      "int"
+    ],
+    "return_type": "tuple[list[int], list[int]]",
+    "summary": "Performs single-point genetic crossover exchanging tail segments between two chromosome parents.",
+    "pseudocode": "1. Determine common chromosome length n.\\n2. Clamp crossover cut point inside [1, n - 1].\\n3. Offspring 1 = parent1[:point] + parent2[point:].\\n4. Offspring 2 = parent2[:point] + parent1[point:].\\n5. Return (offspring1, offspring2).",
+    "invariants": [
+      "Offspring chromosomes have identical length to parent chromosomes.",
+      "Offspring inherit prefix directly from one parent and suffix from the other."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "point = 0 or point = len",
+        "failure_mechanism": "Crossover at chromosome boundaries produces identical clones rather than genetic recombination.",
+        "counterexample_input": "point=0",
+        "verified_fix": "Clamp crossover point strictly within internal chromosome slice: max(1, min(n - 1, point))."
+      }
+    ],
+    "source_code": "def genetic_algorithm_one_point_crossover(parent1: list[int], parent2: list[int], point: int) -> tuple[list[int], list[int]]:\n    n = min(len(parent1), len(parent2))\n    if n <= 1:\n        return (list(parent1), list(parent2))\n    pt = max(1, min(n - 1, int(point)))\n    c1 = list(parent1[:pt]) + list(parent2[pt:n])\n    c2 = list(parent2[:pt]) + list(parent1[pt:n])\n    return (c1, c2)\n",
+    "domain": "general"
+  },
+  {
+    "name": "branch_and_bound_knapsack_bound",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "list[tuple[float, float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes fractional LP relaxation upper bound for branch-and-bound 0/1 knapsack pruning.",
+    "pseudocode": "1. If current weight exceeds capacity, return 0.0 (infeasible).\\n2. Add full value of remaining items while remaining capacity permits.\\n3. Take fractional slice of next item to exhaust remaining capacity.\\n4. Return total upper bound.",
+    "invariants": [
+      "Upper bound is >= optimal integer completion value (admissible upper bound).",
+      "Enables aggressive pruning of suboptimal branch-and-bound search tree subtrees."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if weight > capacity: return current_value",
+        "failure_mechanism": "Failing to prune infeasible branches allows over-capacity nodes to survive in the search tree.",
+        "counterexample_input": "current_weight > capacity",
+        "verified_fix": "Return 0.0 upper bound when current weight violates knapsack capacity."
+      }
+    ],
+    "source_code": "def branch_and_bound_knapsack_bound(current_value: float, current_weight: float, capacity: float, items_left: list[tuple[float, float]]) -> float:\n    cap = max(0.0, float(capacity))\n    cur_w = float(current_weight)\n    cur_v = float(current_value)\n    if cur_w > cap:\n        return 0.0\n    bound = cur_v\n    rem_cap = cap - cur_w\n    sorted_items = sorted(items_left, key=lambda item: (float(item[0]) / max(1e-9, float(item[1]))), reverse=True)\n    for v, w in sorted_items:\n        val = max(0.0, float(v))\n        weight = max(1e-9, float(w))\n        if weight <= rem_cap:\n            bound += val\n            rem_cap -= weight\n        else:\n            bound += val * (rem_cap / weight)\n            break\n    return float(bound)\n",
+    "domain": "general"
+  },
+  {
+    "name": "stable_marriage_gale_shapley",
+    "param_types": [
+      "list[list[int]]",
+      "list[list[int]]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes stable matching with zero blocking pairs via Gale-Shapley deferred acceptance algorithm.",
+    "pseudocode": "1. Initialize all proposers as un-matched.\\n2. Un-matched proposer proposes to highest ranked receiver not yet proposed to.\\n3. Receiver tentatively accepts if currently un-matched or prefers new proposer.\\n4. Displaced proposer rejoins un-matched pool.\\n5. Return receiver-to-proposer matches array.",
+    "invariants": [
+      "Produces a stable matching with zero blocking pairs.",
+      "Proposer-optimal and receiver-pessimal."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if pref_rank < current_partner",
+        "failure_mechanism": "Comparing raw partner index instead of preference list rank leads to unstable matchings.",
+        "counterexample_input": "receiver_prefs where lower index != higher preference",
+        "verified_fix": "Construct inverted ranking lookup table: rank[partner] to compare preference priorities."
+      }
+    ],
+    "source_code": "def stable_marriage_gale_shapley(proposer_prefs: list[list[int]], receiver_prefs: list[list[int]]) -> list[int]:\n    n = min(len(proposer_prefs), len(receiver_prefs))\n    if n == 0:\n        return []\n    match_receiver = [-1] * n\n    prop_next = [0] * n\n    free_proposers = [i for i in range(n)]\n    rank_matrix = [[n for _ in range(n)] for _ in range(n)]\n    for r in range(n):\n        for priority, p in enumerate(receiver_prefs[r]):\n            if 0 <= p < n:\n                rank_matrix[r][p] = priority\n    while free_proposers:\n        p = free_proposers.pop(0)\n        if prop_next[p] < len(proposer_prefs[p]):\n            r = proposer_prefs[p][prop_next[p]]\n            prop_next[p] += 1\n            if 0 <= r < n:\n                curr_partner = match_receiver[r]\n                if curr_partner == -1:\n                    match_receiver[r] = p\n                elif rank_matrix[r][p] < rank_matrix[r][curr_partner]:\n                    match_receiver[r] = p\n                    free_proposers.append(curr_partner)\n                else:\n                    free_proposers.append(p)\n    return match_receiver\n",
+    "domain": "general"
+  }
+]

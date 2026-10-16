@@ -1,0 +1,1035 @@
+[
+  {
+    "name": "hann_window_weight",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Raised cosine Hann window tapering weight evaluation.",
+    "pseudocode": "1. Check bounds for index n within total_n.\n2. Compute normalized angle theta = 2 * pi * n / (total_n - 1).\n3. Compute w = 0.5 * (1 - cos(theta)).",
+    "invariants": [
+      "Window weight w is bounded strictly within [0.0, 1.0].",
+      "Even symmetry holds: w(n) == w(total_n - 1 - n)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "total_n denominator without boundary clamp",
+        "failure_mechanism": "total_n <= 1 causes division by zero in (total_n - 1).",
+        "counterexample_input": "n=0, total_n=1",
+        "verified_fix": "Enforce minimum total_n of 2 returning 1.0 for single sample."
+      }
+    ],
+    "source_code": "def hann_window_weight(n: int, total_n: int) -> float:\n    if total_n <= 1:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    theta = 2.0 * math.pi * float(idx) / denom\n    weight = 0.5 * (1.0 - math.cos(theta))\n    return weight",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "blackman_window_weight",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Exact 3-term Blackman window weight for enhanced sidelobe attenuation.",
+    "pseudocode": "1. Normalize sample index to angle theta = 2 * pi * n / (total_n - 1).\n2. Evaluate 3 cosine harmonics with exact coefficients 0.42, -0.5, 0.08.\n3. Return non-negative window weight.",
+    "invariants": [
+      "First sidelobe attenuation exceeds 58 dB down from main lobe peak.",
+      "Symmetric profile: weight(n) == weight(total_n - 1 - n)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Incorrect sign on second harmonic term (+0.08 instead of -0.08)",
+        "failure_mechanism": "Adding second harmonic degrades sidelobe rolloff rate by 18 dB.",
+        "counterexample_input": "n=0, total_n=64",
+        "verified_fix": "Use exact Blackman harmonic combination: 0.42 - 0.5*cos(theta) + 0.08*cos(2*theta)."
+      }
+    ],
+    "source_code": "def blackman_window_weight(n: int, total_n: int) -> float:\n    if total_n <= 1:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    theta = 2.0 * math.pi * float(idx) / denom\n    c1 = 0.5 * math.cos(theta)\n    c2 = 0.08 * math.cos(2.0 * theta)\n    w = 0.42 - c1 + c2\n    return max(0.0, w)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "blackman_harris_window",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "4-term Blackman-Harris window weight achieving 92 dB sidelobe suppression.",
+    "pseudocode": "1. Compute phase angle theta = 2 * pi * n / (total_n - 1).\n2. Combine 4 cosine harmonics: a0 - a1*cos + a2*cos(2th) - a3*cos(3th).\n3. Return high-dynamic-range window weight.",
+    "invariants": [
+      "Maximum sidelobe level is below -92 dB relative to central peak.",
+      "Strictly positive bell-shaped symmetric window profile."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Truncating 4-term coefficients to only 2 decimal places",
+        "failure_mechanism": "Truncated coefficients destroy destructive sidelobe cancellation floor.",
+        "counterexample_input": "n=10, total_n=128",
+        "verified_fix": "Use exact 4-term standard coefficients: 0.35875, 0.48829, 0.14128, 0.01168."
+      }
+    ],
+    "source_code": "def blackman_harris_window(n: int, total_n: int) -> float:\n    if total_n <= 1:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    th = 2.0 * math.pi * float(idx) / denom\n    a0 = 0.35875\n    a1 = 0.48829 * math.cos(th)\n    a2 = 0.14128 * math.cos(2.0 * th)\n    a3 = 0.01168 * math.cos(3.0 * th)\n    w = a0 - a1 + a2 - a3\n    return max(0.0, w)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "kaiser_bessel_window_weight",
+    "param_types": [
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Kaiser-Bessel window weight with zeroth-order modified Bessel function series.",
+    "pseudocode": "1. Evaluate modified Bessel function I0(beta) via truncated series.\n2. Compute radial parameter xi = 2*n / (total_n - 1) - 1.0.\n3. Return I0(beta * sqrt(1 - xi^2)) / I0(beta).",
+    "invariants": [
+      "Maximizes energy concentration in main lobe for specified parameter beta.",
+      "Approaches rectangular window when beta -> 0 and bell curve when beta increases."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unbounded Bessel series sum loop",
+        "failure_mechanism": "Iterating too many terms slows computation or overflows on large beta.",
+        "counterexample_input": "n=5, total_n=20, beta=100.0",
+        "verified_fix": "Clamp beta <= 30.0 and truncate I0 series when term contribution < 1e-12."
+      }
+    ],
+    "source_code": "def kaiser_bessel_window_weight(n: int, total_n: int, beta: float) -> float:\n    if total_n <= 1:\n        return 1.0\n    b = max(0.0, min(30.0, abs(beta)))\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    xi = 2.0 * float(idx) / denom - 1.0\n    rad = max(0.0, 1.0 - xi * xi)\n    arg = b * math.sqrt(rad)\n    t = 1.0\n    i0_arg = 1.0\n    for k in range(1, 25):\n        t = t * (0.5 * arg / float(k))\n        term = t * t\n        i0_arg = i0_arg + term\n        if term < 1e-12:\n            break\n    t = 1.0\n    i0_b = 1.0\n    for k in range(1, 25):\n        t = t * (0.5 * b / float(k))\n        term = t * t\n        i0_b = i0_b + term\n        if term < 1e-12:\n            break\n    weight = i0_arg / max(1e-14, i0_b)\n    return max(0.0, min(1.0, weight))",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "tukey_taper_window",
+    "param_types": [
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Tukey tapered cosine flat-top window with adjustable taper fraction alpha.",
+    "pseudocode": "1. Clamp taper parameter alpha to unit interval [0, 1].\n2. If within left or right taper zone, evaluate raised cosine curve.\n3. Return 1.0 for central flat plateau.",
+    "invariants": [
+      "Transitions continuously between rectangular (alpha=0) and Hann window (alpha=1).",
+      "Exact unity weight across central flat plateau region."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked taper fraction alpha > 1.0",
+        "failure_mechanism": "alpha > 1 produces non-monotonic overlapping cosine tapers.",
+        "counterexample_input": "n=5, total_n=32, alpha=2.0",
+        "verified_fix": "Clamp alpha strictly within interval [0.0, 1.0]."
+      }
+    ],
+    "source_code": "def tukey_taper_window(n: int, total_n: int, alpha: float) -> float:\n    if total_n <= 1:\n        return 1.0\n    a = max(0.0, min(1.0, float(alpha)))\n    if a <= 1e-06:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    norm_idx = float(idx) / denom\n    half_a = 0.5 * a\n    if norm_idx < half_a:\n        th = 2.0 * math.pi / a * (norm_idx - half_a)\n        w = 0.5 * (1.0 + math.cos(th))\n        return w\n    if norm_idx > 1.0 - half_a:\n        th = 2.0 * math.pi / a * (norm_idx - 1.0 + half_a)\n        w = 0.5 * (1.0 + math.cos(th))\n        return w\n    return 1.0",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "flattop_window_weight",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Flat-top spectral calibration window for precision amplitude measurement.",
+    "pseudocode": "1. Compute phase angle theta = 2 * pi * n / (total_n - 1).\n2. Evaluate 5 cosine harmonics with standard flat-top calibration constants.\n3. Return amplitude calibration weight.",
+    "invariants": [
+      "Passband scalloping loss is under 0.01 dB near harmonic peaks.",
+      "Symmetric 5-term profile optimized for stationary sinusoidal calibration."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Clamping negative lobes to zero",
+        "failure_mechanism": "Flat-top windows intentionally have small negative sidelobes; clamping breaks flat passband filter.",
+        "counterexample_input": "n=0, total_n=64",
+        "verified_fix": "Preserve unclipped linear output of standard 5-term cosine summation."
+      }
+    ],
+    "source_code": "def flattop_window_weight(n: int, total_n: int) -> float:\n    if total_n <= 1:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    th = 2.0 * math.pi * float(idx) / denom\n    a0 = 0.21557895\n    a1 = 0.41663158 * math.cos(th)\n    a2 = 0.277263158 * math.cos(2.0 * th)\n    a3 = 0.083578947 * math.cos(3.0 * th)\n    a4 = 0.006947368 * math.cos(4.0 * th)\n    w = a0 - a1 + a2 - a3 + a4\n    return w",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "bartlett_triangular_window",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Bartlett triangular tapering window with zero endpoint weights.",
+    "pseudocode": "1. Check boundary total_n > 1.\n2. Compute linear normalized distance from center: 2 * |n - (N-1)/2| / (N-1).\n3. Return triangular weight 1.0 - norm_dist.",
+    "invariants": [
+      "Fourier transform is non-negative everywhere (squared sinc response).",
+      "Symmetric linear taper decaying to 0.0 at outer boundaries."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using denominator total_n instead of total_n - 1",
+        "failure_mechanism": "Asymmetric apex and non-zero endpoint weights violate Bartlett definition.",
+        "counterexample_input": "n=0, total_n=10",
+        "verified_fix": "Use denominator (total_n - 1) so n=0 and n=total_n-1 evaluate to exactly 0.0."
+      }
+    ],
+    "source_code": "def bartlett_triangular_window(n: int, total_n: int) -> float:\n    if total_n <= 1:\n        return 1.0\n    idx = max(0, min(total_n - 1, n))\n    denom = float(total_n - 1)\n    center = 0.5 * denom\n    dist = abs(float(idx) - center) / center\n    w = max(0.0, 1.0 - dist)\n    return w",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "cooley_tukey_radix2_dit_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Cooley-Tukey radix-2 decimation-in-time complex butterfly update step.",
+    "pseudocode": "1. Multiply odd component B by complex twiddle factor W: t = b * w.\n2. Form upper output A_out = A + t.\n3. Form lower output B_out = A - t.",
+    "invariants": [
+      "Energy conservation: |A_out|^2 + |B_out|^2 == 2 * (|A|^2 + |B|^2) (Parseval identity).",
+      "Exact complex rotation preserving orthogonality of butterfly pair."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Complex multiplication with wrong cross-term sign (br*wi - bi*wr)",
+        "failure_mechanism": "Sign inversion on imaginary component conjugates twiddle factor, producing IDFT instead of DFT.",
+        "counterexample_input": "ar=1.0, ai=0.0, br=0.0, bi=1.0, wr=0.0, wi=-1.0",
+        "verified_fix": "Use standard complex multiplication: tr = br*wr - bi*wi, ti = br*wi + bi*wr."
+      }
+    ],
+    "source_code": "def cooley_tukey_radix2_dit_step(ar: float, ai: float, br: float, bi: float, wr: float, wi: float) -> tuple[float, float, float, float]:\n    tr = br * wr - bi * wi\n    ti = br * wi + bi * wr\n    out_ar = ar + tr\n    out_ai = ai + ti\n    out_br = ar - tr\n    out_bi = ai - ti\n    return (out_ar, out_ai, out_br, out_bi)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "goertzel_single_bin_energy",
+    "param_types": [
+      "list[float]",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Goertzel algorithm evaluating single-bin DFT power via 2nd-order IIR resonator.",
+    "pseudocode": "1. Compute target normalized frequency omega = 2 * pi * k / total_n.\n2. Run 2nd-order recursive difference equation: s0 = x + 2*cos(omega)*s1 - s2.\n3. Compute output power energy = s1^2 + s2^2 - 2*cos(omega)*s1*s2.",
+    "invariants": [
+      "Matches exact squared magnitude |X[k]|^2 of full Discrete Fourier Transform.",
+      "Requires only O(N) operations and zero trigonometric evaluations inside sample loop."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Feeding current sample into final power equation instead of state registers",
+        "failure_mechanism": "Evaluating power using s0 instead of lagged registers (s1, s2) introduces phase lag distortion.",
+        "counterexample_input": "samples=[1.0, 0.0, -1.0, 0.0], k=1, n=4",
+        "verified_fix": "Evaluate final energy on lagged states: s1*s1 + s2*s2 - coeff*s1*s2."
+      }
+    ],
+    "source_code": "def goertzel_single_bin_energy(samples: list[float], k: int, n: int) -> float:\n    length = len(samples)\n    if length == 0 or n <= 0:\n        return 0.0\n    tot = max(1, n)\n    omega = 2.0 * math.pi * float(k % tot) / float(tot)\n    coeff = 2.0 * math.cos(omega)\n    s1 = 0.0\n    s2 = 0.0\n    for x in samples:\n        s0 = x + coeff * s1 - s2\n        s2 = s1\n        s1 = s0\n    energy = s1 * s1 + s2 * s2 - coeff * s1 * s2\n    return max(0.0, energy)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "chirp_z_transform_kernel",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Chirp Z-Transform quadratic phase kernel exp(-i * pi * k^2 / total_n).",
+    "pseudocode": "1. Compute quadratic phase index p = (k * k) % (2 * total_n).\n2. Compute phase angle phi = -pi * p / total_n.\n3. Return complex phasor (cos(phi), sin(phi)).",
+    "invariants": [
+      "Unit modulus phasor: cos(phi)^2 + sin(phi)^2 == 1.0.",
+      "Quadratic phase modulation converts z-plane spiral contour into convolution."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "k * k without modulo reduction",
+        "failure_mechanism": "Large k indices cause integer power growth or precision loss when multiplied by pi.",
+        "counterexample_input": "k=10000, n=64",
+        "verified_fix": "Reduce exponent modulo (2 * total_n) before evaluating trigonometric functions."
+      }
+    ],
+    "source_code": "def chirp_z_transform_kernel(k: int, n: int) -> tuple[float, float]:\n    tot = max(1, abs(n))\n    mod_base = 2 * tot\n    p = k * k % mod_base\n    phi = -math.pi * float(p) / float(tot)\n    re = math.cos(phi)\n    im = math.sin(phi)\n    return (re, im)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "discrete_cosine_transform_type2",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Orthogonal Discrete Cosine Transform Type-II single-bin projection.",
+    "pseudocode": "1. Extract signal length N and target frequency bin k.\n2. Accumulate sum of x[n] * cos(pi * (n + 0.5) * k / N).\n3. Apply orthonormal scaling factor sqrt(1/N) if k=0 else sqrt(2/N).",
+    "invariants": [
+      "Orthogonal basis projection: energy is preserved under full DCT-II transform.",
+      "High energy compaction property for smooth correlated time-series."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Omitting 1/sqrt(2) scaling on DC bin k=0",
+        "failure_mechanism": "Unscaled DC bin breaks unitary orthogonality of DCT matrix.",
+        "counterexample_input": "x=[1.0, 1.0, 1.0, 1.0], k=0",
+        "verified_fix": "Scale DC bin by sqrt(1/N) and AC bins by sqrt(2/N)."
+      }
+    ],
+    "source_code": "def discrete_cosine_transform_type2(x: list[float], k: int) -> float:\n    n = len(x)\n    if n == 0:\n        return 0.0\n    safe_k = max(0, min(n - 1, abs(k)))\n    tot = float(n)\n    scale = math.sqrt(1.0 / tot) if safe_k == 0 else math.sqrt(2.0 / tot)\n    acc = 0.0\n    for idx, val in enumerate(x):\n        th = math.pi * (float(idx) + 0.5) * float(safe_k) / tot\n        acc = acc + val * math.cos(th)\n    res = scale * acc\n    return res",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "discrete_sine_transform_type1",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Discrete Sine Transform Type-I single-bin projection with Dirichlet boundary conditions.",
+    "pseudocode": "1. Determine basis dimension N + 1.\n2. Project signal onto odd-symmetric sine basis sin(pi * (n+1) * (k+1) / (N+1)).\n3. Scale by orthonormal factor sqrt(2 / (N + 1)).",
+    "invariants": [
+      "Satisfies zero boundary conditions at indices 0 and N+1.",
+      "Orthogonal transform matching odd harmonic Fourier expansion."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using index n instead of n + 1 in sine argument",
+        "failure_mechanism": "First sample evaluates to sin(0) = 0, discarding input information.",
+        "counterexample_input": "x=[1.0, 1.0, 1.0], k=0",
+        "verified_fix": "Index interior points from 1 to N using (idx + 1) in sine argument."
+      }
+    ],
+    "source_code": "def discrete_sine_transform_type1(x: list[float], k: int) -> float:\n    n = len(x)\n    if n == 0:\n        return 0.0\n    safe_k = max(0, min(n - 1, abs(k)))\n    denom = float(n + 1)\n    scale = math.sqrt(2.0 / denom)\n    acc = 0.0\n    for idx, val in enumerate(x):\n        th = math.pi * float(idx + 1) * float(safe_k + 1) / denom\n        acc = acc + val * math.sin(th)\n    res = scale * acc\n    return res",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "hilbert_transform_quadrature_fir",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Time-domain Hilbert transform FIR filter generating 90-degree phase-shifted quadrature.",
+    "pseudocode": "1. Design odd-length anti-symmetric Hilbert impulse response: h(m) = 2/(pi*m) for odd m.\n2. Window impulse response with Hann window.\n3. Convolve input samples with Hilbert FIR kernel.",
+    "invariants": [
+      "Imparts strictly +90 degree phase shift on negative frequencies and -90 degree on positive.",
+      "Anti-symmetric impulse response ensures zero DC gain."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Even number of FIR filter taps",
+        "failure_mechanism": "Even filter length introduces fractional half-sample group delay.",
+        "counterexample_input": "samples=[1.0, 0.0, -1.0], taps=4",
+        "verified_fix": "Enforce odd tap length (2*M + 1) to guarantee integer group delay."
+      }
+    ],
+    "source_code": "def hilbert_transform_quadrature_fir(samples: list[float], taps: int) -> list[float]:\n    n_samples = len(samples)\n    if n_samples == 0:\n        return []\n    half_m = max(1, min(16, abs(taps) // 2))\n    num_taps = 2 * half_m + 1\n    h = [0.0] * num_taps\n    for i in range(-half_m, half_m + 1):\n        if i % 2 != 0:\n            val = 2.0 / (math.pi * float(i))\n            w = 0.5 * (1.0 + math.cos(math.pi * float(i) / float(half_m)))\n            h[i + half_m] = val * w\n    out = [0.0] * n_samples\n    for i in range(n_samples):\n        acc = 0.0\n        for j in range(num_taps):\n            src_idx = i - (j - half_m)\n            if 0 <= src_idx < n_samples:\n                acc = acc + samples[src_idx] * h[j]\n        out[i] = acc\n    return out",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "phase_unwrap_1d",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "1D phase unwrapping algorithm removing 2*pi branch jump discontinuities.",
+    "pseudocode": "1. Iterate through sequential phase samples.\n2. Compute circular difference (delta + pi) % (2*pi) - pi.\n3. Accumulate continuous unwrapped phase trajectory.",
+    "invariants": [
+      "Preserves modulo 2*pi equivalence: unwrapped(t) == phases(t) (mod 2*pi).",
+      "Adjacent step differences are bounded strictly by discontinuity threshold."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Mutating input list in-place or simple round(diff / 2*pi)",
+        "failure_mechanism": "In-place modification violates purity; simple rounding fails on noisy boundary wraps.",
+        "counterexample_input": "phases=[3.1, -3.1, 3.1], discont_threshold=3.14159",
+        "verified_fix": "Construct new output list and compute shortest circular angular difference."
+      }
+    ],
+    "source_code": "def phase_unwrap_1d(phases: list[float], discont_threshold: float) -> list[float]:\n    n = len(phases)\n    if n == 0:\n        return []\n    thresh = abs(discont_threshold) if abs(discont_threshold) > 1e-06 else math.pi\n    two_pi = 2.0 * math.pi\n    out = [0.0] * n\n    out[0] = phases[0]\n    cum_shift = 0.0\n    for i in range(1, n):\n        diff = phases[i] - phases[i - 1]\n        shifted_diff = (diff + math.pi) % two_pi - math.pi\n        if diff > thresh and shifted_diff < 0.0:\n            cum_shift = cum_shift - two_pi\n        elif diff < -thresh and shifted_diff > 0.0:\n            cum_shift = cum_shift + two_pi\n        out[i] = phases[i] + cum_shift\n    return out",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "instantaneous_frequency_diff",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Instantaneous frequency estimation via central difference derivative of unwrapped phase.",
+    "pseudocode": "1. Compute sampling interval dt = 1.0 / fs.\n2. Apply central finite differences for interior points: (phi[i+1] - phi[i-1]) / (4*pi*dt).\n3. Apply one-sided forward and backward differences at boundary endpoints.",
+    "invariants": [
+      "Output has physical frequency units in Hertz: f = (1 / 2*pi) * d(phi)/dt.",
+      "Exact constant frequency recovery for linear phase chirp ramp."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked sampling frequency fs <= 0.0",
+        "failure_mechanism": "Zero or negative sampling rate produces division by zero or negative frequency trajectory.",
+        "counterexample_input": "unwrapped_phase=[0.0, 1.0, 2.0], fs=0.0",
+        "verified_fix": "Enforce minimum positive sampling frequency magnitude abs(fs) >= 1.0."
+      }
+    ],
+    "source_code": "def instantaneous_frequency_diff(unwrapped_phase: list[float], fs: float) -> list[float]:\n    n = len(unwrapped_phase)\n    if n < 2:\n        return [0.0] * n\n    safe_fs = abs(fs) if abs(fs) > 1e-06 else 1.0\n    dt = 1.0 / safe_fs\n    two_pi = 2.0 * math.pi\n    scale = 1.0 / (two_pi * dt)\n    freqs = [0.0] * n\n    freqs[0] = (unwrapped_phase[1] - unwrapped_phase[0]) * scale\n    half_scale = 0.5 * scale\n    for i in range(1, n - 1):\n        freqs[i] = (unwrapped_phase[i + 1] - unwrapped_phase[i - 1]) * half_scale\n    freqs[-1] = (unwrapped_phase[-1] - unwrapped_phase[-2]) * scale\n    return freqs",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "biquad_peaking_eq_coeffs",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Audio EQ Cookbook biquad peaking equalizer normalized filter coefficients [b0, b1, b2, a1, a2].",
+    "pseudocode": "1. Compute linear amplitude gain A = 10^(gain_db / 40).\n2. Compute pre-warped digital frequency w0 = 2*pi*f0 / fs.\n3. Compute alpha = sin(w0) / (2*Q) and normalize coefficients by a0.",
+    "invariants": [
+      "Center frequency gain matches 10^(gain_db / 20) exactly.",
+      "DC and Nyquist gains are strictly unity (0 dB transmission)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Center frequency f0 >= fs / 2.0 exceeding Nyquist rate",
+        "failure_mechanism": "Frequency above Nyquist folds aliased pole outside unit circle producing severe instability.",
+        "counterexample_input": "f0=24000.0, fs=44100.0, q=1.0, gain_db=6.0",
+        "verified_fix": "Clamp f0 to strictly sub-Nyquist frequency interval [1.0, 0.499 * fs]."
+      }
+    ],
+    "source_code": "def biquad_peaking_eq_coeffs(f0: float, fs: float, q: float, gain_db: float) -> list[float]:\n    safe_fs = abs(fs) if abs(fs) > 1e-06 else 44100.0\n    safe_f0 = max(1.0, min(0.499 * safe_fs, abs(f0)))\n    safe_q = max(0.01, min(100.0, abs(q)))\n    w0 = 2.0 * math.pi * safe_f0 / safe_fs\n    cos_w0 = math.cos(w0)\n    sin_w0 = math.sin(w0)\n    alpha = sin_w0 / (2.0 * safe_q)\n    amp = math.pow(10.0, gain_db / 40.0)\n    b0 = 1.0 + alpha * amp\n    b1 = -2.0 * cos_w0\n    b2 = 1.0 - alpha * amp\n    a0 = 1.0 + alpha / amp\n    a1 = -2.0 * cos_w0\n    a2 = 1.0 - alpha / amp\n    norm_a0 = a0 if abs(a0) > 1e-12 else 1.0\n    return [b0 / norm_a0, b1 / norm_a0, b2 / norm_a0, a1 / norm_a0, a2 / norm_a0]",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "biquad_lowpass_coeffs",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "2nd-order Butterworth low-pass biquad filter normalized coefficients.",
+    "pseudocode": "1. Pre-warp cut-off frequency w0 = 2*pi*f0 / fs.\n2. Compute resonance damping factor alpha = sin(w0) / (2*Q).\n3. Assemble numerator and denominator coefficients and normalize by a0.",
+    "invariants": [
+      "Maximally flat passband with -40 dB/decade asymptotic high-frequency rolloff.",
+      "DC transmission gain is strictly unity (1.0)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Omitting a0 normalization across all coefficients",
+        "failure_mechanism": "Direct Form II expects a0 == 1.0; un-normalized a0 scales recursive loop gain incorrectly.",
+        "counterexample_input": "f0=1000.0, fs=48000.0, q=0.7071",
+        "verified_fix": "Divide all feedforward b_k and feedback a_k coefficients by a0."
+      }
+    ],
+    "source_code": "def biquad_lowpass_coeffs(f0: float, fs: float, q: float) -> list[float]:\n    safe_fs = abs(fs) if abs(fs) > 1e-06 else 48000.0\n    safe_f0 = max(1.0, min(0.499 * safe_fs, abs(f0)))\n    safe_q = max(0.01, min(50.0, abs(q)))\n    w0 = 2.0 * math.pi * safe_f0 / safe_fs\n    cos_w0 = math.cos(w0)\n    sin_w0 = math.sin(w0)\n    alpha = sin_w0 / (2.0 * safe_q)\n    b0 = 0.5 * (1.0 - cos_w0)\n    b1 = 1.0 - cos_w0\n    b2 = 0.5 * (1.0 - cos_w0)\n    a0 = 1.0 + alpha\n    a1 = -2.0 * cos_w0\n    a2 = 1.0 - alpha\n    norm_a0 = a0 if abs(a0) > 1e-12 else 1.0\n    return [b0 / norm_a0, b1 / norm_a0, b2 / norm_a0, a1 / norm_a0, a2 / norm_a0]",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "biquad_highpass_coeffs",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "2nd-order Butterworth high-pass biquad filter normalized coefficients.",
+    "pseudocode": "1. Pre-warp cutoff frequency w0 = 2*pi*f0 / fs.\n2. Compute resonance damping factor alpha = sin(w0) / (2*Q).\n3. Return normalized coefficients [b0, b1, b2, a1, a2].",
+    "invariants": [
+      "Zero DC transmission: transfer function H(z=1) == 0.0.",
+      "Unity gain transmission at Nyquist frequency H(z=-1) == 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using positive b1 sign in numerator",
+        "failure_mechanism": "Positive b1 flips phase and destroys high-pass transfer function zero at DC.",
+        "counterexample_input": "f0=2000.0, fs=44100.0, q=0.7071",
+        "verified_fix": "Enforce alternating signs in numerator: b0 = (1+cos)/2, b1 = -(1+cos), b2 = (1+cos)/2."
+      }
+    ],
+    "source_code": "def biquad_highpass_coeffs(f0: float, fs: float, q: float) -> list[float]:\n    safe_fs = abs(fs) if abs(fs) > 1e-06 else 48000.0\n    safe_f0 = max(1.0, min(0.499 * safe_fs, abs(f0)))\n    safe_q = max(0.01, min(50.0, abs(q)))\n    w0 = 2.0 * math.pi * safe_f0 / safe_fs\n    cos_w0 = math.cos(w0)\n    sin_w0 = math.sin(w0)\n    alpha = sin_w0 / (2.0 * safe_q)\n    b0 = 0.5 * (1.0 + cos_w0)\n    b1 = -(1.0 + cos_w0)\n    b2 = 0.5 * (1.0 + cos_w0)\n    a0 = 1.0 + alpha\n    a1 = -2.0 * cos_w0\n    a2 = 1.0 - alpha\n    norm_a0 = a0 if abs(a0) > 1e-12 else 1.0\n    return [b0 / norm_a0, b1 / norm_a0, b2 / norm_a0, a1 / norm_a0, a2 / norm_a0]",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "biquad_direct_form_2_step",
+    "param_types": [
+      "float",
+      "list[float]",
+      "list[float]",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Transposed Direct Form II single-sample IIR biquad filtering step.",
+    "pseudocode": "1. Compute output sample y = b0 * x + s1.\n2. Update internal state s1 = b1 * x - a1 * y + s2.\n3. Update internal state s2 = b2 * x - a2 * y and return (y, s1, s2).",
+    "invariants": [
+      "Canonic state representation: requires minimal 2 delay registers for 2nd order filter.",
+      "Numerically stable for filter poles situated strictly inside unit circle."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Standard Direct Form I storing 4 delay states",
+        "failure_mechanism": "Direct Form I requires double memory storage and suffers from fixed-point limit cycles.",
+        "counterexample_input": "x=1.0, b=[0.5, 0.0, 0.0], a=[0.0, 0.0], s1=0.0, s2=0.0",
+        "verified_fix": "Use transposed Direct Form II state updates: s1_next = b1*x - a1*y + s2."
+      }
+    ],
+    "source_code": "def biquad_direct_form_2_step(x: float, b: list[float], a: list[float], s1: float, s2: float) -> tuple[float, float, float]:\n    b0 = b[0] if len(b) > 0 else 1.0\n    b1 = b[1] if len(b) > 1 else 0.0\n    b2 = b[2] if len(b) > 2 else 0.0\n    a1 = a[0] if len(a) > 0 else 0.0\n    a2 = a[1] if len(a) > 1 else 0.0\n    y = b0 * x + s1\n    s1_next = b1 * x - a1 * y + s2\n    s2_next = b2 * x - a2 * y\n    return (y, s1_next, s2_next)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "fir_direct_convolution",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Time-domain direct discrete convolution of signal with FIR impulse response.",
+    "pseudocode": "1. Check for empty inputs.\n2. Compute output length M + N - 1.\n3. Accumulate sum of products over overlapping indices.",
+    "invariants": [
+      "Commutativity holds: x * h == h * x.",
+      "Exact output length is len(signal) + len(h) - 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked inner loop index range causing IndexError",
+        "failure_mechanism": "Accessing signal[i - j] when i - j >= len(signal) crashes without boundary condition.",
+        "counterexample_input": "signal=[1.0, 2.0], h=[3.0, 4.0]",
+        "verified_fix": "Bound inner loop index j to range [max(0, i - n_signal + 1), min(i + 1, n_h)]."
+      }
+    ],
+    "source_code": "def fir_direct_convolution(signal: list[float], h: list[float]) -> list[float]:\n    n_x = len(signal)\n    n_h = len(h)\n    if n_x == 0 or n_h == 0:\n        return []\n    out_len = n_x + n_h - 1\n    y = [0.0] * out_len\n    for i in range(out_len):\n        j_min = max(0, i - n_x + 1)\n        j_max = min(i + 1, n_h)\n        acc = 0.0\n        for j in range(j_min, j_max):\n            acc = acc + h[j] * signal[i - j]\n        y[i] = acc\n    return y",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "overlap_add_block_partition",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "list[tuple[int, int]]",
+    "summary": "Generates block index ranges for Overlap-Add fast convolution partitioning.",
+    "pseudocode": "1. Set stride equal to block length L.\n2. Partition signal into non-overlapping blocks [start, min(start + L, N)].\n3. Return list of block range tuples.",
+    "invariants": [
+      "Union of partitions covers input signal exactly with zero gaps.",
+      "Partition block lengths do not exceed maximum specified block length."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Non-positive block length causing infinite loop",
+        "failure_mechanism": "block_len <= 0 creates zero step size in loop.",
+        "counterexample_input": "n_signal=100, block_len=0, filter_len=10",
+        "verified_fix": "Enforce minimum block length max(1, block_len)."
+      }
+    ],
+    "source_code": "def overlap_add_block_partition(n_signal: int, block_len: int, filter_len: int) -> list[tuple[int, int]]:\n    tot = max(0, min(512, int(n_signal)))\n    l_block = max(1, min(256, int(block_len)))\n    partitions = []\n    curr = 0\n    while curr < tot and len(partitions) < 128:\n        end_idx = min(tot, curr + l_block)\n        partitions.append((curr, end_idx))\n        curr = end_idx\n    return partitions\n",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "overlap_save_block_slice",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "list[tuple[int, int]]",
+    "summary": "Generates read range and discard length tuples for Overlap-Save circular convolution.",
+    "pseudocode": "1. Discard length equals filter_len - 1.\n2. Compute step size L = block_len - discard_len.\n3. Advance sliding window across signal and record read boundaries.",
+    "invariants": [
+      "Discards initial M-1 circular aliasing points per FFT block.",
+      "Reconstructs linear convolution identical to time-domain direct convolution."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "filter_len >= block_len",
+        "failure_mechanism": "Filter length exceeding block length leaves zero or negative usable valid output points.",
+        "counterexample_input": "n_signal=100, block_len=8, filter_len=16",
+        "verified_fix": "Require block_len > filter_len, clamping effective discard length."
+      }
+    ],
+    "source_code": "def overlap_save_block_slice(n_signal: int, block_len: int, filter_len: int) -> list[tuple[int, int]]:\n    tot = max(0, min(512, int(n_signal)))\n    m_filt = max(1, min(256, int(filter_len)))\n    discard = m_filt - 1\n    l_eff = max(1, int(block_len) - discard)\n    slices = []\n    curr = 0\n    while curr < tot and len(slices) < 128:\n        read_start = max(0, curr - discard)\n        read_end = min(tot, curr + l_eff)\n        slices.append((read_start, read_end))\n        curr = curr + l_eff\n    return slices\n",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "matched_filter_peak_detect",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[int]",
+    "summary": "Peak detector identifying local maxima exceeding detection threshold.",
+    "pseudocode": "1. Scan through signal samples with interior 3-point window.\n2. Check if central sample strictly exceeds neighbors: x[i] > x[i-1] and x[i] >= x[i+1].\n3. Check if central sample exceeds detection threshold and record index.",
+    "invariants": [
+      "Isolates true local maxima with zero duplicate adjacent plateau indices.",
+      "Every detected peak amplitude is strictly greater than specified threshold."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x[i] >= x[i-1] and x[i] >= x[i+1] without strict inequality",
+        "failure_mechanism": "Flat plateau regions trigger multiple duplicate detections for single peak.",
+        "counterexample_input": "corr=[0.0, 2.0, 2.0, 0.0], threshold=1.0",
+        "verified_fix": "Use strict inequality on leading edge (x[i] > x[i-1]) to isolate single index on plateau."
+      }
+    ],
+    "source_code": "def matched_filter_peak_detect(corr: list[float], threshold: float) -> list[int]:\n    n = len(corr)\n    if n < 3:\n        return []\n    peaks = []\n    for i in range(1, n - 1):\n        val = corr[i]\n        if val > threshold:\n            if val > corr[i - 1] and val >= corr[i + 1]:\n                peaks.append(i)\n    return peaks",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "savgol_filter_quadratic_5pt",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "5-point Savitzky-Golay quadratic polynomial smoothing filter central ordinate.",
+    "pseudocode": "1. Verify window contains at least 5 samples.\n2. Apply convolution kernel weights [-3, 12, 17, 12, -3] / 35.\n3. Return smoothed central estimate.",
+    "invariants": [
+      "Preserves polynomial moments up to quadratic order without amplitude attenuation.",
+      "Normalized kernel weights sum to exactly 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unnormalized integer weights summing to 35",
+        "failure_mechanism": "Failing to divide by 35 scales smoothed signal output by factor of 35.",
+        "counterexample_input": "window=[1.0, 1.0, 1.0, 1.0, 1.0]",
+        "verified_fix": "Divide accumulated weight product by 35.0."
+      }
+    ],
+    "source_code": "def savgol_filter_quadratic_5pt(window: list[float]) -> float:\n    if len(window) < 5:\n        return window[len(window) // 2] if len(window) > 0 else 0.0\n    w0 = window[0] * -3.0\n    w1 = window[1] * 12.0\n    w2 = window[2] * 17.0\n    w3 = window[3] * 12.0\n    w4 = window[4] * -3.0\n    total = w0 + w1 + w2 + w3 + w4\n    smoothed = total / 35.0\n    return smoothed",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "median_filter_1d_sliding",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "1D sliding median filter for impulsive noise suppression preserving sharp edges.",
+    "pseudocode": "1. Enforce odd window size 2*k + 1.\n2. Extract local window around each sample with replicated boundary padding.\n3. Compute median of sorted local window and store in output list.",
+    "invariants": [
+      "Rejects impulsive salt-and-pepper noise spikes with zero edge blurring.",
+      "Input signal list is completely unmodified."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Mutating input list in-place during sorting",
+        "failure_mechanism": "Calling list.sort() on extracted slice reference modifies input array.",
+        "counterexample_input": "signal=[10.0, 1.0, 2.0], window_size=3",
+        "verified_fix": "Sort an independent copy: sorted(window) to guarantee caller argument immutability."
+      }
+    ],
+    "source_code": "def median_filter_1d_sliding(signal: list[float], window_size: int) -> list[float]:\n    n = len(signal)\n    if n == 0:\n        return []\n    w_size = max(1, min(n, abs(window_size)))\n    if w_size % 2 == 0:\n        w_size = w_size + 1\n    half_w = w_size // 2\n    out = [0.0] * n\n    for i in range(n):\n        buf = []\n        for j in range(-half_w, half_w + 1):\n            idx = max(0, min(n - 1, i + j))\n            buf.append(signal[idx])\n        sorted_buf = sorted(buf)\n        out[i] = sorted_buf[half_w]\n    return out",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "exponential_envelope_follower",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Asymmetric dual-rate exponential envelope follower tracking peak signal dynamics.",
+    "pseudocode": "1. Full-wave rectify input sample: x_rect = abs(x).\n2. Select attack coefficient if x_rect > env_prev, else release coefficient.\n3. Return exponential smoothed envelope: alpha*x_rect + (1 - alpha)*env_prev.",
+    "invariants": [
+      "Output envelope is non-negative everywhere: env >= 0.0.",
+      "Smoothly follows fast transients and decays exponentially during release."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked attack or release coefficients outside [0, 1]",
+        "failure_mechanism": "Coefficients > 1 cause unbounded exponential growth.",
+        "counterexample_input": "x=1.0, env_prev=0.5, attack_coeff=1.5, release_coeff=0.1",
+        "verified_fix": "Clamp both attack and release coefficients strictly within [0.001, 1.0]."
+      }
+    ],
+    "source_code": "def exponential_envelope_follower(x: float, env_prev: float, attack_coeff: float, release_coeff: float) -> float:\n    x_rect = abs(x)\n    safe_prev = max(0.0, env_prev)\n    att = max(0.001, min(1.0, abs(attack_coeff)))\n    rel = max(0.001, min(1.0, abs(release_coeff)))\n    coeff = att if x_rect > safe_prev else rel\n    env = coeff * x_rect + (1.0 - coeff) * safe_prev\n    return env",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "analytic_signal_envelope",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Instantaneous polar envelope magnitude and phase of complex analytic signal.",
+    "pseudocode": "1. Cast real and imaginary parts to float.\n2. Compute polar magnitude using math.hypot.\n3. Compute instantaneous phase angle using math.atan2 and return pair (mag, phase).",
+    "invariants": [
+      "Instantaneous amplitude is non-negative: envelope >= 0.0.",
+      "Phase angle is bounded strictly within (-pi, pi]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "atan(imag / real) without quadrant tracking",
+        "failure_mechanism": "Single-argument atan loses sign quadrant information and divides by zero when real part is zero.",
+        "counterexample_input": "real_part=0.0, imag_part=-1.0",
+        "verified_fix": "Use math.atan2(im, re) for robust four-quadrant phase computation."
+      }
+    ],
+    "source_code": "def analytic_signal_envelope(real_part: float, imag_part: float) -> tuple[float, float]:\n    re = float(real_part)\n    im = float(imag_part)\n    mag = math.hypot(re, im)\n    phase = math.atan2(im, re)\n    return (mag, phase)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "zero_crossing_rate_window",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Normalized zero-crossing rate calculation with hysteresis thresholding.",
+    "pseudocode": "1. Check for empty or single sample input.\n2. Iterate through adjacent sample pairs.\n3. Increment count when signs differ and absolute change exceeds noise threshold.",
+    "invariants": [
+      "Normalized rate is bounded within interval [0.0, 1.0].",
+      "Immune to zero-level quantization chatter via hysteresis threshold."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Counting every sign flip without hysteresis deadband",
+        "failure_mechanism": "Microscopic noise oscillations around zero artificially inflate crossing rate.",
+        "counterexample_input": "samples=[0.0001, -0.0001, 0.0001], threshold=0.0",
+        "verified_fix": "Require step difference abs(x[i] - x[i-1]) to strictly exceed noise threshold."
+      }
+    ],
+    "source_code": "def zero_crossing_rate_window(samples: list[float], threshold: float) -> float:\n    n = len(samples)\n    if n < 2:\n        return 0.0\n    thresh = max(0.0, abs(threshold))\n    crossings = 0\n    for i in range(1, n):\n        s_prev = samples[i - 1]\n        s_curr = samples[i]\n        if s_prev > 0.0 and s_curr < 0.0 or (s_prev < 0.0 and s_curr > 0.0):\n            if abs(s_curr - s_prev) > thresh:\n                crossings = crossings + 1\n    rate = float(crossings) / float(n - 1)\n    return rate",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "autocorrelation_lag_rxx",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Normalized sample autocorrelation sequence value Rxx(lag) / Rxx(0).",
+    "pseudocode": "1. Compute total energy Rxx(0) = sum(x[i]^2).\n2. Accumulate cross-product sum(x[i] * x[i + lag]).\n3. Return normalized correlation coefficient in [-1, 1].",
+    "invariants": [
+      "Normalized peak at zero lag: Rxx(0) == 1.0.",
+      "Bounded magnitude: |Rxx(lag)| <= 1.0 for all integer lags."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Dividing by zero energy on silent or zero input signal",
+        "failure_mechanism": "All-zero signal yields 0 / 0 causing ZeroDivisionError.",
+        "counterexample_input": "samples=[0.0, 0.0, 0.0], lag=1",
+        "verified_fix": "Check for negligible energy Rxx(0) < 1e-15 and return 0.0."
+      }
+    ],
+    "source_code": "def autocorrelation_lag_rxx(samples: list[float], lag: int) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    safe_lag = min(n - 1, max(0, abs(lag)))\n    r0 = sum((x * x for x in samples))\n    if r0 < 1e-15:\n        return 0.0\n    r_lag = sum((samples[i] * samples[i + safe_lag] for i in range(n - safe_lag)))\n    coeff = r_lag / r0\n    return max(-1.0, min(1.0, coeff))",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "yule_walker_levinson_durbin",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "tuple[list[float], float]",
+    "summary": "Levinson-Durbin recursion solving Yule-Walker equations for autoregressive model.",
+    "pseudocode": "1. Initialize prediction error variance E = r[0].\n2. For order m = 1 to p, compute reflection coefficient k_m.\n3. Update autoregressive polynomial a and prediction variance E.",
+    "invariants": [
+      "Strictly minimum phase: reflection coefficients |k_m| < 1.0 guarantee stable all-pole filter.",
+      "Prediction error variance E decreases monotonically with increasing AR order."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Reflection coefficient |k_m| >= 1.0",
+        "failure_mechanism": "Unchecked reflection coefficient places poles on or outside unit circle causing instability.",
+        "counterexample_input": "r=[1.0, 1.5], order=1",
+        "verified_fix": "Clamp reflection coefficient magnitude strictly to |k_m| <= 0.999."
+      }
+    ],
+    "source_code": "def yule_walker_levinson_durbin(r: list[float], order: int) -> tuple[list[float], float]:\n    p = max(1, min(len(r) - 1, abs(order))) if len(r) > 1 else 0\n    if p == 0:\n        return ([1.0], r[0] if len(r) > 0 else 1.0)\n    e = r[0] if r[0] > 1e-12 else 1e-12\n    a = [1.0]\n    for m in range(1, p + 1):\n        s = sum((a[j] * r[m - j] for j in range(1, m)))\n        rm = r[m] if m < len(r) else 0.0\n        km = -(rm + s) / e\n        km_clamped = max(-0.999, min(0.999, km))\n        a_new = [1.0] + [0.0] * m\n        for j in range(1, m):\n            a_new[j] = a[j] + km_clamped * a[m - j]\n        a_new[m] = km_clamped\n        a = a_new\n        e = e * (1.0 - km_clamped * km_clamped)\n        if e < 1e-15:\n            e = 1e-15\n            break\n    return (a, e)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "lpc_prediction_residual",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Inverse FIR filtering computing linear prediction error residual excitation.",
+    "pseudocode": "1. Extract AR coefficients with a[0] = 1.0.\n2. Convolve input signal with inverse predictor filter.\n3. Return residual prediction error signal.",
+    "invariants": [
+      "Output length matches input signal length exactly.",
+      "Residual signal exhibits flattened white noise power spectrum for matching AR model."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Applying non-unit leading coefficient a0 != 1.0",
+        "failure_mechanism": "Arbitrary leading coefficient scales residual amplitude incorrectly.",
+        "counterexample_input": "samples=[1.0, 2.0], coeffs=[2.0, -0.5]",
+        "verified_fix": "Normalize all LPC coefficients by coeffs[0] ensuring unit leading coefficient."
+      }
+    ],
+    "source_code": "def lpc_prediction_residual(samples: list[float], coeffs: list[float]) -> list[float]:\n    n = len(samples)\n    if n == 0:\n        return []\n    p = len(coeffs) - 1\n    if p < 1:\n        return list(samples)\n    a0 = coeffs[0] if abs(coeffs[0]) > 1e-12 else 1.0\n    norm_a = [c / a0 for c in coeffs]\n    res = [0.0] * n\n    for i in range(n):\n        pred = sum((norm_a[k] * samples[i - k] for k in range(1, min(i + 1, len(norm_a)))))\n        res[i] = samples[i] + pred\n    return res",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "cepstral_liftering_window",
+    "param_types": [
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Sinusoidal cepstral liftering window weight for formant spectral envelope enhancement.",
+    "pseudocode": "1. Enforce minimum lifter length parameter L.\n2. Evaluate sinusoidal lifter curve: 1.0 + 0.5 * L * sin(pi * n / L).\n3. Return quefrency weighting factor.",
+    "invariants": [
+      "Boosts low quefrency formant components while attenuating high quefrency pitch ripple.",
+      "Smooth non-negative weighting function."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lifter_param <= 0 causing division by zero",
+        "failure_mechanism": "Zero lifter parameter raises ZeroDivisionError in sine denominator.",
+        "counterexample_input": "n=5, total_n=20, lifter_param=0.0",
+        "verified_fix": "Clamp lifter_param to minimum safe value max(1.0, abs(lifter_param))."
+      }
+    ],
+    "source_code": "def cepstral_liftering_window(n: int, total_n: int, lifter_param: float) -> float:\n    l_param = max(1.0, abs(lifter_param))\n    idx = max(0, min(total_n - 1, n))\n    th = math.pi * float(idx) / l_param\n    w = 1.0 + 0.5 * l_param * math.sin(th)\n    return w",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "mel_filterbank_triangle_weight",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Triangular mel-scale filterbank channel weighting with linear ramps.",
+    "pseudocode": "1. Return 0.0 if frequency lies outside passband [f_low, f_high].\n2. Compute rising ramp if freq <= f_center: (freq - f_low) / (f_center - f_low).\n3. Compute falling ramp if freq > f_center: (f_high - freq) / (f_high - f_center).",
+    "invariants": [
+      "Peak transmission weight is exactly 1.0 at center frequency f_center.",
+      "Strictly zero weight outside filter passband."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "f_low == f_center or f_center == f_high",
+        "failure_mechanism": "Coincident corner frequencies create ZeroDivisionError in ramp slopes.",
+        "counterexample_input": "freq=100.0, f_low=100.0, f_center=100.0, f_high=200.0",
+        "verified_fix": "Enforce minimum spacing between adjacent corner frequencies."
+      }
+    ],
+    "source_code": "def mel_filterbank_triangle_weight(freq: float, f_low: float, f_center: float, f_high: float) -> float:\n    if freq < f_low or freq > f_high:\n        return 0.0\n    denom_left = max(1e-12, f_center - f_low)\n    denom_right = max(1e-12, f_high - f_center)\n    if freq <= f_center:\n        w = (freq - f_low) / denom_left\n    else:\n        w = (f_high - freq) / denom_right\n    return max(0.0, min(1.0, w))",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "stft_hop_frame_stride",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Frame start index sequence generator for Short-Time Fourier Transform (STFT).",
+    "pseudocode": "1. Enforce positive hop length and frame length.\n2. Advance frame start index in increments of hop_len.\n3. Terminate when frame end exceeds total signal length.",
+    "invariants": [
+      "Every frame start index satisfies 0 <= start <= signal_len - frame_len.",
+      "Consecutive frame start indices differ by exactly hop_len."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "hop_len <= 0 producing infinite loop",
+        "failure_mechanism": "Zero or negative hop step causes while loop hang.",
+        "counterexample_input": "signal_len=1000, frame_len=256, hop_len=0",
+        "verified_fix": "Enforce minimum positive hop length max(1, abs(hop_len))."
+      }
+    ],
+    "source_code": "def stft_hop_frame_stride(signal_len: int, frame_len: int, hop_len: int) -> list[int]:\n    n_sig = max(0, signal_len)\n    f_len = max(1, frame_len)\n    h_len = max(1, abs(hop_len))\n    indices = []\n    curr = 0\n    while curr + f_len <= n_sig:\n        indices.append(curr)\n        curr = curr + h_len\n    return indices",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "resample_polyphase_index",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Rational sample rate conversion polyphase sub-filter and input sample index mapping.",
+    "pseudocode": "1. Compute virtual high-rate sample time t = out_idx * down.\n2. Subfilter index is t % up.\n3. Base input sample index is t // up.",
+    "invariants": [
+      "Exact rational timing representation with zero cumulative drift.",
+      "Subfilter branch index satisfies 0 <= subfilter < up."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "up <= 0 or down <= 0",
+        "failure_mechanism": "Zero factor causes ZeroDivisionError in modulo or floor division.",
+        "counterexample_input": "out_idx=10, up=0, down=3",
+        "verified_fix": "Clamp up and down factors to strictly positive integers >= 1."
+      }
+    ],
+    "source_code": "def resample_polyphase_index(out_idx: int, up: int, down: int) -> tuple[int, int]:\n    safe_up = max(1, abs(up))\n    safe_down = max(1, abs(down))\n    virtual_time = max(0, out_idx) * safe_down\n    subfilter = virtual_time % safe_up\n    input_idx = virtual_time // safe_up\n    return (subfilter, input_idx)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "delay_fractional_lagrange_3pt",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "3-point Lagrange fractional delay FIR filter coefficient generator.",
+    "pseudocode": "1. Wrap delay parameter d into unit fractional interval [0, 1).\n2. Compute 2nd-order Lagrange polynomial coefficients at points 0, 1, 2.\n3. Return 3-tap FIR filter coefficients [h0, h1, h2].",
+    "invariants": [
+      "DC gain is strictly unity: sum(h) == 1.0.",
+      "Maximally flat group delay at zero frequency."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Fractional delay outside unit range [0, 1)",
+        "failure_mechanism": "Large delay shifts focus outside 3-tap window, causing large interpolation error.",
+        "counterexample_input": "d=2.5",
+        "verified_fix": "Wrap fractional delay modulo 1.0: d_frac = d - floor(d)."
+      }
+    ],
+    "source_code": "def delay_fractional_lagrange_3pt(d: float) -> list[float]:\n    d_frac = d - math.floor(d)\n    h0 = 0.5 * (d_frac - 1.0) * (d_frac - 2.0)\n    h1 = -d_frac * (d_frac - 2.0)\n    h2 = 0.5 * d_frac * (d_frac - 1.0)\n    return [h0, h1, h2]",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "comb_filter_feedforward_step",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Feedforward comb filter notch step creating periodic spectral nulls.",
+    "pseudocode": "1. Scale delayed sample by feedforward gain alpha.\n2. Add directly to incoming sample x.\n3. Return notch-filtered output.",
+    "invariants": [
+      "Linear phase FIR filter structure with zero feedback.",
+      "Introduces periodic spectral nulls at odd multiples of fs / (2 * delay)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked feedforward gain causing volume explosion",
+        "failure_mechanism": "alpha >> 1 amplifies passband frequencies uncontrollably.",
+        "counterexample_input": "x=1.0, x_delayed=1.0, alpha=100.0",
+        "verified_fix": "Clamp feedforward gain magnitude strictly to [-2.0, 2.0]."
+      }
+    ],
+    "source_code": "def comb_filter_feedforward_step(x: float, x_delayed: float, alpha: float) -> float:\n    safe_alpha = max(-2.0, min(2.0, float(alpha)))\n    scaled_delay = safe_alpha * x_delayed\n    out = x + scaled_delay\n    return out",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "comb_filter_feedback_step",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Feedback comb filter resonant step creating periodic harmonic peaks.",
+    "pseudocode": "1. Clamp feedback coefficient magnitude |alpha| <= 0.999 for stability.\n2. Add scaled delayed feedback to incoming sample.\n3. Return resonant comb filter output.",
+    "invariants": [
+      "Strictly stable IIR filter: decaying impulse response for |alpha| < 1.0.",
+      "Creates resonant frequency peaks at integer multiples of fs / delay."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "alpha >= 1.0 without stability clamping",
+        "failure_mechanism": "Unit or super-unit feedback gain drives recursive filter into infinite exponential blowout.",
+        "counterexample_input": "x=1.0, y_delayed=1.0, alpha=1.0",
+        "verified_fix": "Clamp feedback coefficient magnitude strictly to |alpha| <= 0.999."
+      }
+    ],
+    "source_code": "def comb_filter_feedback_step(x: float, y_delayed: float, alpha: float) -> float:\n    safe_alpha = max(-0.999, min(0.999, float(alpha)))\n    feedback = safe_alpha * y_delayed\n    out = x + feedback\n    return out",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "allpass_first_order_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "First-order allpass filter step shifting phase while preserving unity gain at all frequencies.",
+    "pseudocode": "1. Clamp pole parameter |a| < 1.0 for stability.\n2. Compute output: y = a * x + x_prev - a * y_prev.\n3. Return tuple (y, x, y) updating state registers.",
+    "invariants": [
+      "Magnitude response is identically unity: |H(e^jw)| == 1.0 across entire frequency spectrum.",
+      "Phase response varies monotonically from 0 to -pi."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked pole parameter |a| >= 1.0",
+        "failure_mechanism": "Pole on or outside unit circle creates explosive unstable filter.",
+        "counterexample_input": "x=1.0, x_prev=0.0, y_prev=0.0, a=1.5",
+        "verified_fix": "Clamp pole parameter magnitude strictly to |a| <= 0.999."
+      }
+    ],
+    "source_code": "def allpass_first_order_step(x: float, x_prev: float, y_prev: float, a: float) -> tuple[float, float, float]:\n    safe_a = max(-0.999, min(0.999, float(a)))\n    y = safe_a * x + x_prev - safe_a * y_prev\n    new_x_prev = x\n    new_y_prev = y\n    return (y, new_x_prev, new_y_prev)",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "downsample_anti_alias_decimate",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Subsamples signal by integer decimation factor picking every factor-th sample.",
+    "pseudocode": "1. Enforce minimum decimation factor of 1.\n2. Iterate through input samples with step stride equal to factor.\n3. Collect decimated samples into output list.",
+    "invariants": [
+      "Output length equals ceil(len(samples) / factor).",
+      "Preserves exact original sample values at chosen stride points."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "factor <= 0 causing ValueError in range stride",
+        "failure_mechanism": "Zero step size raises ValueError in range(0, n, 0).",
+        "counterexample_input": "samples=[1.0, 2.0, 3.0], factor=0",
+        "verified_fix": "Clamp factor to minimum integer value max(1, abs(factor))."
+      }
+    ],
+    "source_code": "def downsample_anti_alias_decimate(samples: list[float], factor: int) -> list[float]:\n    n = len(samples)\n    if n == 0:\n        return []\n    stride = max(1, abs(factor))\n    decimated = []\n    for i in range(0, n, stride):\n        decimated.append(samples[i])\n    return decimated",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "upsample_zero_insert",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Zero-stuffing upsampler inserting (factor - 1) zeros between adjacent samples.",
+    "pseudocode": "1. Enforce minimum positive upsampling factor of 1.\n2. For each input sample, append sample followed by (factor - 1) zero values.\n3. Return upsampled signal list.",
+    "invariants": [
+      "Output length equals len(samples) * factor.",
+      "Preserves original samples at integer multiples of factor."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "factor <= 0",
+        "failure_mechanism": "Zero or negative factor produces empty or corrupted signal list.",
+        "counterexample_input": "samples=[1.0, 2.0], factor=-2",
+        "verified_fix": "Clamp factor to positive integer max(1, abs(factor))."
+      }
+    ],
+    "source_code": "def upsample_zero_insert(samples: list[float], factor: int) -> list[float]:\n    n = len(samples)\n    if n == 0:\n        return []\n    f = max(1, min(16, abs(int(factor))))\n    out = []\n    max_len = 512\n    for x in samples[:max_len]:\n        out.append(float(x))\n        for _ in range(f - 1):\n            out.append(0.0)\n    return out\n",
+    "domain": "signal_processing"
+  },
+  {
+    "name": "circular_shift_signal",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Periodic circular buffer rotation by integer shift steps.",
+    "pseudocode": "1. Compute effective shift modulo signal length.\n2. Slice tail and head segments.\n3. Return rotated output list.",
+    "invariants": [
+      "Preserves Euclidean energy norm: norm(shifted) == norm(original).",
+      "Invertible: circular_shift(shifted, -shift) restores original signal."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using shift directly without modulo length reduction",
+        "failure_mechanism": "shift exceeding length produces out-of-bounds slice errors.",
+        "counterexample_input": "samples=[1.0, 2.0, 3.0], shift=10",
+        "verified_fix": "Compute effective shift as shift % len(samples)."
+      }
+    ],
+    "source_code": "def circular_shift_signal(samples: list[float], shift: int) -> list[float]:\n    n = len(samples)\n    if n == 0:\n        return []\n    eff_shift = shift % n\n    out = [0.0] * n\n    for i in range(n):\n        new_idx = (i + eff_shift) % n\n        out[new_idx] = samples[i]\n    return out",
+    "domain": "signal_processing"
+  }
+]

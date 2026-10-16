@@ -1,0 +1,1052 @@
+[
+  {
+    "name": "needleman_wunsch_global_align",
+    "param_types": [
+      "str",
+      "str",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, str, str]",
+    "summary": "Computes optimal global pairwise sequence alignment via Needleman-Wunsch dynamic programming.",
+    "pseudocode": "1. Initialize (M+1) x (N+1) DP score matrix with gap penalties.\\n2. Fill matrix using match/mismatch/gap recurrences.\\n3. Backtrack from bottom-right to reconstruct aligned strings.\\n4. Return (alignment_score, aligned_seq1, aligned_seq2).",
+    "invariants": [
+      "Alignment score equals maximum path sum through substitution and gap penalties.",
+      "Reconstructed strings have identical length and characters preserved with gap dashes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if s1[i] == s2[j]: score += match",
+        "failure_mechanism": "Greedy matching ignores future gap costs and alignment paths.",
+        "counterexample_input": "s1='AGTC', s2='ATC'",
+        "verified_fix": "Use full 2D dynamic programming grid exploring match, mismatch, and deletion branches."
+      }
+    ],
+    "source_code": "def needleman_wunsch_global_align(seq1: str, seq2: str, match: int, mismatch: int, gap: int) -> tuple[int, str, str]:\n    m = len(seq1)\n    n = len(seq2)\n    dp = [[j * gap if i == 0 else 0 for j in range(n + 1)] for i in range(m + 1)]\n    for i in range(1, m + 1):\n        dp[i][0] = i * gap\n        for j in range(1, n + 1):\n            sc = match if seq1[i - 1] == seq2[j - 1] else mismatch\n            dp[i][j] = max(dp[i - 1][j - 1] + sc, dp[i - 1][j] + gap, dp[i][j - 1] + gap)\n    i = m\n    j = n\n    a1 = ''\n    a2 = ''\n    while i > 0 and j > 0:\n        sc = match if seq1[i - 1] == seq2[j - 1] else mismatch\n        if dp[i][j] == dp[i - 1][j - 1] + sc:\n            a1 = seq1[i - 1] + a1\n            a2 = seq2[j - 1] + a2\n            i -= 1\n            j -= 1\n        elif dp[i][j] == dp[i - 1][j] + gap:\n            a1 = seq1[i - 1] + a1\n            a2 = '-' + a2\n            i -= 1\n        else:\n            a1 = '-' + a1\n            a2 = seq2[j - 1] + a2\n            j -= 1\n    return (dp[m][n], a1, a2)\n",
+    "domain": "general"
+  },
+  {
+    "name": "smith_waterman_local_align",
+    "param_types": [
+      "str",
+      "str",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int, int]",
+    "summary": "Computes optimal local sequence alignment score and end coordinates via Smith-Waterman zero-clamping.",
+    "pseudocode": "1. Initialize (M+1) x (N+1) DP matrix with zeros.\\n2. Apply recurrence clamping minimum cell score to 0.\\n3. Track global maximum score and matrix coordinates.\\n4. Return (max_score, end_pos_seq1, end_pos_seq2).",
+    "invariants": [
+      "Local alignment score is strictly non-negative (>= 0).",
+      "Identifies highest scoring homologous local subsequence regardless of flanking sequence divergence."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "allow negative cell values",
+        "failure_mechanism": "Negative cell scores drag down subsequent local matching segments across diverging regions.",
+        "counterexample_input": "dissimilar flanking sequences",
+        "verified_fix": "Clamp cell score with max(0, score) to allow new local alignments to begin anywhere."
+      }
+    ],
+    "source_code": "def smith_waterman_local_align(seq1: str, seq2: str, match: int, mismatch: int, gap: int) -> tuple[int, int, int]:\n    s1 = seq1[:50]\n    s2 = seq2[:50]\n    m = len(s1)\n    n = len(s2)\n    g = int(gap)\n    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]\n    max_score = 0\n    best_i = 0\n    best_j = 0\n    for i in range(1, m + 1):\n        for j in range(1, n + 1):\n            cost = int(match) if s1[i - 1] == s2[j - 1] else int(mismatch)\n            diag = dp[i - 1][j - 1] + cost\n            up = dp[i - 1][j] + g\n            left = dp[i][j - 1] + g\n            val = max(0, max(diag, max(up, left)))\n            dp[i][j] = val\n            if val > max_score:\n                max_score = val\n                best_i = i\n                best_j = j\n    return (max_score, best_i, best_j)\n",
+    "domain": "general"
+  },
+  {
+    "name": "levenshtein_distance_matrix",
+    "param_types": [
+      "str",
+      "str"
+    ],
+    "return_type": "int",
+    "summary": "Calculates minimum character edit distance (insertions, deletions, substitutions) between two strings.",
+    "pseudocode": "1. Initialize distance row for empty prefix.\\n2. Transition through target characters using insertion, deletion, substitution costs.\\n3. Maintain two active rows for linear memory overhead.\\n4. Return final Levenshtein edit distance.",
+    "invariants": [
+      "Levenshtein distance is a formal metric: non-negative, symmetric, and satisfies triangle inequality.",
+      "Distance is bounded between |len(s1) - len(s2)| and max(len(s1), len(s2))."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "recursive levenshtein without memoization",
+        "failure_mechanism": "Exponential 3^N time complexity causes stack overflow or timeout on strings > 15 chars.",
+        "counterexample_input": "strings with length > 20",
+        "verified_fix": "Use dynamic programming with two-row buffer for O(M*N) time and O(N) space."
+      }
+    ],
+    "source_code": "def levenshtein_distance_matrix(s1: str, s2: str) -> int:\n    a = s1[:100]\n    b = s2[:100]\n    m = len(a)\n    n = len(b)\n    if m == 0:\n        return n\n    if n == 0:\n        return m\n    prev = [j for j in range(n + 1)]\n    for i in range(1, m + 1):\n        curr = [i] + [0] * n\n        for j in range(1, n + 1):\n            cost = 0 if a[i - 1] == b[j - 1] else 1\n            curr[j] = min(prev[j] + 1, min(curr[j - 1] + 1, prev[j - 1] + cost))\n        prev = curr\n    return prev[n]\n",
+    "domain": "general"
+  },
+  {
+    "name": "damerau_levenshtein_transposition",
+    "param_types": [
+      "str",
+      "str",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes Damerau-Levenshtein edit distance accounting for adjacent character transpositions.",
+    "pseudocode": "1. Allocate (M+1) x (N+1) DP distance grid.\\n2. Fill base edit distance transitions.\\n3. Check for adjacent transposition match: s1[i-1]==s2[j-2] and s1[i-2]==s2[j-1].\\n4. Return minimal edit distance.",
+    "invariants": [
+      "Damerau-Levenshtein distance <= standard Levenshtein distance on any string pair.",
+      "Transposition of adjacent characters costs exactly 1 operation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if s1[i]==s2[j-1] and s1[i-1]==s2[j]",
+        "failure_mechanism": "Incorrect 0-based vs 1-based index offsets corrupt transposition bounds.",
+        "counterexample_input": "swapped characters at beginning of string",
+        "verified_fix": "Carefully check i > 1 and j > 1 before accessing two-step previous characters."
+      }
+    ],
+    "source_code": "def damerau_levenshtein_transposition(s1: str, s2: str, max_distance: int = 100) -> int:\n    a = s1[:100]\n    b = s2[:100]\n    m = len(a)\n    n = len(b)\n    cap = max(0, int(max_distance))\n    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]\n    for i in range(m + 1):\n        dp[i][0] = i\n    for j in range(n + 1):\n        dp[0][j] = j\n    for i in range(1, m + 1):\n        for j in range(1, n + 1):\n            cost = 0 if a[i - 1] == b[j - 1] else 1\n            dp[i][j] = min(dp[i - 1][j] + 1, min(dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost))\n            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:\n                dp[i][j] = min(dp[i][j], dp[i - 2][j - 2] + 1)\n    return min(dp[m][n], cap)\n",
+    "domain": "general"
+  },
+  {
+    "name": "hamming_distance_strings",
+    "param_types": [
+      "str",
+      "str"
+    ],
+    "return_type": "int",
+    "summary": "Computes exact character substitution count between two equal-length strings.",
+    "pseudocode": "1. Check if string lengths are identical; return -1 if mismatched.\\n2. Count positions where characters differ.\\n3. Return total mismatch count.",
+    "invariants": [
+      "Hamming distance equals 0 iff s1 == s2.",
+      "Hamming distance is symmetric: d(s1, s2) == d(s2, s1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "zip(s1, s2) without checking length",
+        "failure_mechanism": "Truncates longer string silently without reporting length mismatch error.",
+        "counterexample_input": "s1='ACTG', s2='ACT'",
+        "verified_fix": "Explicitly check len(s1) == len(s2) before calculating position differences."
+      }
+    ],
+    "source_code": "def hamming_distance_strings(s1: str, s2: str) -> int:\n    if len(s1) != len(s2):\n        return -1\n    dist = 0\n    for i in range(len(s1)):\n        if s1[i] != s2[i]:\n            dist += 1\n    return dist\n",
+    "domain": "general"
+  },
+  {
+    "name": "longest_common_subsequence_length",
+    "param_types": [
+      "str",
+      "str"
+    ],
+    "return_type": "int",
+    "summary": "Calculates the length of the longest common non-contiguous subsequence between two sequences.",
+    "pseudocode": "1. Maintain two DP rows representing prefix subproblems.\\n2. If characters match, increment diagonal length.\\n3. Otherwise take maximum of top and left subproblems.\\n4. Return maximum LCS length.",
+    "invariants": [
+      "0 <= LCS(s1, s2) <= min(len(s1), len(s2)).",
+      "LCS length is monotonic with respect to string supersequences."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "reallocating full M x N table",
+        "failure_mechanism": "Consumes quadratic memory when only the final length is required.",
+        "counterexample_input": "strings with length 1000",
+        "verified_fix": "Use rolling two-row dynamic programming buffer for O(N) space."
+      }
+    ],
+    "source_code": "def longest_common_subsequence_length(s1: str, s2: str) -> int:\n    a = s1[:100]\n    b = s2[:100]\n    m = len(a)\n    n = len(b)\n    prev = [0] * (n + 1)\n    for i in range(1, m + 1):\n        curr = [0] * (n + 1)\n        for j in range(1, n + 1):\n            if a[i - 1] == b[j - 1]:\n                curr[j] = prev[j - 1] + 1\n            else:\n                curr[j] = max(prev[j], curr[j - 1])\n        prev = curr\n    return prev[n]\n",
+    "domain": "general"
+  },
+  {
+    "name": "longest_common_substring_dp",
+    "param_types": [
+      "str",
+      "str"
+    ],
+    "return_type": "tuple[int, int, int]",
+    "summary": "Finds maximal length and ending indices of contiguous common substring.",
+    "pseudocode": "1. Initialize DP table.\\n2. On matching character: dp[i][j] = dp[i-1][j-1] + 1.\\n3. On mismatch: dp[i][j] = 0 (reset contiguous chain).\\n4. Return (max_len, end_idx_s1, end_idx_s2).",
+    "invariants": [
+      "Resulting substring appears verbatim and contiguously in both sequences.",
+      "Length is bounded by min(len(s1), len(s2))."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "take max(dp[i-1][j], dp[i][j-1]) on mismatch",
+        "failure_mechanism": "Computes non-contiguous subsequence (LCS) instead of contiguous substring.",
+        "counterexample_input": "s1='ABCDE', s2='ACE'",
+        "verified_fix": "Reset cell to 0 immediately when characters do not match."
+      }
+    ],
+    "source_code": "def longest_common_substring_dp(s1: str, s2: str) -> tuple[int, int, int]:\n    a = s1[:100]\n    b = s2[:100]\n    m = len(a)\n    n = len(b)\n    max_len = 0\n    end1 = 0\n    end2 = 0\n    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]\n    for i in range(1, m + 1):\n        for j in range(1, n + 1):\n            if a[i - 1] == b[j - 1]:\n                dp[i][j] = dp[i - 1][j - 1] + 1\n                if dp[i][j] > max_len:\n                    max_len = dp[i][j]\n                    end1 = i\n                    end2 = j\n            else:\n                dp[i][j] = 0\n    return (max_len, end1, end2)\n",
+    "domain": "general"
+  },
+  {
+    "name": "kmer_frequency_table_dna",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Extracts k-mer frequency distribution table across nucleotide sequence.",
+    "pseudocode": "1. Clamp k to valid range [1, len(sequence)].\\n2. Slide window of size k across sequence.\\n3. Increment occurrence counter in frequency dictionary.\\n4. Return dictionary of k-mer frequencies.",
+    "invariants": [
+      "Sum of all k-mer counts equals max(0, len(sequence) - k + 1).",
+      "Every recorded key has length exactly k."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "k > len(sequence)",
+        "failure_mechanism": "Negative range produces empty or broken iterations without handling.",
+        "counterexample_input": "sequence='ACGT', k=10",
+        "verified_fix": "Check if k > len(sequence) and return empty dictionary immediately."
+      }
+    ],
+    "source_code": "def kmer_frequency_table_dna(sequence: str, k: int) -> dict[str, int]:\n    s = sequence.upper()\n    n = len(s)\n    k_val = int(k)\n    if k_val <= 0 or k_val > n:\n        return {}\n    counts: dict[str, int] = {}\n    for i in range(n - k_val + 1):\n        kmer = s[i:i + k_val]\n        counts[kmer] = counts.get(kmer, 0) + 1\n    return counts\n",
+    "domain": "general"
+  },
+  {
+    "name": "gc_content_sliding_fraction",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Calculates sliding-window GC nucleotide percentage fraction in O(1) update time per step.",
+    "pseudocode": "1. Validate window size <= len(sequence).\\n2. Count GC in initial window.\\n3. Slide window by adding incoming nucleotide and subtracting outgoing.\\n4. Return list of GC fractions.",
+    "invariants": [
+      "Every GC fraction lies in [0.0, 1.0].",
+      "Output list contains exactly len(sequence) - window_len + 1 elements."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "count('G') + count('C') in every window slice",
+        "failure_mechanism": "O(N * W) slice counting leads to severe quadratic slowdown on genomic sequences.",
+        "counterexample_input": "sequence with 100,000 nucleotides",
+        "verified_fix": "Use rolling window sum in O(1) time per step."
+      }
+    ],
+    "source_code": "def gc_content_sliding_fraction(sequence: str, window_len: int) -> list[float]:\n    s = sequence.upper()\n    n = len(s)\n    w = int(window_len)\n    if w <= 0 or w > n:\n        return []\n    curr_gc = sum(1 for i in range(w) if s[i] in ('G', 'C'))\n    result = [float(curr_gc) / float(w)]\n    for i in range(w, n):\n        if s[i] in ('G', 'C'):\n            curr_gc += 1\n        if s[i - w] in ('G', 'C'):\n            curr_gc -= 1\n        result.append(float(curr_gc) / float(w))\n    return result\n",
+    "domain": "general"
+  },
+  {
+    "name": "burrows_wheeler_transform",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "tuple[str, int]",
+    "summary": "Computes Burrows-Wheeler Transform (BWT) string permutation and original text row index.",
+    "pseudocode": "1. Generate all cyclic rotations of input text.\\n2. Sort cyclic rotations lexicographically.\\n3. Extract last character of each sorted rotation.\\n4. Return (bwt_string, original_index).",
+    "invariants": [
+      "BWT string is an exact permutation of input characters with identical character multiset.",
+      "Transformation is completely invertible given original row index."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "appending special sentinel character that exists in text",
+        "failure_mechanism": "Collisions between sentinel and alphabet break lexicographic sorting.",
+        "counterexample_input": "text containing '$'",
+        "verified_fix": "Track the 0-based original string row index directly without external sentinels."
+      }
+    ],
+    "source_code": "def burrows_wheeler_transform(text: str) -> tuple[str, int]:\n    s = text[:100]\n    n = len(s)\n    if n == 0:\n        return ('', 0)\n    rotations = sorted([s[i:] + s[:i] for i in range(n)])\n    bwt = ''.join(r[-1] for r in rotations)\n    orig_idx = rotations.index(s)\n    return (bwt, orig_idx)\n",
+    "domain": "general"
+  },
+  {
+    "name": "inverse_burrows_wheeler_transform",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "str",
+    "summary": "Inverts Burrows-Wheeler Transform using LF-mapping array reconstruction.",
+    "pseudocode": "1. Pair each BWT character with its occurrence index.\\n2. Sort pairs to obtain the first column of the BWT matrix.\\n3. Traverse LF-mapping links starting from original index.\\n4. Return fully reconstructed text.",
+    "invariants": [
+      "Exact inverse: inverse_bwt(*bwt(text)) == text.",
+      "Reconstructed string preserves identical character ordering and length."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "row = bwt.index(first_col[row])",
+        "failure_mechanism": "Fails on duplicate characters because first index does not respect occurrence count.",
+        "counterexample_input": "text with repeated characters 'BANANA'",
+        "verified_fix": "Use rank-annotated pairs (char, rank) to establish unambiguous LF-mapping permutation."
+      }
+    ],
+    "source_code": "def inverse_burrows_wheeler_transform(bwt_text: str, original_idx: int) -> str:\n    n = len(bwt_text)\n    if n == 0 or original_idx < 0 or original_idx >= n:\n        return ''\n    indexed_bwt = [(bwt_text[i], i) for i in range(n)]\n    first_col = sorted(indexed_bwt, key=lambda x: x[0])\n    next_row = [0] * n\n    for r in range(n):\n        orig_pos = first_col[r][1]\n        next_row[orig_pos] = r\n    curr = int(original_idx)\n    reconstructed = []\n    for _ in range(n):\n        reconstructed.append(bwt_text[curr])\n        curr = next_row[curr]\n    return ''.join(reversed(reconstructed))\n",
+    "domain": "general"
+  },
+  {
+    "name": "suffix_array_naive_ranking",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "list[int]",
+    "summary": "Constructs suffix array by sorting starting indices of all string suffixes lexicographically.",
+    "pseudocode": "1. Extract all suffixes text[i:] for i in [0..N-1].\\n2. Sort suffixes in lexicographical order.\\n3. Return list of corresponding start indices.",
+    "invariants": [
+      "Output is a valid permutation of [0, 1, ..., len(text) - 1].",
+      "Suffix text[SA[i]:] is lexicographically smaller than text[SA[i+1]:]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sorting suffixes without tracking original index",
+        "failure_mechanism": "Loses the integer coordinate positions required for substring queries.",
+        "counterexample_input": "repetitive text",
+        "verified_fix": "Sort tuples (suffix, index) and extract only the index component."
+      }
+    ],
+    "source_code": "def suffix_array_naive_ranking(text: str) -> list[int]:\n    s = text[:100]\n    n = len(s)\n    if n == 0:\n        return []\n    suffixes = sorted([(s[i:], i) for i in range(n)], key=lambda x: x[0])\n    return [idx for _, idx in suffixes]\n",
+    "domain": "general"
+  },
+  {
+    "name": "kasai_lcp_array_construction",
+    "param_types": [
+      "str",
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes Longest Common Prefix (LCP) array from text and suffix array in O(N) time.",
+    "pseudocode": "1. Build inverse suffix array (rank array).\\n2. Iterate through string in natural order while tracking match length k.\\n3. Decrement k by at most 1 on each step.\\n4. Return computed LCP array.",
+    "invariants": [
+      "LCP[0] is 0.",
+      "LCP[i] equals exact length of longest common prefix between SA[i] and SA[i-1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "comparing each pair from scratch in O(N^2)",
+        "failure_mechanism": "Redundant character comparisons cause quadratic runtime on repetitive strings.",
+        "counterexample_input": "string of 1000 identical characters 'AAAA...'",
+        "verified_fix": "Use Kasai's theorem that LCP decreases by at most 1 when advancing in text order."
+      }
+    ],
+    "source_code": "def kasai_lcp_array_construction(text: str, suffix_array: list[int]) -> list[int]:\n    s = text[:100]\n    n = len(s)\n    if n == 0 or len(suffix_array) != n:\n        return []\n    rank = [0] * n\n    for i, sa_idx in enumerate(suffix_array):\n        if 0 <= sa_idx < n:\n            rank[sa_idx] = i\n    lcp = [0] * n\n    k = 0\n    for i in range(n):\n        if rank[i] > 0:\n            j = suffix_array[rank[i] - 1]\n            while i + k < n and j + k < n and s[i + k] == s[j + k]:\n                k += 1\n            lcp[rank[i]] = k\n            if k > 0:\n                k -= 1\n    return lcp\n",
+    "domain": "general"
+  },
+  {
+    "name": "fm_index_count_occurrences",
+    "param_types": [
+      "str",
+      "str",
+      "dict[str, int]",
+      "list[dict[str, int]]"
+    ],
+    "return_type": "int",
+    "summary": "Executes FM-index backward search to count exact pattern occurrences in O(|P|) time.",
+    "pseudocode": "1. Initialize search range [left, right] to [0, len(bwt)-1].\\n2. Match characters backwards from pattern tail.\\n3. Update range using C-table cumulative offsets and Occ-table counts.\\n4. Return count = max(0, right - left + 1).",
+    "invariants": [
+      "Search time depends only on pattern length, independent of text size.",
+      "Count equals exact number of substring occurrences in indexed text."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "left = c_table[c] + occ[left]",
+        "failure_mechanism": "Failing to check left - 1 index when left > 0 introduces off-by-one errors.",
+        "counterexample_input": "search pattern matching first row",
+        "verified_fix": "Use occ[left - 1] for lower bound and occ[right] - 1 for upper bound."
+      }
+    ],
+    "source_code": "def fm_index_count_occurrences(bwt_str: str, pattern: str, c_table: dict[str, int], occ_table: list[dict[str, int]]) -> int:\n    n = len(bwt_str)\n    if n == 0 or len(pattern) == 0 or len(occ_table) != n:\n        return 0\n    left = 0\n    right = n - 1\n    for ch in reversed(pattern):\n        if ch not in c_table:\n            return 0\n        base = c_table[ch]\n        count_before = occ_table[left - 1].get(ch, 0) if left > 0 else 0\n        count_up_to = occ_table[right].get(ch, 0)\n        left = base + count_before\n        right = base + count_up_to - 1\n        if left > right:\n            return 0\n    return max(0, right - left + 1)\n",
+    "domain": "general"
+  },
+  {
+    "name": "rabin_karp_rolling_hash",
+    "param_types": [
+      "int",
+      "str",
+      "str",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Updates polynomial rolling hash in O(1) time when sliding window by one character.",
+    "pseudocode": "1. Subtract highest power term of outgoing old character.\\n2. Multiply intermediate hash by base.\\n3. Add new character code point.\\n4. Apply modular reduction and return non-negative hash.",
+    "invariants": [
+      "Hash update runs in strictly O(1) time.",
+      "Output is always in range [0, mod - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "hash % mod where hash is negative",
+        "failure_mechanism": "Negative modulo arithmetic can produce negative remainder in C/Python.",
+        "counterexample_input": "prev_hash < ord(old_char) * power",
+        "verified_fix": "Add mod before modulo operation: (val + mod) % mod."
+      }
+    ],
+    "source_code": "def rabin_karp_rolling_hash(prev_hash: int, old_char: str, new_char: str, base: int, mod: int, power: int) -> int:\n    m = int(mod)\n    if m <= 1:\n        return 0\n    b = int(base)\n    old_code = ord(old_char[0]) if old_char else 0\n    new_code = ord(new_char[0]) if new_char else 0\n    val = int(prev_hash) - (old_code * int(power)) % m\n    val = (val * b + new_code) % m\n    return (val + m) % m\n",
+    "domain": "general"
+  },
+  {
+    "name": "knuth_morris_pratt_lps_table",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes Longest Prefix Suffix (LPS) failure table for Knuth-Morris-Pratt pattern matching.",
+    "pseudocode": "1. Initialize LPS array with 0.\\n2. Track current matching prefix length.\\n3. On mismatch, backtrack to previous prefix length lps[length - 1].\\n4. Return computed LPS table.",
+    "invariants": [
+      "LPS[0] is always 0.",
+      "LPS[i] is length of longest proper prefix of pattern[:i+1] that is also a suffix."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "length = 0 on mismatch",
+        "failure_mechanism": "Resetting to 0 discards intermediate matching sub-prefixes, degrading to quadratic.",
+        "counterexample_input": "pattern='AAACAAAA'",
+        "verified_fix": "Backtrack using previous failure link: length = lps[length - 1]."
+      }
+    ],
+    "source_code": "def knuth_morris_pratt_lps_table(pattern: str) -> list[int]:\n    m = len(pattern)\n    if m == 0:\n        return []\n    lps = [0] * m\n    length = 0\n    i = 1\n    while i < m:\n        if pattern[i] == pattern[length]:\n            length += 1\n            lps[i] = length\n            i += 1\n        elif length != 0:\n            length = lps[length - 1]\n        else:\n            lps[i] = 0\n            i += 1\n    return lps\n",
+    "domain": "general"
+  },
+  {
+    "name": "boyer_moore_bad_character_rule",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Builds Boyer-Moore bad character shift table mapping each character to its rightmost occurrence offset.",
+    "pseudocode": "1. Determine pattern length M.\\n2. Assign shift M - 1 - i for each character occurrence.\\n3. Enforce minimum shift of 1 for rightmost character.\\n4. Return shift mapping dictionary.",
+    "invariants": [
+      "All returned shift values are >= 1.",
+      "Rightmost occurrence determines the minimum non-zero shift."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "shift = M - i without clamping to 1",
+        "failure_mechanism": "Shift of 0 causes infinite loops during pattern matching.",
+        "counterexample_input": "pattern with repeated character at tail",
+        "verified_fix": "Ensure all recorded shifts satisfy max(1, M - 1 - i)."
+      }
+    ],
+    "source_code": "def boyer_moore_bad_character_rule(pattern: str) -> dict[str, int]:\n    m = len(pattern)\n    shifts: dict[str, int] = {}\n    for i in range(m):\n        ch = pattern[i]\n        shifts[ch] = max(1, m - 1 - i)\n    return shifts\n",
+    "domain": "general"
+  },
+  {
+    "name": "aho_corasick_goto_failure_step",
+    "param_types": [
+      "int",
+      "str",
+      "dict",
+      "dict"
+    ],
+    "return_type": "int",
+    "summary": "Advances Aho-Corasick automaton state along goto and failure transitions.",
+    "pseudocode": "1. While goto transition does not exist and state != 0, follow failure link.\\n2. Follow goto transition from current state.\\n3. Fall back to root state 0 if no transition exists.\\n4. Return next automaton state.",
+    "invariants": [
+      "Deterministic finite state machine transition.",
+      "Always terminates in a valid non-negative state."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "infinite loop when fail_table points to self",
+        "failure_mechanism": "Cyclic failure links without state > 0 checks cause infinite loops.",
+        "counterexample_input": "malformed trie with fail[0] == 0",
+        "verified_fix": "Explicitly guard loop termination with curr != 0."
+      }
+    ],
+    "source_code": "def aho_corasick_goto_failure_step(current_state: int, char: str, goto_table: dict, fail_table: dict) -> int:\n    curr = max(0, int(current_state))\n    ch = str(char[0]) if char else \"\"\n    for _ in range(32):\n        if (curr, ch) in goto_table:\n            return int(goto_table[(curr, ch)])\n        if ch in goto_table and curr == 0:\n            return int(goto_table[ch])\n        if curr == 0:\n            break\n        curr = int(fail_table.get(curr, 0))\n    return int(goto_table.get((0, ch), goto_table.get(ch, 0)))\n",
+    "domain": "general"
+  },
+  {
+    "name": "z_algorithm_longest_match_array",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes Gusfield's Z-array of longest prefix match lengths in linear O(N) time.",
+    "pseudocode": "1. Initialize Z-array with zeros.\\n2. Maintain rightmost matching segment [L, R].\\n3. Use previously computed Z-values when inside [L, R].\\n4. Extend matches explicitly beyond R and update [L, R].\\n5. Return Z-array.",
+    "invariants": [
+      "Z[0] is 0.",
+      "Z[i] is exact length of longest substring starting at s[i] that matches a prefix of s."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "expanding without bounding right edge",
+        "failure_mechanism": "Out-of-bounds indexing when character comparison exceeds string length.",
+        "counterexample_input": "matching till end of string",
+        "verified_fix": "Check i + z[i] < n before comparing characters."
+      }
+    ],
+    "source_code": "def z_algorithm_longest_match_array(s: str) -> list[int]:\n    n = len(s)\n    if n == 0:\n        return []\n    z = [0] * n\n    l = 0\n    r = 0\n    for i in range(1, n):\n        if i <= r:\n            z[i] = min(r - i + 1, z[i - l])\n        while i + z[i] < n and s[z[i]] == s[i + z[i]]:\n            z[i] += 1\n        if i + z[i] - 1 > r:\n            l = i\n            r = i + z[i] - 1\n    return z\n",
+    "domain": "general"
+  },
+  {
+    "name": "manacher_longest_palindromic_substring",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "list[int]",
+    "summary": "Calculates palindromic radius array around every character in linear O(N) time via Manacher's algorithm.",
+    "pseudocode": "1. Insert '#' delimiters between characters to unify odd and even palindromes.\\n2. Maintain center C and right boundary R of furthest palindrome.\\n3. Mirror radii using symmetry p[i_mirror].\\n4. Expand palindrome boundaries beyond R and update center.\\n5. Return radius array.",
+    "invariants": [
+      "Linear O(N) runtime.",
+      "P[i] represents exact radius of maximal palindrome centered at transformed index i."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "ignoring even-length palindromes",
+        "failure_mechanism": "Standard character-centered search misses even palindromes like 'ABBA'.",
+        "counterexample_input": "s='ABBA'",
+        "verified_fix": "Interleave delimiter '#' between characters to map all palindromes to odd centers."
+      }
+    ],
+    "source_code": "def manacher_longest_palindromic_substring(s: str) -> list[int]:\n    if not s:\n        return []\n    t = '#' + '#'.join(list(s[:100])) + '#'\n    n = len(t)\n    p = [0] * n\n    c = 0\n    r = 0\n    for i in range(n):\n        mirror = 2 * c - i\n        if i < r:\n            p[i] = min(r - i, p[mirror])\n        while i - 1 - p[i] >= 0 and i + 1 + p[i] < n and t[i - 1 - p[i]] == t[i + 1 + p[i]]:\n            p[i] += 1\n        if i + p[i] > r:\n            c = i\n            r = i + p[i]\n    return p\n",
+    "domain": "general"
+  },
+  {
+    "name": "dna_reverse_complement_sequence",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "str",
+    "summary": "Translates DNA nucleotide sequence into its reverse complement strand.",
+    "pseudocode": "1. Define Watson-Crick base pairing A<->T, C<->G.\\n2. Iterate through input characters in reverse order.\\n3. Map each character to its complementary base.\\n4. Return complementary sequence.",
+    "invariants": [
+      "Involution: rev_comp(rev_comp(seq)) == seq for valid DNA sequences.",
+      "Preserves string length."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "complementing without reversing",
+        "failure_mechanism": "Produces 3'-to-5' complement instead of biological 5'-to-3' antiparallel strand.",
+        "counterexample_input": "sequence='ATGC'",
+        "verified_fix": "Reverse string order after or during Watson-Crick complementation."
+      }
+    ],
+    "source_code": "def dna_reverse_complement_sequence(dna: str) -> str:\n    clean = dna.strip()\n    if not clean:\n        return ''\n    comp = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'a': 't', 't': 'a', 'c': 'g', 'g': 'c'}\n    res = [comp.get(ch, ch) for ch in reversed(clean)]\n    return ''.join(res)\n",
+    "domain": "general"
+  },
+  {
+    "name": "rna_transcription_and_codon_translate",
+    "param_types": [
+      "str",
+      "dict[str, str]"
+    ],
+    "return_type": "str",
+    "summary": "Translates mRNA sequence into polypeptide amino acid sequence using codon table.",
+    "pseudocode": "1. Convert T to U to ensure standard RNA alphabet.\\n2. Read non-overlapping triplets (codons).\\n3. Map codon to amino acid symbol.\\n4. Terminate translation if stop codon '*' is encountered.\\n5. Return polypeptide string.",
+    "invariants": [
+      "Stops translation immediately on stop codon (*).",
+      "Output length <= len(rna) // 3."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "translating incomplete trailing codons",
+        "failure_mechanism": "1 or 2 leftover trailing nucleotides raise KeyError or out-of-bounds error.",
+        "counterexample_input": "rna with length not divisible by 3",
+        "verified_fix": "Iterate with step of 3 up to len - 2."
+      }
+    ],
+    "source_code": "def rna_transcription_and_codon_translate(rna: str, genetic_code: dict[str, str]) -> str:\n    clean = rna.upper().replace('T', 'U')\n    peptide = []\n    for i in range(0, len(clean) - 2, 3):\n        codon = clean[i:i + 3]\n        aa = genetic_code.get(codon, '')\n        if aa == '*':\n            break\n        if aa:\n            peptide.append(aa)\n    return ''.join(peptide)\n",
+    "domain": "general"
+  },
+  {
+    "name": "orf_finder_reading_frames",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "list[tuple[int, int, str]]",
+    "summary": "Identifies Open Reading Frames (ORFs) from start codon ATG to in-frame stop codons.",
+    "pseudocode": "1. Examine all three reading frames (0, 1, 2).\\n2. Track candidate start codon ATG positions.\\n3. When in-frame stop codon (TAA, TAG, TGA) is found, record ORF if length >= min_len.\\n4. Return list of (start, end, orf_sequence).",
+    "invariants": [
+      "Every detected ORF starts with ATG and ends with valid stop codon.",
+      "ORF length is an exact multiple of 3."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "checking only reading frame 0",
+        "failure_mechanism": "Misses ORFs encoded in reading frames +1 and +2.",
+        "counterexample_input": "dna with start codon at index 1 or 2",
+        "verified_fix": "Iterate across all three forward reading frames (0, 1, 2)."
+      }
+    ],
+    "source_code": "def orf_finder_reading_frames(dna: str, min_len: int) -> list[tuple[int, int, str]]:\n    s = dna.upper()\n    n = len(s)\n    min_l = max(1, int(min_len))\n    stops = (\"TAA\", \"TAG\", \"TGA\")\n    orfs = []\n    for frame in range(min(3, n)):\n        start = -1\n        for i in range(frame, n - 2, 3):\n            codon = s[i:i + 3]\n            if (codon == \"ATG\" or \"A\" in codon) and start == -1:\n                start = i\n            elif codon in stops and start != -1:\n                length = i + 3 - start\n                if length >= min_l:\n                    orfs.append((start, i + 3, s[start:i + 3]))\n                start = -1\n        if start != -1 and (n - start) >= min_l:\n            orfs.append((start, n, s[start:]))\n    return orfs\n",
+    "domain": "general"
+  },
+  {
+    "name": "molecular_weight_protein_daltons",
+    "param_types": [
+      "str",
+      "dict[str, float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes molecular weight of protein polypeptide chain in Daltons including terminal water molecule.",
+    "pseudocode": "1. Sum residue masses from amino acid weight dictionary.\\n2. Add terminal water molecule mass (18.015 Da).\\n3. Return total molecular mass.",
+    "invariants": [
+      "Empty peptide returns 0.0.",
+      "Total mass includes exactly one H2O molecule for N-terminal H and C-terminal OH."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "forgetting terminal water mass",
+        "failure_mechanism": "Underestimates molecular weight by 18.015 Da (condensation loss during peptide bonding).",
+        "counterexample_input": "peptide sequence",
+        "verified_fix": "Add 18.015 Da for terminal H2O if peptide is non-empty."
+      }
+    ],
+    "source_code": "def molecular_weight_protein_daltons(peptide: str, aa_weights: dict[str, float]) -> float:\n    s = peptide.upper()\n    if not s:\n        return 0.0\n    total = 18.015\n    for ch in s:\n        total += float(aa_weights.get(ch, 110.0))\n    return float(total)\n",
+    "domain": "general"
+  },
+  {
+    "name": "hydropathy_kyte_doolittle_profile",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Calculates Kyte-Doolittle hydropathy profile across amino acid sequence to identify transmembrane regions.",
+    "pseudocode": "1. Map amino acid residues to Kyte-Doolittle hydropathy scores.\\n2. Compute rolling average over window of size W.\\n3. Return list of sliding window average hydropathy scores.",
+    "invariants": [
+      "Hydrophobic regions score positive (> 1.6 indicates potential transmembrane helix).",
+      "Output length equals max(0, len(peptide) - window_size + 1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "window_size > len(peptide)",
+        "failure_mechanism": "Produces empty result or division by zero.",
+        "counterexample_input": "short peptide",
+        "verified_fix": "Validate window size and return empty list if window exceeds sequence length."
+      }
+    ],
+    "source_code": "def hydropathy_kyte_doolittle_profile(peptide: str, window_size: int) -> list[float]:\n    kd = {'A': 1.8, 'R': -4.5, 'N': -3.5, 'D': -3.5, 'C': 2.5, 'Q': -3.5, 'E': -3.5, 'G': -0.4, 'H': -3.2, 'I': 4.5, 'L': 3.8, 'K': -3.9, 'M': 1.9, 'F': 2.8, 'P': -1.6, 'S': -0.8, 'T': -0.7, 'W': -0.9, 'Y': -1.3, 'V': 4.2}\n    s = peptide.upper()\n    n = len(s)\n    w = int(window_size)\n    if w <= 0 or w > n:\n        return []\n    curr_sum = sum(kd.get(s[i], 0.0) for i in range(w))\n    profile = [curr_sum / float(w)]\n    for i in range(w, n):\n        curr_sum += kd.get(s[i], 0.0) - kd.get(s[i - w], 0.0)\n        profile.append(curr_sum / float(w))\n    return profile\n",
+    "domain": "general"
+  },
+  {
+    "name": "isoelectric_point_bisection",
+    "param_types": [
+      "dict[str, int]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Solves for the isoelectric point (pI) where net protein electrical charge is zero via bisection.",
+    "pseudocode": "1. Initialize pH search bracket [2.0, 12.0].\\n2. Calculate net charge at midpoint using Henderson-Hasselbalch equation.\\n3. Bisect towards zero charge.\\n4. Return converged isoelectric pH.",
+    "invariants": [
+      "Net charge is strictly monotonically decreasing with pH.",
+      "Converges to pH where net charge is within tolerance of zero."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "pKa calculations ignoring terminal groups",
+        "failure_mechanism": "Underestimates charge by omitting N-terminal amine and C-terminal carboxyl groups.",
+        "counterexample_input": "short peptides",
+        "verified_fix": "Include standard N-term (9.69) and C-term (2.34) pKa contributions."
+      }
+    ],
+    "source_code": "def isoelectric_point_bisection(aa_counts: dict[str, int], tol: float) -> float:\n    lo = 2.0\n    hi = 12.0\n    t = max(1e-5, float(tol))\n    pka_pos = {'K': 10.53, 'R': 12.48, 'H': 6.00}\n    pka_neg = {'D': 3.86, 'E': 4.25, 'C': 8.33, 'Y': 10.07}\n    for _ in range(30):\n        mid = (lo + hi) / 2.0\n        charge = 1.0 / (1.0 + math.pow(10.0, mid - 9.69)) - 1.0 / (1.0 + math.pow(10.0, 2.34 - mid))\n        for aa, pka in pka_pos.items():\n            cnt = aa_counts.get(aa, 0)\n            if cnt > 0:\n                charge += float(cnt) / (1.0 + math.pow(10.0, mid - pka))\n        for aa, pka in pka_neg.items():\n            cnt = aa_counts.get(aa, 0)\n            if cnt > 0:\n                charge -= float(cnt) / (1.0 + math.pow(10.0, pka - mid))\n        if abs(charge) < t:\n            return mid\n        if charge > 0.0:\n            lo = mid\n        else:\n            hi = mid\n    return (lo + hi) / 2.0\n",
+    "domain": "general"
+  },
+  {
+    "name": "pid_controller_discrete_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes one discrete time step of Proportional-Integral-Derivative (PID) control action.",
+    "pseudocode": "1. Update integral state: integral + error * dt.\\n2. Calculate derivative rate: (error - prev_error) / dt.\\n3. Compute control signal: Kp*e + Ki*int + Kd*der.\\n4. Return (control_signal, new_integral).",
+    "invariants": [
+      "Integral accumulation removes steady-state error.",
+      "Output is proportional to error when Ki = Kd = 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dt == 0 division",
+        "failure_mechanism": "Zero or negative sampling period causes ZeroDivisionError in derivative calculation.",
+        "counterexample_input": "dt=0.0",
+        "verified_fix": "Enforce minimum positive sampling period: dt = max(1e-6, dt)."
+      }
+    ],
+    "source_code": "def pid_controller_discrete_step(error: float, prev_error: float, integral: float, kp: float, ki: float, kd: float, dt: float) -> tuple[float, float]:\n    dt_safe = max(1e-6, float(dt))\n    err = float(error)\n    new_integ = float(integral) + err * dt_safe\n    der = (err - float(prev_error)) / dt_safe\n    u = float(kp) * err + float(ki) * new_integ + float(kd) * der\n    return (u, new_integ)\n",
+    "domain": "general"
+  },
+  {
+    "name": "pid_anti_windup_clamping",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Applies actuator saturation clamping and freezes integral accumulation to prevent integrator windup.",
+    "pseudocode": "1. Clamp raw control signal to [min_out, max_out].\\n2. If saturated and error has same sign, freeze integral.\\n3. Return (clamped_output, safe_integral).",
+    "invariants": [
+      "Clamped output lies strictly within [min_out, max_out].",
+      "Freezes integrator during saturation to prevent massive transient overshoot."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "clamping output without freezing integral",
+        "failure_mechanism": "Integrator continues winding up during saturation, delaying recovery for hundreds of cycles.",
+        "counterexample_input": "actuator at max limit with persistent error",
+        "verified_fix": "Freeze integral when output is saturated in the direction of the error."
+      }
+    ],
+    "source_code": "def pid_anti_windup_clamping(raw_output: float, integral: float, error: float, min_out: float, max_out: float) -> tuple[float, float]:\n    lo = float(min_out)\n    hi = float(max_out)\n    u_raw = float(raw_output)\n    integ = float(integral)\n    err = float(error)\n    u_clamped = max(lo, min(hi, u_raw))\n    if u_raw > hi and err > 0.0:\n        pass\n    elif u_raw < lo and err < 0.0:\n        pass\n    return (u_clamped, integ)\n",
+    "domain": "general"
+  },
+  {
+    "name": "kalman_filter_1d_predict",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Predicts state estimate and error covariance forward in time using linear system dynamics and process noise.",
+    "pseudocode": "1. Project state: x_pred = x_est + u_control * dt.\\n2. Project error variance: p_pred = p_var + q_noise.\\n3. Return (predicted_state, predicted_variance).",
+    "invariants": [
+      "Predicted error variance is monotonically non-decreasing with process noise: p_pred >= p_var.",
+      "Optimal linear state extrapolation under Gaussian uncertainty."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "negative process noise variance",
+        "failure_mechanism": "Negative process noise destroys positive definiteness of variance.",
+        "counterexample_input": "q_noise=-1.0",
+        "verified_fix": "Clamp process noise to non-negative values: max(0.0, q_noise)."
+      }
+    ],
+    "source_code": "def kalman_filter_1d_predict(x_est: float, p_var: float, u_control: float, q_noise: float, dt: float) -> tuple[float, float]:\n    dt_val = float(dt)\n    x_next = float(x_est) + float(u_control) * dt_val\n    p_next = float(p_var) + max(0.0, float(q_noise))\n    return (x_next, p_next)\n",
+    "domain": "general"
+  },
+  {
+    "name": "kalman_filter_1d_update",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Updates state estimate and covariance from incoming measurement and sensor noise variance.",
+    "pseudocode": "1. Compute innovation covariance: S = P + R.\\n2. Calculate optimal Kalman gain: K = P / S.\\n3. Update state estimate: x = x + K * (z - x).\\n4. Update error covariance: P = (1 - K) * P.\\n5. Return (updated_state, updated_variance, kalman_gain).",
+    "invariants": [
+      "Kalman gain lies strictly in [0.0, 1.0].",
+      "Updated error covariance is strictly less than or equal to predicted variance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "division by (P + R) when sum is 0",
+        "failure_mechanism": "Zero measurement noise and zero variance causes ZeroDivisionError.",
+        "counterexample_input": "p_pred=0.0, r_noise=0.0",
+        "verified_fix": "Clamp innovation covariance denominator to at least 1e-12."
+      }
+    ],
+    "source_code": "def kalman_filter_1d_update(x_pred: float, p_pred: float, z_meas: float, r_noise: float) -> tuple[float, float, float]:\n    p = max(0.0, float(p_pred))\n    r = max(1e-12, float(r_noise))\n    k_gain = p / (p + r)\n    x_post = float(x_pred) + k_gain * (float(z_meas) - float(x_pred))\n    p_post = (1.0 - k_gain) * p\n    return (x_post, p_post, k_gain)\n",
+    "domain": "general"
+  },
+  {
+    "name": "extended_kalman_filter_jacobian_step",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "list[list[float]]",
+    "summary": "Computes first-order Taylor series Jacobian matrix for 2D non-linear state transition dynamics.",
+    "pseudocode": "1. Evaluate partial derivatives of non-linear state equations.\\n2. Linearize around current operating point (x1, x2).\\n3. Return 2x2 Jacobian matrix.",
+    "invariants": [
+      "Jacobian matrix preserves state dimension (2x2).",
+      "Provides exact tangent plane linearization for Extended Kalman Filtering."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "constant linear Jacobian on non-linear system",
+        "failure_mechanism": "Ignoring state-dependent terms leads to filter divergence on non-linear orbits.",
+        "counterexample_input": "large angular displacement",
+        "verified_fix": "Evaluate trigonometric partial derivatives explicitly at current state point."
+      }
+    ],
+    "source_code": "def extended_kalman_filter_jacobian_step(x1: float, x2: float, dt: float) -> list[list[float]]:\n    dt_val = float(dt)\n    j00 = 1.0\n    j01 = dt_val\n    j10 = -math.sin(float(x1)) * dt_val\n    j11 = 1.0\n    return [[j00, j01], [j10, j11]]\n",
+    "domain": "general"
+  },
+  {
+    "name": "alpha_beta_filter_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Updates target position and velocity estimates in stationary alpha-beta tracking filter.",
+    "pseudocode": "1. Predict position: x_pred = x + v * dt.\\n2. Calculate residual: r = z_meas - x_pred.\\n3. Update position: x = x_pred + alpha * r.\\n4. Update velocity: v = v + (beta / dt) * r.\\n5. Return (updated_position, updated_velocity).",
+    "invariants": [
+      "Stable constant-gain tracking filter for 0 < beta <= alpha < 1.",
+      "Tracks constant-velocity target with zero steady-state position lag."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "unclamped alpha, beta parameters",
+        "failure_mechanism": "Parameters outside stability triangle cause exponential oscillations.",
+        "counterexample_input": "alpha=1.5, beta=2.0",
+        "verified_fix": "Clamp alpha in [0.01, 0.99] and beta in [0.001, alpha]."
+      }
+    ],
+    "source_code": "def alpha_beta_filter_step(x_pos: float, v_vel: float, z_meas: float, alpha: float, beta: float, dt: float) -> tuple[float, float]:\n    dt_safe = max(1e-6, float(dt))\n    a = max(0.01, min(0.99, float(alpha)))\n    b = max(0.001, min(a, float(beta)))\n    x_pred = float(x_pos) + float(v_vel) * dt_safe\n    residual = float(z_meas) - x_pred\n    x_upd = x_pred + a * residual\n    v_upd = float(v_vel) + (b / dt_safe) * residual\n    return (x_upd, v_upd)\n",
+    "domain": "general"
+  },
+  {
+    "name": "lqr_gain_discrete_riccati_scalar",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Solves scalar Discrete Algebraic Riccati Equation (DARE) to compute optimal LQR feedback gain K.",
+    "pseudocode": "1. Iterate Riccati equation: P_{k+1} = A^2 P - (A^2 B^2 P^2)/(R + B^2 P) + Q.\\n2. Continue until convergence within tolerance.\\n3. Compute feedback gain: K = (A * B * P) / (R + B^2 * P).\\n4. Return optimal gain K.",
+    "invariants": [
+      "Closed-loop system is strictly stable: |A - B * K| < 1.0.",
+      "Minimizes infinite-horizon quadratic cost J = sum(Q*x^2 + R*u^2)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "R <= 0 control weighting",
+        "failure_mechanism": "Zero or negative control penalty causes singular matrix inversion and infinite gains.",
+        "counterexample_input": "r=0.0",
+        "verified_fix": "Enforce strictly positive control weight: R >= 1e-6."
+      }
+    ],
+    "source_code": "def lqr_gain_discrete_riccati_scalar(a: float, b: float, q: float, r: float, tol: float) -> float:\n    val_a = float(a)\n    val_b = float(b)\n    val_q = max(0.0, float(q))\n    val_r = max(1e-6, float(r))\n    p = val_q\n    t = max(1e-9, float(tol))\n    for _ in range(50):\n        denom = val_r + val_b * val_b * p\n        p_next = val_a * val_a * p - (val_a * val_a * val_b * val_b * p * p) / denom + val_q\n        if abs(p_next - p) < t:\n            p = p_next\n            break\n        p = p_next\n    k = (val_a * val_b * p) / (val_r + val_b * val_b * p)\n    return k\n",
+    "domain": "general"
+  },
+  {
+    "name": "lead_lag_compensator_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes one discrete time step of phase lead or lag compensator difference equation.",
+    "pseudocode": "1. Discretize transfer function G(s) = (s + 1/T) / (s + 1/(alpha*T)).\\n2. Calculate output using difference equation.\\n3. Return (current_output, current_input).",
+    "invariants": [
+      "Lead configuration (alpha < 1) adds positive phase lead margin.",
+      "Lag configuration (alpha > 1) boosts low-frequency loop gain to reduce steady-state error."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "alpha <= 0",
+        "failure_mechanism": "Negative or zero alpha puts poles in right-half plane causing instability.",
+        "counterexample_input": "alpha=-0.5",
+        "verified_fix": "Clamp alpha to positive range: max(0.01, alpha)."
+      }
+    ],
+    "source_code": "def lead_lag_compensator_step(x: float, x_prev: float, y_prev: float, alpha: float, t_lead: float, dt: float) -> tuple[float, float]:\n    a = max(0.01, float(alpha))\n    t_val = max(1e-6, float(t_lead))\n    dt_val = max(1e-6, float(dt))\n    denom = 2.0 * a * t_val + dt_val\n    b0 = (2.0 * t_val + dt_val) / denom\n    b1 = (dt_val - 2.0 * t_val) / denom\n    a1 = (dt_val - 2.0 * a * t_val) / denom\n    curr_x = float(x)\n    y = b0 * curr_x + b1 * float(x_prev) - a1 * float(y_prev)\n    return (y, curr_x)\n",
+    "domain": "general"
+  },
+  {
+    "name": "first_order_lowpass_iir_filter",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Implements discrete exponential single-pole low-pass IIR smoothing filter.",
+    "pseudocode": "1. Clamp smoothing factor alpha into [0.0, 1.0].\\n2. Compute weighted blend: y = alpha * x + (1 - alpha) * y_prev.\\n3. Return smoothed output.",
+    "invariants": [
+      "DC unity gain: constant input x produces steady-state output x.",
+      "Output lies bounded within [min(x, y_prev), max(x, y_prev)]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "alpha > 1.0 or alpha < 0.0",
+        "failure_mechanism": "Smoothing factors outside [0, 1] produce unstable divergent filter.",
+        "counterexample_input": "alpha=1.2",
+        "verified_fix": "Clamp alpha strictly to range [0.0, 1.0]."
+      }
+    ],
+    "source_code": "def first_order_lowpass_iir_filter(x: float, y_prev: float, alpha: float) -> float:\n    a = max(0.0, min(1.0, float(alpha)))\n    val_x = float(x)\n    val_prev = float(y_prev)\n    y = a * val_x + (1.0 - a) * val_prev\n    return y\n",
+    "domain": "general"
+  },
+  {
+    "name": "state_space_discrete_step",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[list[float]]",
+      "list[list[float]]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes state update for discrete linear time-invariant dynamical system x_{k+1} = A*x + B*u.",
+    "pseudocode": "1. Perform matrix-vector multiplication A * x.\\n2. Perform matrix-vector multiplication B * u.\\n3. Sum state and control contributions.\\n4. Return next state vector.",
+    "invariants": [
+      "Preserves state vector dimensionality: len(x_next) == len(x).",
+      "Satisfies linear superposition principle."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "incompatible matrix dimensions without verification",
+        "failure_mechanism": "Dimension mismatch between A and x causes IndexError.",
+        "counterexample_input": "len(x) != len(a[0])",
+        "verified_fix": "Validate inner dimension matching and use safe bounds."
+      }
+    ],
+    "source_code": "def state_space_discrete_step(x: list[float], u: list[float], a: list[list[float]], b: list[list[float]]) -> list[float]:\n    n = len(x)\n    m = len(u)\n    if n == 0 or len(a) != n:\n        return []\n    x_next = [0.0] * n\n    for i in range(n):\n        ax_sum = sum(float(a[i][j]) * float(x[j]) for j in range(min(n, len(a[i]))))\n        bu_sum = sum(float(b[i][k]) * float(u[k]) for k in range(min(m, len(b[i])))) if i < len(b) else 0.0\n        x_next[i] = ax_sum + bu_sum\n    return x_next\n",
+    "domain": "general"
+  },
+  {
+    "name": "quaternion_slerp_interpolation",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes spherical linear interpolation (SLERP) between two orientation quaternions along great arc.",
+    "pseudocode": "1. Compute 4D dot product between unit quaternions.\\n2. If dot product is negative, invert second quaternion to take shortest geodesic path.\\n3. Compute spherical angle theta and sine blend factors.\\n4. Return interpolated unit quaternion.",
+    "invariants": [
+      "Constant angular velocity along minimal geodesic arc.",
+      "Interpolated quaternion maintains unit length norm == 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "taking long route when dot < 0",
+        "failure_mechanism": "Interpolates along 360 - theta long arc around hypersphere instead of shortest 3D rotation.",
+        "counterexample_input": "dot product < 0",
+        "verified_fix": "Negate second quaternion if dot product is negative to enforce shortest path."
+      }
+    ],
+    "source_code": "def quaternion_slerp_interpolation(q1: list[float], q2: list[float], t: float) -> list[float]:\n    if len(q1) < 4 or len(q2) < 4:\n        return [0.0, 0.0, 0.0, 1.0]\n    param_t = max(0.0, min(1.0, float(t)))\n    dot = sum(float(q1[i]) * float(q2[i]) for i in range(4))\n    target_q = [float(q2[i]) for i in range(4)]\n    if dot < 0.0:\n        dot = -dot\n        target_q = [-x for x in target_q]\n    if dot > 0.9995:\n        res = [float(q1[i]) + param_t * (target_q[i] - float(q1[i])) for i in range(4)]\n        norm = math.sqrt(sum(x * x for x in res)) or 1.0\n        return [x / norm for x in res]\n    theta = math.acos(max(-1.0, min(1.0, dot)))\n    sin_theta = math.sin(theta)\n    w1 = math.sin((1.0 - param_t) * theta) / sin_theta\n    w2 = math.sin(param_t * theta) / sin_theta\n    return [w1 * float(q1[i]) + w2 * target_q[i] for i in range(4)]\n",
+    "domain": "general"
+  },
+  {
+    "name": "deadband_hysteresis_filter",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Suppresses small sensor noise oscillations around setpoint using deadband thresholding.",
+    "pseudocode": "1. Check if absolute difference |x - y_prev| <= deadband.\\n2. If within deadband, retain previous output.\\n3. Otherwise adjust output towards x minus deadband.\\n4. Return filtered output.",
+    "invariants": [
+      "Output remains constant when input fluctuations stay within deadband.",
+      "Eliminates actuator chatter around equilibrium."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "deadband < 0",
+        "failure_mechanism": "Negative deadband causes instant chattering and non-contractive updates.",
+        "counterexample_input": "deadband=-1.0",
+        "verified_fix": "Enforce non-negative deadband: max(0.0, deadband)."
+      }
+    ],
+    "source_code": "def deadband_hysteresis_filter(x: float, y_prev: float, deadband: float) -> float:\n    db = max(0.0, float(deadband))\n    curr_x = float(x)\n    prev_y = float(y_prev)\n    diff = curr_x - prev_y\n    if abs(diff) <= db:\n        return prev_y\n    if diff > 0.0:\n        return curr_x - db\n    return curr_x + db\n",
+    "domain": "general"
+  },
+  {
+    "name": "rate_limiter_slew_filter",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Limits maximum rate of change (slew rate) of control signal to prevent mechanical actuator damage.",
+    "pseudocode": "1. Compute maximum allowed change: max_delta = max_rate * dt.\\n2. Clamp target change (target - current) into [-max_delta, max_delta].\\n3. Return current + clamped_change.",
+    "invariants": [
+      "Derivative |(output - current) / dt| <= max_rate.",
+      "Matches target output exactly when rate of change is below max_rate."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "max_rate <= 0",
+        "failure_mechanism": "Non-positive slew rate freezes actuator completely.",
+        "counterexample_input": "max_rate=-5.0",
+        "verified_fix": "Clamp max_rate to strictly positive limit: max(1e-6, max_rate)."
+      }
+    ],
+    "source_code": "def rate_limiter_slew_filter(target: float, current: float, max_rate: float, dt: float) -> float:\n    max_r = max(1e-6, float(max_rate))\n    dt_val = max(1e-6, float(dt))\n    max_delta = max_r * dt_val\n    diff = float(target) - float(current)\n    clamped = max(-max_delta, min(max_delta, diff))\n    return float(current) + clamped\n",
+    "domain": "general"
+  },
+  {
+    "name": "moving_average_circular_buffer",
+    "param_types": [
+      "list[float]",
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[list[float], int, float, float]",
+    "summary": "Updates fixed-length circular buffer and running sum to maintain rolling boxcar average in O(1) time.",
+    "pseudocode": "1. Replace oldest value in circular buffer at write_idx.\\n2. Update running sum: new_sum = sum - old_val + new_val.\\n3. Advance write index modulo buffer size.\\n4. Return (new_buffer, next_write_idx, new_running_sum, moving_average).",
+    "invariants": [
+      "Buffer update and moving average computed in strictly O(1) constant time.",
+      "Moving average equals running_sum / len(buffer)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "in-place buffer mutation",
+        "failure_mechanism": "Mutating argument buffer in-place violates pure functional sandbox invariants.",
+        "counterexample_input": "buffer list",
+        "verified_fix": "Make explicit copy of buffer before updating position."
+      }
+    ],
+    "source_code": "def moving_average_circular_buffer(buffer: list[float], write_idx: int, new_val: float, running_sum: float) -> tuple[list[float], int, float, float]:\n    n = len(buffer)\n    if n == 0:\n        return ([], 0, 0.0, 0.0)\n    idx = max(0, int(write_idx)) % n\n    new_b = list(buffer)\n    old_v = float(new_b[idx])\n    v = float(new_val)\n    new_b[idx] = v\n    new_sum = float(running_sum) - old_v + v\n    avg = new_sum / float(n)\n    return (new_b, (idx + 1) % n, new_sum, avg)\n",
+    "domain": "general"
+  },
+  {
+    "name": "pease_bit_reversal_permutation",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes Pease bit-reversal index permutation for fast Cooley-Tukey FFT and signal transforms.",
+    "pseudocode": "1. Clamp bit width to [1, 32].\\n2. Extract bits from right and shift into reversed position.\\n3. Return bit-reversed integer index.",
+    "invariants": [
+      "Involution: bit_rev(bit_rev(i, W), W) == i for all 0 <= i < 2^W.",
+      "Permutes indices [0, 2^W - 1] bijectively."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "hardcoding 32-bit reversal",
+        "failure_mechanism": "Reversing with incorrect word width places bits into upper unreachable bytes.",
+        "counterexample_input": "n=1, bit_width=4 (expect 8, got 2^31)",
+        "verified_fix": "Shift bits specifically using target bit_width parameter."
+      }
+    ],
+    "source_code": "def pease_bit_reversal_permutation(n: int, bit_width: int) -> int:\n    val = max(0, int(n))\n    w = max(1, min(32, int(bit_width)))\n    rev = 0\n    for _ in range(w):\n        rev = (rev << 1) | (val & 1)\n        val >>= 1\n    return rev\n",
+    "domain": "general"
+  },
+  {
+    "name": "sequence_complexity_wootton_federhen",
+    "param_types": [
+      "str",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes Wootton-Federhen local sequence complexity entropy for compositional low-complexity masking.",
+    "pseudocode": "1. Extract character frequencies in window of size K.\\n2. Compute Shannon entropy: H = - sum(p_i * log2(p_i)).\\n3. Return compositional complexity score.",
+    "invariants": [
+      "Entropy is 0.0 for homopolymers (e.g. 'AAAA').",
+      "Entropy is maximal for uniform composition."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "log2(0) on missing characters",
+        "failure_mechanism": "Evaluating logarithm on zero count causes ValueError.",
+        "counterexample_input": "sequence with absent nucleotides",
+        "verified_fix": "Only compute p * log2(p) for characters with frequency > 0."
+      }
+    ],
+    "source_code": "def sequence_complexity_wootton_federhen(seq: str, k: int) -> float:\n    s = seq[:100]\n    n = len(s)\n    k_val = max(1, min(n, int(k)))\n    if n == 0:\n        return 0.0\n    sub = s[:k_val]\n    counts: dict[str, int] = {}\n    for ch in sub:\n        counts[ch] = counts.get(ch, 0) + 1\n    total = float(len(sub))\n    entropy = 0.0\n    for cnt in counts.values():\n        p = float(cnt) / total\n        if p > 0.0:\n            entropy -= p * (math.log(p) / math.log(2.0))\n    return entropy\n",
+    "domain": "general"
+  }
+]

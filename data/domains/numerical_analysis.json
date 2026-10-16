@@ -1,0 +1,1068 @@
+[
+  {
+    "name": "bisection_root_bracket",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Bisection root finder for polynomial equation on bracket interval [a, b].",
+    "pseudocode": "1. Evaluate polynomial residuals at bracket endpoints a, b using Horner rule.\n2. Iteratively divide interval in half.\n3. Retain subinterval with alternating sign until width is within tolerance.",
+    "invariants": [
+      "Root remains bracketed within interval bounds [left, right] across all iterations.",
+      "Bracket interval length contracts by exactly factor of two per iteration step."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "mid = (a + b) / 2.0",
+        "failure_mechanism": "Direct addition of extreme floating point values can overflow to infinity.",
+        "counterexample_input": "coeffs=[1.0, -2.0], a=1e300, b=1e300, tol=1e-5",
+        "verified_fix": "Compute midpoint as left + 0.5 * (right - left) to prevent floating overflow."
+      }
+    ],
+    "source_code": "def bisection_root_bracket(coeffs: list[float], a: float, b: float, tol: float) -> float:\n    if len(coeffs) == 0:\n        return 0.5 * (a + b)\n    left = min(a, b)\n    right = max(a, b)\n    eps = max(1e-12, abs(tol))\n    f_left = 0.0\n    for c in reversed(coeffs):\n        f_left = f_left * left + c\n    f_right = 0.0\n    for c in reversed(coeffs):\n        f_right = f_right * right + c\n    if abs(f_left) <= eps:\n        return left\n    if abs(f_right) <= eps:\n        return right\n    for _ in range(60):\n        mid = left + 0.5 * (right - left)\n        if abs(right - left) <= eps:\n            return mid\n        f_mid = 0.0\n        for c in reversed(coeffs):\n            f_mid = f_mid * mid + c\n        if abs(f_mid) <= eps:\n            return mid\n        if f_left > 0.0 and f_mid > 0.0 or (f_left < 0.0 and f_mid < 0.0):\n            left = mid\n            f_left = f_mid\n        else:\n            right = mid\n            f_right = f_mid\n    return left + 0.5 * (right - left)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "brent_dekker_root",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Brent-Dekker root solver combining inverse quadratic interpolation, secant, and bisection.",
+    "pseudocode": "1. Initialize bracket points a, b and previous point c.\n2. Attempt inverse quadratic interpolation or secant step.\n3. Fallback to bisection if interpolation step falls outside bracket or contracts slowly.",
+    "invariants": [
+      "Superlinear convergence rate on smooth functions with bisection fallback guarantees.",
+      "Opposite signs of residual at bracket endpoints are preserved throughout search."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p / q without division guard",
+        "failure_mechanism": "Collinear or nearly identical function values cause zero denominator crash in secant step.",
+        "counterexample_input": "coeffs=[0.0, 1.0], a=1.0, b=1.0, tol=1e-8",
+        "verified_fix": "Enforce minimum divisor threshold and fallback to bisection when denominator is negligible."
+      }
+    ],
+    "source_code": "def brent_dekker_root(coeffs: list[float], a: float, b: float, tol: float) -> float:\n    if len(coeffs) == 0:\n        return 0.5 * (a + b)\n    x0 = min(a, b)\n    x1 = max(a, b)\n    eps = max(1e-12, abs(tol))\n    f0 = 0.0\n    for c in reversed(coeffs):\n        f0 = f0 * x0 + c\n    f1 = 0.0\n    for c in reversed(coeffs):\n        f1 = f1 * x1 + c\n    x2 = x0\n    f2 = f0\n    for _ in range(50):\n        if abs(f1) <= eps or abs(x1 - x0) <= eps:\n            return x1\n        if abs(f0 - f2) > 1e-14 and abs(f1 - f2) > 1e-14:\n            s0 = x0 * f1 * f2 / ((f0 - f1) * (f0 - f2))\n            s1 = x1 * f0 * f2 / ((f1 - f0) * (f1 - f2))\n            s2 = x2 * f0 * f1 / ((f2 - f0) * (f2 - f1))\n            trial = s0 + s1 + s2\n        else:\n            denom = f1 - f0\n            trial = x1 - f1 * (x1 - x0) / (denom if abs(denom) > 1e-14 else 1e-14)\n        if trial < min(x0, x1) or trial > max(x0, x1):\n            trial = 0.5 * (x0 + x1)\n        x2 = x1\n        f2 = f1\n        x1 = trial\n        f1 = 0.0\n        for c in reversed(coeffs):\n            f1 = f1 * x1 + c\n    return x1",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "newton_raphson_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Single Newton-Raphson update step with derivative threshold guard.",
+    "pseudocode": "1. Check if residual magnitude is within tolerance.\n2. Apply safety floor to derivative to prevent stationary point divergence.\n3. Compute updated point as x - fx / dfx.",
+    "invariants": [
+      "Locally quadratic convergence for roots with non-zero first derivative.",
+      "Preserves current point invariant when input residual is within tolerance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x - fx / dfx without derivative threshold",
+        "failure_mechanism": "Zero or near-zero derivative at local extrema triggers ZeroDivisionError or massive divergence.",
+        "counterexample_input": "x=1.0, fx=0.5, dfx=0.0, tol=1e-6",
+        "verified_fix": "Clamp denominator magnitude to minimum threshold preserving sign."
+      }
+    ],
+    "source_code": "def newton_raphson_step(x: float, fx: float, dfx: float, tol: float) -> float:\n    eps = max(1e-14, abs(tol))\n    if abs(fx) <= eps:\n        return x\n    denom = dfx\n    if abs(denom) < 1e-12:\n        denom = 1e-12 if denom >= 0.0 else -1e-12\n    step = fx / denom\n    x_new = x - step\n    return x_new",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "halley_root_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Third-order Halley root step with curvature correction and denominator safeguard.",
+    "pseudocode": "1. Return x if residual is near zero.\n2. Compute second-order denominator 2*(df)^2 - fx*d2fx.\n3. If denominator vanishes, fallback to standard Newton step.",
+    "invariants": [
+      "Cubic local convergence rate for simple roots.",
+      "Reduces to standard first-order Newton step when second derivative curvature vanishes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "step = 2*fx*df / (2*df*df - fx*d2fx)",
+        "failure_mechanism": "Denominator cancellation between 2*(df)^2 and fx*d2fx creates catastrophic division by zero.",
+        "counterexample_input": "x=1.0, fx=2.0, dfx=1.0, d2fx=1.0",
+        "verified_fix": "Detect denominator cancellation and fallback safely to standard Newton step."
+      }
+    ],
+    "source_code": "def halley_root_step(x: float, fx: float, dfx: float, d2fx: float) -> float:\n    if abs(fx) <= 1e-14:\n        return x\n    df = dfx\n    if abs(df) < 1e-12:\n        df = 1e-12 if df >= 0.0 else -1e-12\n    denom = 2.0 * df * df - fx * d2fx\n    if abs(denom) < 1e-14:\n        return x - fx / df\n    step = 2.0 * fx * df / denom\n    return x - step",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "ridder_root_find",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Ridders root finding algorithm using exponential factor transformation.",
+    "pseudocode": "1. Evaluate polynomial at bracket endpoints a, b and midpoint m.\n2. Apply Ridders quadratic formula using square root of (fm^2 - fa*fb).\n3. Contract bracket interval with quadratic convergence.",
+    "invariants": [
+      "Quadratic convergence per double step with guaranteed root bracket maintenance.",
+      "Always produces candidate strictly within interval [min(a, b), max(a, b)]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sqrt(fm * fm - fa * fb)",
+        "failure_mechanism": "Numerical roundoff can produce tiny negative radicand when fa*fb > fm^2.",
+        "counterexample_input": "coeffs=[1.0, 0.0], a=1.0, b=1.0, tol=1e-5",
+        "verified_fix": "Clamp radicand with max(0.0, ...) before taking square root."
+      }
+    ],
+    "source_code": "def ridder_root_find(coeffs: list[float], a: float, b: float, tol: float) -> float:\n    if len(coeffs) == 0:\n        return 0.5 * (a + b)\n    x1 = min(a, b)\n    x2 = max(a, b)\n    eps = max(1e-12, abs(tol))\n    for _ in range(40):\n        if abs(x2 - x1) <= eps:\n            return 0.5 * (x1 + x2)\n        f1 = 0.0\n        for c in reversed(coeffs):\n            f1 = f1 * x1 + c\n        f2 = 0.0\n        for c in reversed(coeffs):\n            f2 = f2 * x2 + c\n        xm = 0.5 * (x1 + x2)\n        fm = 0.0\n        for c in reversed(coeffs):\n            fm = fm * xm + c\n        if abs(fm) <= eps:\n            return xm\n        disc = max(0.0, fm * fm - f1 * f2)\n        s = math.sqrt(disc)\n        if s < 1e-14:\n            return xm\n        sign_factor = 1.0 if f1 >= f2 else -1.0\n        x_new = xm + (xm - x1) * (sign_factor * fm) / s\n        f_new = 0.0\n        for c in reversed(coeffs):\n            f_new = f_new * x_new + c\n        if abs(f_new) <= eps:\n            return x_new\n        if fm > 0.0 and f_new < 0.0 or (fm < 0.0 and f_new > 0.0):\n            x1 = min(xm, x_new)\n            x2 = max(xm, x_new)\n        elif f1 > 0.0 and f_new < 0.0 or (f1 < 0.0 and f_new > 0.0):\n            x2 = x_new\n        else:\n            x1 = x_new\n    return 0.5 * (x1 + x2)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "secant_root_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Secant root iteration step using finite difference approximation to derivative.",
+    "pseudocode": "1. Compute residual difference f1 - f0.\n2. Safeguard against zero division if residuals are identical.\n3. Compute x2 = x1 - f1 * (x1 - x0) / (f1 - f0).",
+    "invariants": [
+      "Superlinear convergence with golden ratio exponent phi ~= 1.618.",
+      "Zero function derivative evaluations required compared to Newton-Raphson."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "(x1 - x0) / (f1 - f0)",
+        "failure_mechanism": "Identical function values f1 == f0 produce ZeroDivisionError.",
+        "counterexample_input": "x0=1.0, x1=2.0, f0=3.0, f1=3.0",
+        "verified_fix": "Clamp denominator difference with minimum epsilon preserving sign."
+      }
+    ],
+    "source_code": "def secant_root_step(x0: float, x1: float, f0: float, f1: float) -> float:\n    diff_f = f1 - f0\n    if abs(diff_f) < 1e-14:\n        diff_f = 1e-14 if diff_f >= 0.0 else -1e-14\n    step = f1 * (x1 - x0) / diff_f\n    x2 = x1 - step\n    return x2",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "simpson_adaptive_quad",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Simpson composite 1/3 rule numerical quadrature over sampled grid points.",
+    "pseudocode": "1. Check minimum slice size of 3 samples.\n2. Accumulate boundary, odd-indexed (weight 4), and even-indexed (weight 2) values.\n3. Scale total sum by h / 3.0.",
+    "invariants": [
+      "Exact integration for polynomial functions up to cubic degree.",
+      "Local truncation error scales asymptotically as O(h^4)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Summing without odd/even indexing weights",
+        "failure_mechanism": "Treating all intermediate points with equal weights degrades 4th-order accuracy to 2nd-order trapezoidal.",
+        "counterexample_input": "vals=[1.0, 2.0, 3.0], h=0.5",
+        "verified_fix": "Alternate interior weights between 4.0 for odd indices and 2.0 for even indices."
+      }
+    ],
+    "source_code": "def simpson_adaptive_quad(vals: list[float], h: float) -> float:\n    n = len(vals)\n    if n < 2:\n        return 0.0\n    if n == 2:\n        return 0.5 * h * (vals[0] + vals[1])\n    total = vals[0] + vals[-1]\n    for i in range(1, n - 1):\n        weight = 4.0 if i % 2 == 1 else 2.0\n        total = total + weight * vals[i]\n    step = abs(h)\n    return total * (step / 3.0)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "gauss_legendre_quad_3pt",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "3-point Gauss-Legendre quadrature integrating polynomial on interval [a, b].",
+    "pseudocode": "1. Map reference Legendre nodes [-sqrt(3/5), 0, sqrt(3/5)] to [a, b].\n2. Evaluate polynomial at mapped quadrature points.\n3. Accumulate with positive weights [5/9, 8/9, 5/9] scaled by half-width.",
+    "invariants": [
+      "Exact algebraic integration for all polynomials up to degree 5 (2n - 1 for n=3).",
+      "Strictly positive integration weights guarantee numerical stability."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Evaluating points directly on reference domain [-1, 1]",
+        "failure_mechanism": "Failing to apply affine coordinate mapping (b-a)/2 * x + (a+b)/2 integrates wrong domain.",
+        "counterexample_input": "coeffs=[0.0, 1.0], a=10.0, b=20.0",
+        "verified_fix": "Transform reference points via affine coordinate map and scale result by (b - a) / 2."
+      }
+    ],
+    "source_code": "def gauss_legendre_quad_3pt(coeffs: list[float], a: float, b: float) -> float:\n    if len(coeffs) == 0:\n        return 0.0\n    xi = math.sqrt(0.6)\n    nodes = [-xi, 0.0, xi]\n    weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]\n    half_w = 0.5 * (b - a)\n    mid = 0.5 * (a + b)\n    acc = 0.0\n    for i in range(3):\n        x_eval = mid + half_w * nodes[i]\n        f_val = 0.0\n        for c in reversed(coeffs):\n            f_val = f_val * x_eval + c\n        acc = acc + weights[i] * f_val\n    return acc * half_w",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "romberg_quadrature_step",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Romberg Richardson extrapolation tableau step for high-order numerical quadrature.",
+    "pseudocode": "1. Extract current fine estimate and previous coarse estimate.\n2. Compute 4^k factor with shift guard.\n3. Compute extrapolated value (4^k * fine - coarse) / (4^k - 1).",
+    "invariants": [
+      "Eliminates leading O(h^(2k)) truncation error term from trapezoidal sequence.",
+      "Monotone error reduction across diagonal tableau entries."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "factor = 4 ** k without exponent cap",
+        "failure_mechanism": "Large k causes integer overflow or float loss of precision in denominator.",
+        "counterexample_input": "t_current=[1.0], t_previous=[2.0], k=100",
+        "verified_fix": "Clamp k to maximum tableau order 10 to ensure stable power computation."
+      }
+    ],
+    "source_code": "def romberg_quadrature_step(t_current: list[float], t_previous: list[float], k: int) -> float:\n    if len(t_current) == 0 or len(t_previous) == 0:\n        return 0.0\n    safe_k = min(10, max(1, abs(k)))\n    factor = float(1 << 2 * safe_k)\n    val_curr = t_current[-1]\n    val_prev = t_previous[-1]\n    denom = factor - 1.0\n    res = (factor * val_curr - val_prev) / denom\n    return res",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "chebyshev_nodes_1d",
+    "param_types": [
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes 1D Chebyshev-Gauss-Lobatto collocation nodes mapped to [a, b].",
+    "pseudocode": "1. Generate n extrema coordinates cos(pi * k / (n - 1)).\n2. Apply affine coordinate mapping to target interval [a, b].\n3. Return ordered list of collocation coordinates.",
+    "invariants": [
+      "All generated nodes reside strictly inside closed interval [min(a, b), max(a, b)].",
+      "Minimizes polynomial interpolation error by eliminating Runge phenomenon."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cos(pi * k / n) interior Gauss nodes instead of Lobatto boundary nodes",
+        "failure_mechanism": "Boundary points not included, preventing strict boundary condition enforcement in collocation.",
+        "counterexample_input": "n=5, a=-1.0, b=1.0",
+        "verified_fix": "Use denominator n - 1 so endpoints k=0 and k=n-1 yield exact interval boundaries."
+      }
+    ],
+    "source_code": "def chebyshev_nodes_1d(n: int, a: float, b: float) -> list[float]:\n    count = max(2, min(64, abs(int(n))))\n    left = min(float(a), float(b))\n    right = max(float(a), float(b))\n    half_span = 0.5 * (right - left)\n    mid = 0.5 * (left + right)\n    nodes = []\n    denom = float(count - 1)\n    for k in range(count):\n        theta = math.pi * float(k) / denom\n        x_ref = math.cos(theta)\n        mapped = mid - half_span * x_ref\n        nodes.append(mapped)\n    return nodes\n",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "clenshaw_curtis_eval",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Clenshaw backward recurrence evaluating Chebyshev polynomial series sum.",
+    "pseudocode": "1. Initialize backward recurrence registers b1 = 0.0, b2 = 0.0.\n2. Iteratively update bk = 2*x*b1 - b2 + ck for k from N-1 down to 1.\n3. Return c0 + x*b1 - b2.",
+    "invariants": [
+      "Backward stable O(N) evaluation avoiding direct trigonometric transformations.",
+      "Exact evaluation matching orthogonal Chebyshev expansion."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Evaluating powers x^k directly in standard monomial basis",
+        "failure_mechanism": "Severe ill-conditioning and catastrophic cancellation for high polynomial degrees.",
+        "counterexample_input": "coeffs=[1.0, -1.0, 1.0, -1.0, 1.0], x=0.95",
+        "verified_fix": "Use Clenshaw backward recurrence directly on Chebyshev coefficients."
+      }
+    ],
+    "source_code": "def clenshaw_curtis_eval(coeffs: list[float], x: float) -> float:\n    n = len(coeffs)\n    if n == 0:\n        return 0.0\n    if n == 1:\n        return coeffs[0]\n    b1 = 0.0\n    b2 = 0.0\n    two_x = 2.0 * x\n    for k in range(n - 1, 0, -1):\n        b0 = two_x * b1 - b2 + coeffs[k]\n        b2 = b1\n        b1 = b0\n    res = coeffs[0] + x * b1 - b2\n    return res",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "neville_polynomial_interpolate",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Neville algorithm evaluating unique interpolating polynomial through data points.",
+    "pseudocode": "1. Initialize tableau diagonal with given sample ordinates ys.\n2. Recursively combine adjacent polynomial approximations: P = ((x - xj)*Pi + (xi - x)*Pj) / (xi - xj).\n3. Return final extrapolated value at apex of tableau.",
+    "invariants": [
+      "Interpolates all points exactly: P(x_i) == y_i for all sample points.",
+      "Produces unique polynomial interpolation of degree <= n - 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "P = ((x - xj)*Pi + (xi - x)*Pj) / (xi - xj) without duplicate x check",
+        "failure_mechanism": "Duplicate abscissae in sample data trigger division by zero in tableau denominator.",
+        "counterexample_input": "xs=[1.0, 1.0], ys=[2.0, 3.0], x_eval=1.5",
+        "verified_fix": "Guard denominator with minimum distance threshold."
+      }
+    ],
+    "source_code": "def neville_polynomial_interpolate(xs: list[float], ys: list[float], x_eval: float) -> float:\n    n = min(len(xs), len(ys))\n    if n == 0:\n        return 0.0\n    p = [float(y) for y in ys[:n]]\n    for m in range(1, n):\n        for i in range(n - m):\n            j = i + m\n            dx = xs[i] - xs[j]\n            if abs(dx) < 1e-14:\n                dx = 1e-14 if dx >= 0.0 else -1e-14\n            p[i] = ((x_eval - xs[j]) * p[i] + (xs[i] - x_eval) * p[i + 1]) / dx\n    return p[0]",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "cubic_hermite_spline_point",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates C1-continuous cubic Hermite spline interpolation on local interval.",
+    "pseudocode": "1. Compute interval width dx and normalized coordinate t = (x - x0) / dx.\n2. Evaluate cubic Hermite basis functions h00, h10, h01, h11.\n3. Linearly combine endpoints and tangent slopes.",
+    "invariants": [
+      "Matches boundary function values y0, y1 and derivative slopes m0, m1 exactly.",
+      "Maintains global C1 derivative continuity across adjacent spline segments."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unclamped normalized coordinate t",
+        "failure_mechanism": "Evaluating outside the local interval [x0, x1] produces divergent polynomial extrapolation.",
+        "counterexample_input": "x0=0.0, x1=1.0, y0=0.0, y1=1.0, m0=1.0, m1=1.0, x=5.0",
+        "verified_fix": "Clamp normalized parameter t to unit interval [0.0, 1.0]."
+      }
+    ],
+    "source_code": "def cubic_hermite_spline_point(x0: float, x1: float, y0: float, y1: float, m0: float, m1: float, x: float) -> float:\n    dx = x1 - x0\n    if abs(dx) < 1e-14:\n        return 0.5 * (y0 + y1)\n    raw_t = (x - x0) / dx\n    t = min(1.0, max(0.0, raw_t))\n    t2 = t * t\n    t3 = t2 * t\n    h00 = 2.0 * t3 - 3.0 * t2 + 1.0\n    h10 = t3 - 2.0 * t2 + t\n    h01 = -2.0 * t3 + 3.0 * t2\n    h11 = t3 - t2\n    val = h00 * y0 + h10 * dx * m0 + h01 * y1 + h11 * dx * m1\n    return val",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "barycentric_lagrange_interpolate",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Second form Barycentric Lagrange polynomial interpolation with singularity protection.",
+    "pseudocode": "1. Check if evaluation point matches any interpolation node within tolerance.\n2. Accumulate numerator sum(w_i * y_i / (x - x_i)) and denominator sum(w_i / (x - x_i)).\n3. Return numerator / denominator in O(N) operations.",
+    "invariants": [
+      "Forward and backward numerically stable interpolation in O(N) complexity.",
+      "Exact interpolation at nodes: returns y_i when |x - x_i| < eps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sum(w * y / (x - xi)) without exact knot check",
+        "failure_mechanism": "Exact evaluation at node x == xi produces ZeroDivisionError (0/0 indeterminate form).",
+        "counterexample_input": "xs=[0.0, 1.0], ys=[2.0, 4.0], ws=[1.0, -1.0], x=0.0",
+        "verified_fix": "Detect knot proximity |x - xi| < 1e-14 and return corresponding yi directly."
+      }
+    ],
+    "source_code": "def barycentric_lagrange_interpolate(xs: list[float], ys: list[float], ws: list[float], x: float) -> float:\n    n = min(len(xs), len(ys), len(ws))\n    if n == 0:\n        return 0.0\n    num = 0.0\n    denom = 0.0\n    for i in range(n):\n        diff = x - xs[i]\n        if abs(diff) < 1e-14:\n            return ys[i]\n        term = ws[i] / diff\n        num = num + term * ys[i]\n        denom = denom + term\n    if abs(denom) < 1e-15:\n        return 0.0\n    res = num / denom\n    return res",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "tridiagonal_thomas_solve",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Thomas algorithm (TDMA) for solving tridiagonal linear equation systems in O(N).",
+    "pseudocode": "1. Forward sweep: compute modified upper diagonal c' and RHS d'.\n2. Guard against zero pivot on diagonal elements.\n3. Back substitution sweep computing solution vector x.",
+    "invariants": [
+      "Executes in strictly linear O(N) arithmetic operations.",
+      "Unconditionally stable for strictly diagonally dominant matrices."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "denom = b[i] - a[i-1] * c_prime[i-1] without zero check",
+        "failure_mechanism": "Singular or near-singular tridiagonal pivot causes ZeroDivisionError.",
+        "counterexample_input": "a=[1.0], b=[1.0, 1.0], c=[1.0], d=[2.0, 2.0]",
+        "verified_fix": "Detect near-zero pivot denominator and substitute epsilon safeguard."
+      }
+    ],
+    "source_code": "def tridiagonal_thomas_solve(a: list[float], b: list[float], c: list[float], d: list[float]) -> list[float]:\n    n = len(b)\n    if n == 0 or len(d) < n:\n        return []\n    c_prime = [0.0] * n\n    d_prime = [0.0] * n\n    b0 = b[0] if abs(b[0]) > 1e-14 else 1e-14 if b[0] >= 0.0 else -1e-14\n    c_prime[0] = (c[0] if len(c) > 0 else 0.0) / b0\n    d_prime[0] = d[0] / b0\n    for i in range(1, n):\n        ai = a[i - 1] if i - 1 < len(a) else 0.0\n        denom = b[i] - ai * c_prime[i - 1]\n        if abs(denom) < 1e-14:\n            denom = 1e-14 if denom >= 0.0 else -1e-14\n        ci = c[i] if i < len(c) else 0.0\n        c_prime[i] = ci / denom\n        d_prime[i] = (d[i] - ai * d_prime[i - 1]) / denom\n    x = [0.0] * n\n    x[-1] = d_prime[-1]\n    for i in range(n - 2, -1, -1):\n        x[i] = d_prime[i] - c_prime[i] * x[i + 1]\n    return x",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "lu_doolittle_decompose",
+    "param_types": [
+      "list[list[float]]",
+      "int"
+    ],
+    "return_type": "tuple[list[list[float]], list[list[float]]]",
+    "summary": "Doolittle LU factorization of square matrix into unit lower and upper triangular matrices.",
+    "pseudocode": "1. Initialize L with unit diagonal and U with zeros.\n2. Iteratively compute row i of U and column i of L.\n3. Return pair (L, U) such that L * U == A.",
+    "invariants": [
+      "Product L * U reconstructs original matrix A to machine precision.",
+      "Unit lower triangular structure: L[i][i] == 1.0 for all i."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "L[j][i] = (A[j][i] - sum_k) / U[i][i] without pivot check",
+        "failure_mechanism": "Zero pivot U[i][i] causes ZeroDivisionError without pivoting.",
+        "counterexample_input": "a_mat=[[0.0, 1.0], [1.0, 0.0]], n=2",
+        "verified_fix": "Clamp U[i][i] pivot denominator to safe non-zero magnitude."
+      }
+    ],
+    "source_code": "def lu_doolittle_decompose(a_mat: list[list[float]], n: int) -> tuple[list[list[float]], list[list[float]]]:\n    dim = min(abs(n), len(a_mat))\n    if dim == 0:\n        return ([], [])\n    l_mat = [[1.0 if r == c else 0.0 for c in range(dim)] for r in range(dim)]\n    u_mat = [[0.0 for _ in range(dim)] for _ in range(dim)]\n    for i in range(dim):\n        for k in range(i, dim):\n            s = sum((l_mat[i][p] * u_mat[p][k] for p in range(i)))\n            val = a_mat[i][k] if k < len(a_mat[i]) else 0.0\n            u_mat[i][k] = val - s\n        for k in range(i + 1, dim):\n            s = sum((l_mat[k][p] * u_mat[p][i] for p in range(i)))\n            val = a_mat[k][i] if i < len(a_mat[k]) else 0.0\n            piv = u_mat[i][i]\n            if abs(piv) < 1e-14:\n                piv = 1e-14 if piv >= 0.0 else -1e-14\n            l_mat[k][i] = (val - s) / piv\n    return (l_mat, u_mat)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "cholesky_banachiewicz_decompose",
+    "param_types": [
+      "list[list[float]]",
+      "int"
+    ],
+    "return_type": "list[list[float]]",
+    "summary": "Cholesky Banachiewicz decomposition of symmetric positive-definite matrix A = L * L^T.",
+    "pseudocode": "1. For row i, compute diagonal entry L[i][i] as sqrt(A[i][i] - sum(L[i][k]^2)).\n2. Compute subdiagonal entries L[j][i] = (A[j][i] - sum(L[i][k]*L[j][k])) / L[i][i].\n3. Return lower triangular matrix L.",
+    "invariants": [
+      "Matrix product L * L^T equals original matrix A for positive-definite input.",
+      "Strictly lower triangular format with non-negative diagonal elements."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sqrt(A[i][i] - sum(L[i][k]^2)) without non-negativity guard",
+        "failure_mechanism": "Negative value from indefinite matrix or roundoff raises ValueError in math.sqrt.",
+        "counterexample_input": "a_mat=[[-1.0, 0.0], [0.0, -1.0]], n=2",
+        "verified_fix": "Clamp radicand with max(0.0, ...) to ensure non-negative square root."
+      }
+    ],
+    "source_code": "def cholesky_banachiewicz_decompose(a_mat: list[list[float]], n: int) -> list[list[float]]:\n    dim = min(abs(n), len(a_mat))\n    if dim == 0:\n        return []\n    l_mat = [[0.0 for _ in range(dim)] for _ in range(dim)]\n    for i in range(dim):\n        for j in range(i + 1):\n            s = sum((l_mat[i][k] * l_mat[j][k] for k in range(j)))\n            val = a_mat[i][j] if j < len(a_mat[i]) else 0.0\n            if i == j:\n                diff = max(0.0, val - s)\n                l_mat[i][j] = math.sqrt(diff)\n            else:\n                piv = l_mat[j][j]\n                if abs(piv) < 1e-14:\n                    piv = 1e-14 if piv >= 0.0 else -1e-14\n                l_mat[i][j] = (val - s) / piv\n    return l_mat",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "gram_schmidt_qr_factorize",
+    "param_types": [
+      "list[list[float]]",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[list[list[float]], list[list[float]]]",
+    "summary": "Modified Gram-Schmidt orthogonalization computing QR matrix factorization.",
+    "pseudocode": "1. Extract columns of matrix A.\n2. Sequentially project and orthogonalize updated columns against preceding vectors.\n3. Assemble orthogonal Q and upper triangular R.",
+    "invariants": [
+      "Columns of Q are mutually orthonormal: Q^T * Q == I.",
+      "Matrix R is strictly upper triangular with non-negative diagonal."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Classical Gram-Schmidt projecting onto un-updated vectors",
+        "failure_mechanism": "Loss of orthogonality in floating point arithmetic degrades classical Gram-Schmidt.",
+        "counterexample_input": "a_mat=[[1.0, 1.0], [1e-8, 0.0], [0.0, 1e-8]], m=3, n=2",
+        "verified_fix": "Use Modified Gram-Schmidt sequentially projecting updated vector remainder."
+      }
+    ],
+    "source_code": "def gram_schmidt_qr_factorize(a_mat: list[list[float]], m: int, n: int) -> tuple[list[list[float]], list[list[float]]]:\n    rows = min(abs(m), len(a_mat))\n    if rows == 0:\n        return ([], [])\n    cols = min(abs(n), len(a_mat[0]))\n    if cols == 0:\n        return ([], [])\n    v_cols = [[a_mat[r][c] for r in range(rows)] for c in range(cols)]\n    q_cols = [[0.0 for _ in range(rows)] for _ in range(cols)]\n    r_mat = [[0.0 for _ in range(cols)] for _ in range(cols)]\n    for i in range(cols):\n        norm_sq = sum((v_cols[i][r] * v_cols[i][r] for r in range(rows)))\n        norm_v = math.sqrt(norm_sq)\n        r_mat[i][i] = norm_v\n        if norm_v > 1e-14:\n            q_cols[i] = [v_cols[i][r] / norm_v for r in range(rows)]\n        else:\n            q_cols[i] = [0.0 for _ in range(rows)]\n        for j in range(i + 1, cols):\n            dot_prod = sum((q_cols[i][r] * v_cols[j][r] for r in range(rows)))\n            r_mat[i][j] = dot_prod\n            for r in range(rows):\n                v_cols[j][r] = v_cols[j][r] - dot_prod * q_cols[i][r]\n    q_mat = [[q_cols[c][r] for c in range(cols)] for r in range(rows)]\n    return (q_mat, r_mat)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "householder_reflector_vector",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes Householder unit reflector vector with sign choice avoiding cancellation.",
+    "pseudocode": "1. Compute Euclidean norm of vector x.\n2. Choose sign of reflector norm to match sign of x[0].\n3. Normalize reflector vector v such that norm(v) == 1.0.",
+    "invariants": [
+      "Euclidean norm of computed Householder reflector is exactly 1.0.",
+      "Applying transformation (I - 2*v*v^T)*x zeroes all elements below first index."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v[0] = x[0] - norm(x) unconditionally",
+        "failure_mechanism": "Catastrophic cancellation when x[0] > 0 and x[0] ~= norm(x).",
+        "counterexample_input": "x_vec=[1.0, 1e-8, 1e-8]",
+        "verified_fix": "Use sign convention v[0] = x[0] + copysign(norm(x), x[0]) to prevent cancellation."
+      }
+    ],
+    "source_code": "def householder_reflector_vector(x_vec: list[float]) -> list[float]:\n    n = len(x_vec)\n    if n == 0:\n        return []\n    norm_sq = sum((val * val for val in x_vec))\n    sigma = math.sqrt(norm_sq)\n    if sigma < 1e-15:\n        return [1.0] + [0.0] * (n - 1)\n    sign = 1.0 if x_vec[0] >= 0.0 else -1.0\n    v = [float(val) for val in x_vec]\n    v[0] = v[0] + sign * sigma\n    v_norm = math.sqrt(sum((val * val for val in v)))\n    if v_norm < 1e-15:\n        return [1.0] + [0.0] * (n - 1)\n    unit_v = [val / v_norm for val in v]\n    return unit_v",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "givens_rotation_matrix_entries",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Stable computation of Givens rotation cosine and sine matrix parameters.",
+    "pseudocode": "1. Check if b is negligible and return identity rotation (1, 0).\n2. Branch on magnitude comparison |b| > |a| to scale quotient.\n3. Compute c = 1/sqrt(1 + t^2) and s = c * t.",
+    "invariants": [
+      "Trigonometric identity c^2 + s^2 == 1.0 holds to machine precision.",
+      "Zeroing property: -s * a + c * b == 0.0 eliminates second element."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "c = a / sqrt(a*a + b*b), s = b / sqrt(a*a + b*b)",
+        "failure_mechanism": "Squaring extreme floating point values causes overflow to infinity or underflow to zero.",
+        "counterexample_input": "a=1e200, b=1e200",
+        "verified_fix": "Compute scaled ratio t = min(a, b) / max(a, b) before computing hypotenuse."
+      }
+    ],
+    "source_code": "def givens_rotation_matrix_entries(a: float, b: float) -> tuple[float, float]:\n    scale_a = float(a)\n    scale_b = float(b)\n    if abs(scale_b) < 1e-15:\n        return (1.0, 0.0)\n    if abs(scale_b) > abs(scale_a):\n        tau = scale_a / scale_b\n        s = 1.0 / math.sqrt(1.0 + tau * tau)\n        c = s * tau\n    else:\n        tau = scale_b / scale_a\n        c = 1.0 / math.sqrt(1.0 + tau * tau)\n        s = c * tau\n    return (c, s)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "power_iteration_dominant_eigen",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "int"
+    ],
+    "return_type": "tuple[float, list[float]]",
+    "summary": "Power iteration computing dominant eigenvalue and corresponding normalized eigenvector.",
+    "pseudocode": "1. Normalize initial trial vector.\n2. Iteratively multiply by matrix A and re-normalize vector.\n3. Compute Rayleigh quotient eigenvalue estimate from final iterate.",
+    "invariants": [
+      "Eigenvector estimate has Euclidean norm equal to 1.0 upon exit.",
+      "Eigenvalue estimate converges geometrically with ratio |lambda_2 / lambda_1|."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Iterating matrix-vector multiply without per-step normalization",
+        "failure_mechanism": "Repeated multiplication by matrix with dominant eigenvalue > 1 overflows to infinity.",
+        "counterexample_input": "a_mat=[[2.0, 0.0], [0.0, 2.0]], v_init=[1.0, 1.0], iters=100",
+        "verified_fix": "Normalize vector to unit norm at every iteration step."
+      }
+    ],
+    "source_code": "def power_iteration_dominant_eigen(a_mat: list[list[float]], v_init: list[float], iters: int) -> tuple[float, list[float]]:\n    n = len(v_init)\n    if n == 0 or len(a_mat) < n:\n        return (0.0, [])\n    norm_v = math.sqrt(sum((x * x for x in v_init)))\n    v = [x / norm_v for x in v_init] if norm_v > 1e-14 else [1.0] + [0.0] * (n - 1)\n    max_steps = max(1, min(100, abs(iters)))\n    for _ in range(max_steps):\n        w = [sum((a_mat[r][c] * v[c] for c in range(min(n, len(a_mat[r]))))) for r in range(n)]\n        norm_w = math.sqrt(sum((x * x for x in w)))\n        if norm_w < 1e-14:\n            break\n        v = [x / norm_w for x in w]\n    av = [sum((a_mat[r][c] * v[c] for c in range(min(n, len(a_mat[r]))))) for r in range(n)]\n    eigenval = sum((v[i] * av[i] for i in range(n)))\n    return (eigenval, v)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "rayleigh_quotient_iteration",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Rayleigh quotient scalar evaluating eigenvalue estimate v^T * A * v / (v^T * v).",
+    "pseudocode": "1. Compute denominator inner product v^T * v.\n2. Compute matrix-vector product w = A * v.\n3. Return numerator v^T * w divided by denominator.",
+    "invariants": [
+      "Bounded within numerical range [lambda_min, lambda_max] for symmetric matrices.",
+      "Stationary point property: gradient vanishes when v is an eigenvector."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "num / denom without denominator norm check",
+        "failure_mechanism": "Passing zero vector causes ZeroDivisionError.",
+        "counterexample_input": "a_mat=[[1.0, 0.0], [0.0, 1.0]], v_vec=[0.0, 0.0]",
+        "verified_fix": "Verify denominator v^T * v > 1e-15 and return 0.0 for zero vector."
+      }
+    ],
+    "source_code": "def rayleigh_quotient_iteration(a_mat: list[list[float]], v_vec: list[float]) -> float:\n    n = len(v_vec)\n    if n == 0 or len(a_mat) < n:\n        return 0.0\n    denom = sum((x * x for x in v_vec))\n    if denom < 1e-15:\n        return 0.0\n    av = [sum((a_mat[r][c] * v_vec[c] for c in range(min(n, len(a_mat[r]))))) for r in range(n)]\n    num = sum((v_vec[i] * av[i] for i in range(n)))\n    quot = num / denom\n    return quot",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "jacobi_eigenvalue_2x2_sweep",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float, float, float]",
+    "summary": "Exact Jacobi diagonalizer for symmetric 2x2 matrix returning eigenvalues and rotation.",
+    "pseudocode": "1. Compute tau = (a22 - a11) / (2 * a12).\n2. Compute stable tangent t = sgn(tau) / (|tau| + sqrt(1 + tau^2)).\n3. Compute c = 1/sqrt(1 + t^2), s = t*c and rotated diagonal eigenvalues.",
+    "invariants": [
+      "Preserves matrix trace: lambda1 + lambda2 == a11 + a22.",
+      "Orthogonal rotation matrix: c^2 + s^2 == 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "t = tan(0.5 * atan(2 * a12 / (a22 - a11)))",
+        "failure_mechanism": "Trigonometric evaluation is slow and inaccurate when a11 == a22.",
+        "counterexample_input": "a11=1.0, a12=1.0, a22=1.0",
+        "verified_fix": "Use algebraic formulation t = sgn(tau) / (|tau| + sqrt(1 + tau^2))."
+      }
+    ],
+    "source_code": "def jacobi_eigenvalue_2x2_sweep(a11: float, a12: float, a22: float) -> tuple[float, float, float, float]:\n    if abs(a12) < 1e-14:\n        return (a11, a22, 1.0, 0.0)\n    tau = (a22 - a11) / (2.0 * a12)\n    s_tau = 1.0 if tau >= 0.0 else -1.0\n    t = s_tau / (abs(tau) + math.sqrt(1.0 + tau * tau))\n    c = 1.0 / math.sqrt(1.0 + t * t)\n    s = t * c\n    lam1 = a11 - t * a12\n    lam2 = a22 + t * a12\n    return (lam1, lam2, c, s)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "gauss_seidel_iteration_step",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Single Gauss-Seidel relaxation sweep for linear system A * x = b.",
+    "pseudocode": "1. Copy previous iterate.\n2. In-place update each component xi using latest available estimates.\n3. Return updated solution vector.",
+    "invariants": [
+      "Strictly contractive iteration mapping for diagonally dominant matrices.",
+      "Preserves exact solution when starting from true solution."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using only old iterate values x_old[j] for j < i",
+        "failure_mechanism": "Failing to use newly computed x[j] values reduces Gauss-Seidel to slower Jacobi iteration.",
+        "counterexample_input": "a_mat=[[2.0, 1.0], [1.0, 2.0]], b_vec=[3.0, 3.0], x_vec=[0.0, 0.0]",
+        "verified_fix": "Update coordinate x[i] immediately and use updated values for subsequent rows."
+      }
+    ],
+    "source_code": "def gauss_seidel_iteration_step(a_mat: list[list[float]], b_vec: list[float], x_vec: list[float]) -> list[float]:\n    n = min(len(a_mat), len(b_vec), len(x_vec))\n    if n == 0:\n        return []\n    x = [float(v) for v in x_vec[:n]]\n    for i in range(n):\n        s1 = sum((a_mat[i][j] * x[j] for j in range(i) if j < len(a_mat[i])))\n        s2 = sum((a_mat[i][j] * x[j] for j in range(i + 1, n) if j < len(a_mat[i])))\n        diag = a_mat[i][i] if i < len(a_mat[i]) else 1.0\n        if abs(diag) < 1e-14:\n            diag = 1e-14 if diag >= 0.0 else -1e-14\n        x[i] = (b_vec[i] - s1 - s2) / diag\n    return x",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "sor_iteration_step",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Successive Over-Relaxation (SOR) iteration step with relaxation parameter omega.",
+    "pseudocode": "1. Compute standard Gauss-Seidel candidate for component i.\n2. Interpolate with previous iterate: x_new = (1 - omega)*x_old + omega*x_gs.\n3. Return relaxed solution vector.",
+    "invariants": [
+      "Converges for symmetric positive-definite systems for any omega in (0, 2).",
+      "Reduces to standard Gauss-Seidel when omega == 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Allowing relaxation parameter omega >= 2.0",
+        "failure_mechanism": "Relaxation factor outside interval (0, 2) violates Ostrowski-Reich theorem causing explosive divergence.",
+        "counterexample_input": "a_mat=[[2.0, 0.0], [0.0, 2.0]], b_vec=[2.0, 2.0], x_vec=[0.0, 0.0], omega=2.5",
+        "verified_fix": "Clamp omega to valid contractive interval (0.01, 1.99)."
+      }
+    ],
+    "source_code": "def sor_iteration_step(a_mat: list[list[float]], b_vec: list[float], x_vec: list[float], omega: float) -> list[float]:\n    n = min(len(a_mat), len(b_vec), len(x_vec))\n    if n == 0:\n        return []\n    w = max(0.01, min(1.99, abs(omega)))\n    x = [float(val) for val in x_vec[:n]]\n    for i in range(n):\n        s1 = sum((a_mat[i][j] * x[j] for j in range(i) if j < len(a_mat[i])))\n        s2 = sum((a_mat[i][j] * x[j] for j in range(i + 1, n) if j < len(a_mat[i])))\n        diag = a_mat[i][i] if i < len(a_mat[i]) else 1.0\n        if abs(diag) < 1e-14:\n            diag = 1e-14 if diag >= 0.0 else -1e-14\n        x_gs = (b_vec[i] - s1 - s2) / diag\n        x[i] = (1.0 - w) * x[i] + w * x_gs\n    return x",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "conjugate_gradient_step",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "tuple[list[float], list[float], float]",
+    "summary": "Single iteration step of Conjugate Gradient method updating residual, direction, and beta.",
+    "pseudocode": "1. Compute updated residual r_next = r - alpha * Ap.\n2. Compute Fletcher-Reeves beta = dot(r_next, r_next) / dot(r, r).\n3. Update search direction p_next = r_next + beta * p.",
+    "invariants": [
+      "New search direction p_next is A-conjugate to previous search directions.",
+      "Residual norm strictly decreases monotonically across valid CG iterations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "beta = dot(r_next, r_next) / dot(r, r) without zero check",
+        "failure_mechanism": "Zero initial residual dot(r, r) causes ZeroDivisionError.",
+        "counterexample_input": "r_vec=[0.0, 0.0], p_vec=[1.0, 1.0], ap_vec=[1.0, 1.0], alpha=0.1",
+        "verified_fix": "Enforce minimum threshold on dot(r, r) and return zero beta on convergence."
+      }
+    ],
+    "source_code": "def conjugate_gradient_step(r_vec: list[float], p_vec: list[float], ap_vec: list[float], alpha: float) -> tuple[list[float], list[float], float]:\n    n = min(len(r_vec), len(p_vec), len(ap_vec))\n    if n == 0:\n        return ([], [], 0.0)\n    denom = sum((x * x for x in r_vec[:n]))\n    if denom < 1e-15:\n        return ([0.0] * n, [0.0] * n, 0.0)\n    r_next = [r_vec[i] - alpha * ap_vec[i] for i in range(n)]\n    num = sum((x * x for x in r_next))\n    beta = num / denom\n    p_next = [r_next[i] + beta * p_vec[i] for i in range(n)]\n    return (r_next, p_next, beta)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "gmres_givens_arnoldi_step",
+    "param_types": [
+      "list[list[float]]",
+      "list[float]",
+      "list[float]",
+      "int"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Applies previous Givens rotations and computes new rotation for GMRES upper Hessenberg column.",
+    "pseudocode": "1. Apply preceding k Givens rotations to column k of upper Hessenberg matrix H.\n2. Compute new Givens rotation (c, s) to eliminate subdiagonal entry H[k+1][k].\n3. Return rotation coefficients (c, s).",
+    "invariants": [
+      "Computed rotation parameters satisfy c^2 + s^2 == 1.0.",
+      "Eliminates subdiagonal entry H[k+1][k], reducing matrix to triangular form."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked hypotenuse in Givens angle computation",
+        "failure_mechanism": "Zero pivot causes ZeroDivisionError or NaN when column is already eliminated.",
+        "counterexample_input": "h_mat=[[1.0], [0.0]], cs_vec=[], sn_vec=[], k=0",
+        "verified_fix": "Return identity rotation (1.0, 0.0) when subdiagonal entry is negligible."
+      }
+    ],
+    "source_code": "def gmres_givens_arnoldi_step(h_mat: list[list[float]], cs_vec: list[float], sn_vec: list[float], k: int) -> tuple[float, float]:\n    idx = max(0, abs(k))\n    if idx + 1 >= len(h_mat) or idx >= len(h_mat[idx]):\n        return (1.0, 0.0)\n    col = [h_mat[r][idx] if idx < len(h_mat[r]) else 0.0 for r in range(idx + 2)]\n    n_rot = min(idx, len(cs_vec), len(sn_vec))\n    for i in range(n_rot):\n        c = cs_vec[i]\n        s = sn_vec[i]\n        t1 = c * col[i] - s * col[i + 1]\n        t2 = s * col[i] + c * col[i + 1]\n        col[i] = t1\n        col[i + 1] = t2\n    a = col[idx]\n    b = col[idx + 1]\n    if abs(b) < 1e-15:\n        return (1.0, 0.0)\n    hyp = math.hypot(a, b)\n    c_new = a / hyp\n    s_new = -b / hyp\n    return (c_new, s_new)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "rk45_fehlberg_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Embedded Runge-Kutta-Fehlberg RK4(5) step computing 4th-order state and 5th-order error.",
+    "pseudocode": "1. Compute 4th-order solution y4 using Fehlberg CH coefficients.\n2. Compute 5th-order solution y5 using Fehlberg CT coefficients.\n3. Return pair (y4, abs(y5 - y4)) providing adaptive step error estimate.",
+    "invariants": [
+      "Fourth-order accurate state update with O(h^5) local truncation error estimate.",
+      "Error estimate approaches zero as step size h tends to zero."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "abs(h) == 0.0 step size",
+        "failure_mechanism": "Zero step size causes stagnation without advancing time.",
+        "counterexample_input": "t=0.0, y=1.0, h=0.0, k1=1.0, k2=1.0, k3=1.0, k4=1.0, k5=1.0, k6=1.0",
+        "verified_fix": "Enforce minimum step size magnitude abs(h) >= 1e-15."
+      }
+    ],
+    "source_code": "def rk45_fehlberg_step(t: float, y: float, h: float, k1: float, k2: float, k3: float, k4: float, k5: float, k6: float) -> tuple[float, float]:\n    step = h if abs(h) > 1e-15 else 1e-15\n    y4 = y + step * (25.0 / 216.0 * k1 + 1408.0 / 2565.0 * k3 + 2197.0 / 4104.0 * k4 - 1.0 / 5.0 * k5)\n    y5 = y + step * (16.0 / 135.0 * k1 + 6656.0 / 12825.0 * k3 + 28561.0 / 56430.0 * k4 - 9.0 / 50.0 * k5 + 2.0 / 55.0 * k6)\n    err = abs(y5 - y4)\n    return (y4, err)",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "adams_bashforth_4step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Explicit 4-step Adams-Bashforth linear multistep ODE integration step.",
+    "pseudocode": "1. Apply Adams-Bashforth 4th-order coefficients [55, -59, 37, -9] / 24.\n2. Scale combined derivative history by step size h.\n3. Return updated state y + delta.",
+    "invariants": [
+      "Local truncation error scales as O(h^5).",
+      "Explicit evaluation requiring single derivative evaluation per step."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Applying AB4 with variable step sizes h",
+        "failure_mechanism": "AB4 coefficients are derived for uniform step sizes; changing h breaks 4th-order consistency.",
+        "counterexample_input": "y=1.0, h=0.01, f0=1.0, f1=1.0, f2=1.0, f3=1.0",
+        "verified_fix": "Maintain constant step size or interpolate derivative history before applying coefficients."
+      }
+    ],
+    "source_code": "def adams_bashforth_4step(y: float, h: float, f0: float, f1: float, f2: float, f3: float) -> float:\n    c0 = 55.0 * f0\n    c1 = 59.0 * f1\n    c2 = 37.0 * f2\n    c3 = 9.0 * f3\n    delta = h / 24.0 * (c0 - c1 + c2 - c3)\n    y_next = y + delta\n    return y_next",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "adams_moulton_3step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Implicit 3-step Adams-Moulton ODE corrector step using future and past derivatives.",
+    "pseudocode": "1. Combine implicit derivative fn1 with past derivatives f0, f1, f2.\n2. Apply Adams-Moulton 3rd-order coefficients [9, 19, -5, 1] / 24.\n3. Return corrected state y + delta.",
+    "invariants": [
+      "Local truncation error scales as O(h^4) with smaller error constant than explicit methods.",
+      "Substantially larger stability region compared to explicit Adams-Bashforth."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using predictor value without corrector iteration",
+        "failure_mechanism": "Omitting corrector step forfeits A-stability damping of stiff high-frequency modes.",
+        "counterexample_input": "y=1.0, h=0.05, fn1=2.0, f0=1.5, f1=1.2, f2=1.0",
+        "verified_fix": "Apply implicit corrector combination to damp numerical oscillations."
+      }
+    ],
+    "source_code": "def adams_moulton_3step(y: float, h: float, fn1: float, f0: float, f1: float, f2: float) -> float:\n    c_next = 9.0 * fn1\n    c0 = 19.0 * f0\n    c1 = 5.0 * f1\n    c2 = 1.0 * f2\n    delta = h / 24.0 * (c_next + c0 - c1 + c2)\n    y_next = y + delta\n    return y_next",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "backward_differentiation_bdf2",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Second-order Backward Differentiation Formula (BDF2) step for stiff differential equations.",
+    "pseudocode": "1. Weight current state yn by 4/3 and previous state yn_minus_1 by -1/3.\n2. Add implicit derivative contribution (2/3) * h * f_next.\n3. Return updated state y_next.",
+    "invariants": [
+      "Second-order A-stable linear multistep method.",
+      "Strong numerical damping for rapidly decaying stiff transient modes."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Applying BDF2 on first step without initial seed",
+        "failure_mechanism": "BDF2 requires two history points yn and yn-1; starting cold yields incorrect order.",
+        "counterexample_input": "yn=1.0, yn_minus_1=0.0, h=0.1, f_next=1.0",
+        "verified_fix": "Initialize first time step with backward Euler (BDF1) or Runge-Kutta before engaging BDF2."
+      }
+    ],
+    "source_code": "def backward_differentiation_bdf2(yn: float, yn_minus_1: float, h: float, f_next: float) -> float:\n    term1 = 4.0 / 3.0 * yn\n    term2 = 1.0 / 3.0 * yn_minus_1\n    term3 = 2.0 / 3.0 * h * f_next\n    y_next = term1 - term2 + term3\n    return y_next",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "crank_nicolson_diffusion_step",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Explicit RHS evaluation for Crank-Nicolson parabolic diffusion time step update.",
+    "pseudocode": "1. Clamp mesh Fourier ratio r = alpha * dt / dx^2.\n2. Compute second central difference for each interior grid point.\n3. Add explicit half-step diffusion to previous time state.",
+    "invariants": [
+      "Unconditionally stable second-order accuracy in space and time.",
+      "Preserves total conserved scalar mass under zero-flux boundary conditions."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Unchecked mesh Fourier number r > 2.0",
+        "failure_mechanism": "Large r produces spurious non-physical oscillations near boundary layers.",
+        "counterexample_input": "u_vec=[1.0, 0.0, 1.0], r_param=10.0",
+        "verified_fix": "Clamp parameter r or refine time step to satisfy recommended ratio r <= 1.0."
+      }
+    ],
+    "source_code": "def crank_nicolson_diffusion_step(u_vec: list[float], r_param: float) -> list[float]:\n    n = len(u_vec)\n    if n < 2:\n        return list(u_vec)\n    r = min(1.0, max(0.0, abs(r_param)))\n    half_r = 0.5 * r\n    rhs = [float(val) for val in u_vec]\n    for i in range(1, n - 1):\n        diff2 = u_vec[i - 1] - 2.0 * u_vec[i] + u_vec[i + 1]\n        rhs[i] = u_vec[i] + half_r * diff2\n    return rhs",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "upwind_advection_step",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "First-order upwind finite difference advection step satisfying discrete maximum principle.",
+    "pseudocode": "1. Compute Courant number CFL = abs(c) * dt / dx.\n2. Select backward difference if velocity c > 0, forward difference if c < 0.\n3. Update cell values respecting wave propagation direction.",
+    "invariants": [
+      "Total Variation Diminishing (TVD): introduces zero spurious extrema.",
+      "Satisfies discrete maximum principle for CFL <= 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using central difference for advection without artificial viscosity",
+        "failure_mechanism": "Central differencing of hyperbolic advection is unconditionally unstable for explicit forward Euler.",
+        "counterexample_input": "u_vec=[0.0, 1.0, 0.0], c_vel=1.0, dt=0.1, dx=0.1",
+        "verified_fix": "Use one-sided upwind differencing oriented with the flow velocity sign."
+      }
+    ],
+    "source_code": "def upwind_advection_step(u_vec: list[float], c_vel: float, dt: float, dx: float) -> list[float]:\n    n = len(u_vec)\n    if n < 2:\n        return list(u_vec)\n    safe_dx = dx if abs(dx) > 1e-14 else 1e-14\n    cfl = abs(c_vel) * abs(dt) / abs(safe_dx)\n    eff_cfl = min(1.0, cfl)\n    u_new = [float(v) for v in u_vec]\n    if c_vel >= 0.0:\n        for i in range(1, n):\n            u_new[i] = u_vec[i] - eff_cfl * (u_vec[i] - u_vec[i - 1])\n    else:\n        for i in range(n - 1):\n            u_new[i] = u_vec[i] - eff_cfl * (u_vec[i + 1] - u_vec[i])\n    return u_new",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "lax_friedrichs_flux_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Lax-Friedrichs numerical flux for hyperbolic conservation law cell interface.",
+    "pseudocode": "1. Compute average physical flux 0.5 * (f_left + f_right).\n2. Compute numerical dissipation term 0.5 * (dx / dt) * (u_right - u_left).\n3. Return stabilized numerical interface flux.",
+    "invariants": [
+      "Conservative interface flux: F(u, u) == f(u) for uniform state.",
+      "Monotone and TVD under Courant-Friedrichs-Lewy stability condition."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "0.5 * (f_left + f_right) without numerical dissipation term",
+        "failure_mechanism": "Pure average flux produces severe checkerboard shock oscillations.",
+        "counterexample_input": "u_left=1.0, u_right=0.0, f_left=1.0, f_right=0.0, dx=0.1, dt=0.05",
+        "verified_fix": "Add numerical viscosity term proportional to (dx / dt) * (u_right - u_left)."
+      }
+    ],
+    "source_code": "def lax_friedrichs_flux_step(u_left: float, u_right: float, f_left: float, f_right: float, dx: float, dt: float) -> float:\n    safe_dt = dt if abs(dt) > 1e-14 else 1e-14\n    wavespeed = abs(dx) / abs(safe_dt)\n    avg_flux = 0.5 * (f_left + f_right)\n    dissipation = 0.5 * wavespeed * (u_right - u_left)\n    num_flux = avg_flux - dissipation\n    return num_flux",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "minmod_flux_limiter",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Minmod slope limiter function for TVD high-resolution shock capturing schemes.",
+    "pseudocode": "1. Return 0.0 if consecutive slope ratio r is non-positive.\n2. Return min(1.0, r) for positive slope ratio.\n3. Guarantees non-oscillatory TVD reconstruction.",
+    "invariants": [
+      "Satisfies Sweby TVD region bounds: 0.0 <= phi(r) <= min(2*r, 2.0).",
+      "Most diffusive symmetric limiter preventing all spurious numerical oscillations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "phi(r) = r without sign check",
+        "failure_mechanism": "Negative slope ratio indicates local extremum; unbounded limiter creates catastrophic Gibbs oscillations.",
+        "counterexample_input": "r_ratio=-1.0",
+        "verified_fix": "Return 0.0 whenever r <= 0.0 to switch to 1st-order upwind monotonicity at extrema."
+      }
+    ],
+    "source_code": "def minmod_flux_limiter(r_ratio: float) -> float:\n    r = float(r_ratio)\n    if r <= 0.0:\n        return 0.0\n    bound = 1.0\n    limiter = min(bound, r)\n    return limiter",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "superbee_flux_limiter",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Roe Superbee compressive slope limiter resolving contact discontinuities sharply.",
+    "pseudocode": "1. Return 0.0 if slope ratio r <= 0.\n2. Compute term1 = min(2*r, 1.0) and term2 = min(r, 2.0).\n3. Return max(term1, term2).",
+    "invariants": [
+      "Most compressive limiter inside Sweby TVD stability region.",
+      "Zero at local extrema (r <= 0) ensuring strict total variation boundedness."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "max(2.0 * r, 1.0) without upper ceiling",
+        "failure_mechanism": "Uncapped slope ratio exceeds TVD upper boundary (phi > 2) generating numerical instability.",
+        "counterexample_input": "r_ratio=5.0",
+        "verified_fix": "Enforce ceiling of 2.0 by taking min(r, 2.0)."
+      }
+    ],
+    "source_code": "def superbee_flux_limiter(r_ratio: float) -> float:\n    if r_ratio <= 0.0:\n        return 0.0\n    cand1 = min(2.0 * r_ratio, 1.0)\n    cand2 = min(r_ratio, 2.0)\n    phi = max(cand1, cand2)\n    return phi",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "van_leer_flux_limiter",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Smooth Van Leer slope limiter function with continuous derivative for TVD schemes.",
+    "pseudocode": "1. Return 0.0 if slope ratio r <= 0.\n2. Compute smooth quotient (r + |r|) / (1 + |r|) == 2*r / (1 + r).\n3. Return smooth limiter factor.",
+    "invariants": [
+      "Symmetric under inversion: phi(1/r) == phi(r) / r.",
+      "Smooth C1 continuity avoids artificial clipping of smooth wave peaks."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "2 * r / (1 + r) without checking r == -1",
+        "failure_mechanism": "Denominator vanishes at r = -1 producing ZeroDivisionError.",
+        "counterexample_input": "r_ratio=-1.0",
+        "verified_fix": "Return 0.0 for all r <= 0.0 to prevent division by zero and enforce TVD stability."
+      }
+    ],
+    "source_code": "def van_leer_flux_limiter(r_ratio: float) -> float:\n    if r_ratio <= 0.0:\n        return 0.0\n    num = 2.0 * r_ratio\n    denom = 1.0 + r_ratio\n    phi = num / denom\n    return phi",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "frobenius_norm_matrix",
+    "param_types": [
+      "list[list[float]]"
+    ],
+    "return_type": "float",
+    "summary": "Frobenius norm of matrix scaled by maximum element to prevent floating overflow.",
+    "pseudocode": "1. Find maximum absolute matrix element scale.\n2. If scale is negligible, return 0.0.\n3. Accumulate sum of squared scaled entries and return scale * sqrt(sum_sq).",
+    "invariants": [
+      "Submultiplicative norm property: norm(A * B) <= norm(A) * norm(B).",
+      "Strictly positive-definite: norm(A) == 0.0 iff all elements are 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sqrt(sum(x*x for row in A for x in row)) without scaling",
+        "failure_mechanism": "Squaring matrix elements exceeding 1e154 overflows to infinity.",
+        "counterexample_input": "a_mat=[[1e200, 1e200], [1e200, 1e200]]",
+        "verified_fix": "Scale all entries by maximum absolute element before squaring."
+      }
+    ],
+    "source_code": "def frobenius_norm_matrix(a_mat: list[list[float]]) -> float:\n    max_val = 0.0\n    for row in a_mat:\n        for x in row:\n            if abs(x) > max_val:\n                max_val = abs(x)\n    if max_val < 1e-15:\n        return 0.0\n    sum_sq = 0.0\n    for row in a_mat:\n        for x in row:\n            scaled = x / max_val\n            sum_sq = sum_sq + scaled * scaled\n    norm_f = max_val * math.sqrt(sum_sq)\n    return norm_f",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "condition_number_estimator_2x2",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Exact L2 matrix condition number sigma_max / sigma_min for 2x2 matrix.",
+    "pseudocode": "1. Compute entries of Gram matrix G = A^T * A.\n2. Compute eigenvalues of G via trace and discriminant.\n3. Return sqrt(lambda_max / max(lambda_min, eps)).",
+    "invariants": [
+      "Condition number is bounded below: kappa >= 1.0 for all matrices.",
+      "Invariant under orthogonal similarity transformations and scalar scaling."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sigma_max / sigma_min without singular threshold",
+        "failure_mechanism": "Singular matrix with sigma_min == 0 causes ZeroDivisionError.",
+        "counterexample_input": "a11=1.0, a12=2.0, a21=2.0, a22=4.0",
+        "verified_fix": "Clamp sigma_min to minimum epsilon threshold returning bounded condition number."
+      }
+    ],
+    "source_code": "def condition_number_estimator_2x2(a11: float, a12: float, a21: float, a22: float) -> float:\n    g11 = a11 * a11 + a21 * a21\n    g12 = a11 * a12 + a21 * a22\n    g22 = a12 * a12 + a22 * a22\n    tr = g11 + g22\n    disc = max(0.0, (g11 - g22) * (g11 - g22) + 4.0 * g12 * g12)\n    s = math.sqrt(disc)\n    lam_max = max(0.0, 0.5 * (tr + s))\n    lam_min = max(0.0, 0.5 * (tr - s))\n    sig_max = math.sqrt(lam_max)\n    sig_min = math.sqrt(lam_min)\n    if sig_min < 1e-12:\n        return 1000000000000.0 if sig_max > 0.0 else 1.0\n    kappa = sig_max / sig_min\n    return kappa",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "gershgorin_disc_bounds",
+    "param_types": [
+      "list[list[float]]",
+      "int"
+    ],
+    "return_type": "list[tuple[float, float]]",
+    "summary": "Computes Gershgorin circle intervals [A_ii - R_i, A_ii + R_i] containing all eigenvalues.",
+    "pseudocode": "1. For each row i, extract diagonal center A[i][i].\n2. Sum off-diagonal absolute values sum(|A[i][j]| for j != i) as radius R_i.\n3. Return list of intervals [center - radius, center + radius].",
+    "invariants": [
+      "Every eigenvalue of matrix A lies within the union of the Gershgorin discs.",
+      "Interval half-width Ri >= 0.0 is strictly non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Including diagonal entry A[i][i] in row sum R_i",
+        "failure_mechanism": "Adding center element to radius doubles disc size and degrades spectral enclosure.",
+        "counterexample_input": "a_mat=[[10.0, 1.0], [1.0, 10.0]], n=2",
+        "verified_fix": "Skip column j == i during off-diagonal radius summation."
+      }
+    ],
+    "source_code": "def gershgorin_disc_bounds(a_mat: list[list[float]], n: int) -> list[tuple[float, float]]:\n    dim = min(abs(n), len(a_mat))\n    if dim == 0:\n        return []\n    bounds = []\n    for i in range(dim):\n        center = a_mat[i][i] if i < len(a_mat[i]) else 0.0\n        radius = sum((abs(a_mat[i][j]) for j in range(dim) if j != i and j < len(a_mat[i])))\n        interval = (center - radius, center + radius)\n        bounds.append(interval)\n    return bounds",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "pade_approximant_eval",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates rational Pade approximant P(x) / Q(x) using Horner polynomial evaluation.",
+    "pseudocode": "1. Evaluate numerator polynomial P(x) using Horner rule.\n2. Evaluate denominator polynomial Q(x) using Horner rule.\n3. Return P(x) / Q(x) with pole safeguard.",
+    "invariants": [
+      "Extends radius of convergence beyond standard Taylor series expansion.",
+      "Matches function Taylor series coefficients up to order M + N."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_val / q_val without denominator zero guard",
+        "failure_mechanism": "Poles where Q(x) == 0 trigger ZeroDivisionError.",
+        "counterexample_input": "p_coeffs=[1.0], q_coeffs=[1.0, -1.0], x=1.0",
+        "verified_fix": "Detect near-zero denominator and return sign-preserved maximum float clamp."
+      }
+    ],
+    "source_code": "def pade_approximant_eval(p_coeffs: list[float], q_coeffs: list[float], x: float) -> float:\n    p_val = 0.0\n    for c in reversed(p_coeffs):\n        p_val = p_val * x + c\n    q_val = 0.0\n    for c in reversed(q_coeffs):\n        q_val = q_val * x + c\n    if abs(q_val) < 1e-12:\n        return 1000000000000.0 if p_val >= 0.0 else -1000000000000.0\n    res = p_val / q_val\n    return res",
+    "domain": "numerical_analysis"
+  },
+  {
+    "name": "richardson_extrapolation_step",
+    "param_types": [
+      "float",
+      "float",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Richardson extrapolation step eliminating leading order O(h^p) discretization error.",
+    "pseudocode": "1. Compute scale factor r^p with exponent clamp.\n2. Form linear combination (factor * val_fine - val_coarse) / (factor - 1).\n3. Return higher-order accurate extrapolated value.",
+    "invariants": [
+      "Asymptotically increases convergence order from p to at least p + 1.",
+      "Linear combination weights sum to exactly 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Using ratio == 1.0 or order <= 0",
+        "failure_mechanism": "factor - 1 == 0 causes division by zero when refinement ratio is unity.",
+        "counterexample_input": "val_fine=1.0, val_coarse=2.0, order=2, ratio=1.0",
+        "verified_fix": "Enforce ratio != 1.0 and minimum order p >= 1."
+      }
+    ],
+    "source_code": "def richardson_extrapolation_step(val_fine: float, val_coarse: float, order: int, ratio: float) -> float:\n    p = max(1, min(16, abs(order)))\n    r = ratio if abs(ratio - 1.0) > 1e-06 else 2.0\n    factor = r ** p\n    denom = factor - 1.0\n    if abs(denom) < 1e-12:\n        denom = 1e-12\n    res = (factor * val_fine - val_coarse) / denom\n    return res",
+    "domain": "numerical_analysis"
+  }
+]

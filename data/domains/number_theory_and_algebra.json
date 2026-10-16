@@ -1,0 +1,1013 @@
+[
+  {
+    "name": "miller_rabin_deterministic_round",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "bool",
+    "summary": "Executes a deterministic Miller-Rabin primality test round on odd candidate n using base a.",
+    "pseudocode": "1. Guard against n < 2, return False. If n == 2, return True. If n is even, return False.\n2. Compute base modulo n. If base == 0, return True.\n3. Factor n - 1 into 2^s * d with d odd.\n4. Compute x = pow(base, d, n). If x == 1 or x == n - 1, return True.\n5. Square x repeatedly up to s - 1 times; if x == n - 1, return True. Else return False.",
+    "invariants": [
+      "Returns True for all prime numbers n when 1 <= a < n.",
+      "Composite n fails the test for at least 3/4 of all bases a in [1, n-1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "pow(a, n - 1, n) == 1",
+        "failure_mechanism": "Fails to detect Carmichael pseudoprimes such as 561 that satisfy Fermat's little theorem for all coprime bases.",
+        "counterexample_input": "n=561, a=2",
+        "verified_fix": "Factor n - 1 into 2^s * d and verify intermediate square roots of unity mod n."
+      }
+    ],
+    "source_code": "def miller_rabin_deterministic_round(n: int, a: int) -> bool:\n    val_n = int(abs(n))\n    if val_n < 2:\n        return False\n    if val_n == 2:\n        return True\n    if val_n % 2 == 0:\n        return False\n    base = int(abs(a)) % val_n\n    if base == 0:\n        return True\n    d = val_n - 1\n    s = 0\n    while d % 2 == 0:\n        d = d // 2\n        s = s + 1\n    x = pow(base, d, val_n)\n    if x == 1 or x == val_n - 1:\n        return True\n    for _ in range(s - 1):\n        x = x * x % val_n\n        if x == val_n - 1:\n            return True\n    return False",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "lucas_lehmer_mersenne_test",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "bool",
+    "summary": "Evaluates Lucas-Lehmer deterministic primality test for Mersenne number M_p = 2^p - 1.",
+    "pseudocode": "1. Guard exponent p: if p < 2 return False, if p == 2 return True.\n2. Clamp p to 61 to prevent integer explosion.\n3. Set modulus m = (1 << p) - 1 and initial residue s = 4.\n4. Iterate p - 2 times updating s = (s^2 - 2) mod m.\n5. Return s == 0.",
+    "invariants": [
+      "Correctly decides primality of Mersenne number 2^p - 1 for prime exponent p.",
+      "Residue strictly follows recurrence s_{i} = (s_{i-1}^2 - 2) mod (2^p - 1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "s = s * s - 2; s = s % m at the end",
+        "failure_mechanism": "Unbounded integer growth without modular reduction per step leads to exponential memory blowout.",
+        "counterexample_input": "p=31",
+        "verified_fix": "Reduce s modulo 2^p - 1 at every iteration step."
+      }
+    ],
+    "source_code": "def lucas_lehmer_mersenne_test(p: int) -> bool:\n    exp = int(abs(p))\n    if exp < 2:\n        return False\n    if exp == 2:\n        return True\n    capped_p = min(exp, 61)\n    m = (1 << capped_p) - 1\n    s = 4\n    for _ in range(capped_p - 2):\n        s = (s * s - 2) % m\n    is_prime = s == 0\n    return is_prime",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "pollard_rho_factor_step",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Executes Pollard's rho integer factorization using Floyd's cycle detection.",
+    "pseudocode": "1. Guard n <= 3 and even n.\n2. Initialize tortoise x = 2 and hare y = 2 with polynomial f(t) = (t^2 + c) mod n.\n3. In loop up to max_steps, advance x by 1 step and y by 2 steps.\n4. Compute gcd(|x - y|, n). If 1 < gcd < n, return factor.\n5. Return non-trivial factor or 1.",
+    "invariants": [
+      "Returns a non-trivial divisor d of n strictly satisfying 1 < d < n upon success.",
+      "Floyd cycle detection guarantees O(sqrt(p)) step termination for smallest factor p."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "y = (y * y + shift) % val_n; d = gcd(x - y, n)",
+        "failure_mechanism": "Advancing tortoise and hare at equal speeds fails to detect algebraic cycles.",
+        "counterexample_input": "n=8051, c=1, max_steps=100",
+        "verified_fix": "Advance the hare pointer two steps for every single step of the tortoise."
+      }
+    ],
+    "source_code": "def pollard_rho_factor_step(n: int, c: int, max_steps: int) -> int:\n    val_n = int(abs(n))\n    if val_n <= 3:\n        return val_n if val_n > 1 else 0\n    if val_n % 2 == 0:\n        return 2\n    shift = int(c) % val_n\n    limit = max(10, min(int(abs(max_steps)), 1000))\n    x = 2\n    y = 2\n    d = 1\n    count = 0\n    while d == 1 and count < limit:\n        x = (x * x + shift) % val_n\n        y = (y * y + shift) % val_n\n        y = (y * y + shift) % val_n\n        diff = abs(x - y)\n        a_val = diff\n        b_val = val_n\n        while b_val != 0:\n            a_val, b_val = (b_val, a_val % b_val)\n        d = a_val\n        count = count + 1\n    return d if 1 < d < val_n else 0",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "pollard_p_minus_1_factor",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Applies Pollard's p - 1 factorization method for finding factors with powersmooth p - 1.",
+    "pseudocode": "1. Guard n <= 3 and even n.\n2. Clamp smoothness bound B to [2, 100].\n3. Initialize accumulator a = 2.\n4. For j from 2 to B, update a = a^j mod n and test gcd(a - 1, n).\n5. Return non-trivial factor if 1 < gcd < n, else 1.",
+    "invariants": [
+      "Finds prime factor p whenever p - 1 is B-powersmooth.",
+      "Always produces a factor dividing n without mutating input parameters."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "a = pow(2, math.factorial(b), n)",
+        "failure_mechanism": "Computing factorial directly causes overflow before modular reduction.",
+        "counterexample_input": "n=13927, b_bound=10",
+        "verified_fix": "Accumulate exponent powers iteratively step by step: a = pow(a, j, n)."
+      }
+    ],
+    "source_code": "def pollard_p_minus_1_factor(n: int, b_bound: int) -> int:\n    val_n = int(abs(n))\n    if val_n <= 3:\n        return val_n if val_n > 0 else 1\n    if val_n % 2 == 0:\n        return 2\n    b = max(2, min(int(abs(b_bound)), 100))\n    a = 2\n    for j in range(2, b + 1):\n        a = pow(a, j, val_n)\n        u = abs(a - 1)\n        v = val_n\n        while v != 0:\n            u, v = (v, u % v)\n        if 1 < u < val_n:\n            return u\n    return 1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "fermat_factorization_step",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Executes Fermat's difference of squares factorization n = a^2 - b^2.",
+    "pseudocode": "1. Guard n <= 3 and even n.\n2. Initialize a = ceil(sqrt(n)).\n3. In loop up to max_iter, compute b2 = a^2 - n and test if b2 is a perfect square.\n4. If square found, return (a - b, a + b).\n5. Else increment a and continue.",
+    "invariants": [
+      "Returned factors (p, q) strictly satisfy p * q == n.",
+      "Terminates in O(|p - q|) iterations when factors are close to sqrt(n)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "b = int(math.sqrt(b2)); if b * b == b2",
+        "failure_mechanism": "Floating point math.sqrt loses precision for large integers leading to missed square detection.",
+        "counterexample_input": "n=8051, max_iter=100",
+        "verified_fix": "Use integer exact square root math.isqrt."
+      }
+    ],
+    "source_code": "def fermat_factorization_step(n: int, max_iter: int) -> tuple[int, int]:\n    val_n = int(abs(n))\n    if val_n <= 3:\n        return (1, max(1, val_n))\n    if val_n % 2 == 0:\n        return (2, val_n // 2)\n    limit = max(10, min(int(abs(max_iter)), 5000))\n    a = int(math.isqrt(val_n))\n    if a * a < val_n:\n        a = a + 1\n    for _ in range(limit):\n        b2 = a * a - val_n\n        b = int(math.isqrt(b2))\n        if b * b == b2:\n            p = a - b\n            q = a + b\n            return (min(p, q), max(p, q))\n        a = a + 1\n    return (1, val_n)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "shanks_tonelli_modular_sqrt",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Solves modular quadratic congruence r^2 = n mod p using the Tonelli-Shanks algorithm.",
+    "pseudocode": "1. Guard prime p <= 2 and quadratic residue via Euler's criterion pow(n, (p-1)/2, p) == 1.\n2. Factor p - 1 = 2^s * q with q odd.\n3. Find quadratic non-residue z mod p.\n4. Iteratively reduce order of residue in 2-subgroup.\n5. Return canonical minimum positive root r.",
+    "invariants": [
+      "For solvable quadratic residue, (r * r) mod p == n mod p.",
+      "Returns canonical non-negative minimum square root r <= p - r."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "r = pow(n, (p + 1) // 4, p)",
+        "failure_mechanism": "Fails when prime p is not congruent to 3 mod 4.",
+        "counterexample_input": "n=5, p=41",
+        "verified_fix": "Use complete Tonelli-Shanks 2-group step reduction."
+      }
+    ],
+    "source_code": "def shanks_tonelli_modular_sqrt(n: int, p: int) -> int:\n    val_p = int(abs(p))\n    if val_p <= 2:\n        return int(n) % val_p if val_p > 0 else 0\n    val_n = int(n) % val_p\n    if val_n == 0:\n        return 0\n    if pow(val_n, (val_p - 1) // 2, val_p) != 1:\n        return -1\n    q = val_p - 1\n    s = 0\n    while q % 2 == 0:\n        q = q // 2\n        s = s + 1\n    if s == 1:\n        r = pow(val_n, (val_p + 1) // 4, val_p)\n        return min(r, val_p - r)\n    z = 2\n    while pow(z, (val_p - 1) // 2, val_p) != val_p - 1:\n        z = z + 1\n        if z > 100:\n            break\n    m = s\n    c = pow(z, q, val_p)\n    t = pow(val_n, q, val_p)\n    r = pow(val_n, (q + 1) // 2, val_p)\n    while t != 1:\n        t2i = t\n        i = 0\n        for idx in range(1, m):\n            t2i = t2i * t2i % val_p\n            if t2i == 1:\n                i = idx\n                break\n        if i == 0:\n            return -1\n        b = pow(c, 1 << m - i - 1, val_p)\n        m = i\n        c = b * b % val_p\n        t = t * c % val_p\n        r = r * b % val_p\n    return min(r, val_p - r)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "jacobi_symbol_computation",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes the Jacobi symbol (a / n) via the law of quadratic reciprocity.",
+    "pseudocode": "1. Guard n > 0 odd.\n2. In loop while a != 0, extract powers of 2 from a and apply second supplementary law.\n3. Swap a and n applying quadratic reciprocity sign (-1)^((a-1)(n-1)/4).\n4. Reduce a = a mod n.\n5. Return final Jacobi character in {-1, 0, 1}.",
+    "invariants": [
+      "Returns value in {-1, 0, 1} matching theoretical Jacobi character.",
+      "Multiplicative property: (a*b / n) == (a / n) * (b / n)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "t = pow(a, (n - 1) // 2, n)",
+        "failure_mechanism": "Euler's criterion only computes the Legendre symbol for primes; for composite n it fails or gives invalid values.",
+        "counterexample_input": "a=2, n=9",
+        "verified_fix": "Use iterative Euclidean law of quadratic reciprocity without prime factorization."
+      }
+    ],
+    "source_code": "def jacobi_symbol_computation(a: int, n: int) -> int:\n    val_n = int(abs(n))\n    if val_n == 0 or val_n % 2 == 0:\n        return 0\n    val_a = int(a) % val_n\n    t = 1\n    while val_a != 0:\n        while val_a % 2 == 0:\n            val_a = val_a // 2\n            r = val_n % 8\n            if r == 3 or r == 5:\n                t = -t\n        val_a, val_n = (val_n, val_a)\n        if val_a % 4 == 3 and val_n % 4 == 3:\n            t = -t\n        val_a = val_a % val_n\n    return t if val_n == 1 else 0",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "legendre_symbol_euler_criterion",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Evaluates the Legendre symbol (a / p) for odd prime p via Euler's criterion.",
+    "pseudocode": "1. Guard p >= 3 odd.\n2. Compute a mod p. If divisible, return 0.\n3. Evaluate res = pow(a, (p-1)/2, p).\n4. Return 1 if res == 1, or -1 if res == p - 1, else 0.",
+    "invariants": [
+      "Returns 1 if a is quadratic residue mod p, -1 if non-residue, 0 if divisible.",
+      "Satisfies Euler's criterion (a/p) == a^((p-1)/2) mod p."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 1 if pow(a, (p - 1) // 2, p) == 1 else -1",
+        "failure_mechanism": "Incorrectly classifies multiples of p as non-residues instead of 0.",
+        "counterexample_input": "a=7, p=7",
+        "verified_fix": "Explicitly check val_a == 0 before modular exponentiation."
+      }
+    ],
+    "source_code": "def legendre_symbol_euler_criterion(a: int, p: int) -> int:\n    val_p = int(abs(p))\n    if val_p < 3 or val_p % 2 == 0:\n        return 0\n    val_a = int(a) % val_p\n    if val_a == 0:\n        return 0\n    res = pow(val_a, (val_p - 1) // 2, val_p)\n    if res == 1:\n        return 1\n    if res == val_p - 1:\n        return -1\n    return 0",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "chinese_remainder_theorem_pair",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Solves system x = r1 mod m1 and x = r2 mod m2 via extended Euclidean algorithm.",
+    "pseudocode": "1. Guard moduli m1, m2 >= 1.\n2. Run extended gcd on (m1, m2).\n3. Check if diff = r2 - r1 is divisible by gcd g; if not return (0, m1*m2).\n4. Compute combined solution modulo lcm(m1, m2).\n5. Return (solution, lcm).",
+    "invariants": [
+      "Solution x satisfies x % m1 == r1 % m1 and x % m2 == r2 % m2.",
+      "Modulus output is exact least common multiple lcm(m1, m2)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "x = (r1 * m2 * inv(m2, m1) + r2 * m1 * inv(m1, m2)) % (m1 * m2)",
+        "failure_mechanism": "Crashes or computes wrong answers when gcd(m1, m2) > 1.",
+        "counterexample_input": "r1=2, m1=6, r2=4, m2=8",
+        "verified_fix": "Compute extended gcd and verify diff % gcd == 0 with general coprime reduction."
+      }
+    ],
+    "source_code": "def chinese_remainder_theorem_pair(r1: int, m1: int, r2: int, m2: int) -> tuple[int, int]:\n    mod1 = max(1, int(abs(m1)))\n    mod2 = max(1, int(abs(m2)))\n    rem1 = int(r1) % mod1\n    rem2 = int(r2) % mod2\n    a, b = (mod1, mod2)\n    x0, x1 = (1, 0)\n    y0, y1 = (0, 1)\n    while b != 0:\n        q = a // b\n        a, b = (b, a % b)\n        x0, x1 = (x1, x0 - q * x1)\n        y0, y1 = (y1, y0 - q * y1)\n    g = a\n    diff = rem2 - rem1\n    if diff % g != 0:\n        return (0, mod1 * mod2)\n    lcm_mod = mod1 * mod2 // g\n    step = diff // g * x0 % (mod2 // g)\n    ans = (rem1 + step * mod1) % lcm_mod\n    return (ans, lcm_mod)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "chinese_remainder_theorem_general",
+    "param_types": [
+      "list[int]",
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Solves general simultaneous system of congruences for pairwise coprime moduli.",
+    "pseudocode": "1. Validate input lists.\n2. Compute total product M = prod(m_i).\n3. For each congruency, compute partial product M_i = M // m_i.\n4. Find modular inverse inv_i = M_i^(-1) mod m_i via extended gcd.\n5. Sum terms (r_i * M_i * inv_i) mod M and return result.",
+    "invariants": [
+      "Result x satisfies x % moduli[i] == remainders[i] % moduli[i] for all coprime moduli.",
+      "Output lies strictly in range [0, prod(moduli) - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "ans = sum(r * (M // m) for r, m in zip(rems, mods)) % M",
+        "failure_mechanism": "Omits modular inverse weights M_i^(-1) mod m_i.",
+        "counterexample_input": "remainders=[2, 3, 2], moduli=[3, 5, 7]",
+        "verified_fix": "Multiply each term by modular inverse inv(M // m_i, m_i)."
+      }
+    ],
+    "source_code": "def chinese_remainder_theorem_general(remainders: list[int], moduli: list[int]) -> int:\n    rems = [int(r) for r in remainders]\n    mods = [max(1, int(abs(m))) for m in moduli]\n    n = min(len(rems), len(mods))\n    if n == 0:\n        return 0\n    total_m = 1\n    for i in range(n):\n        total_m = total_m * mods[i]\n    ans = 0\n    for i in range(n):\n        mi = mods[i]\n        if mi <= 1:\n            continue\n        big_m = total_m // mi\n        a, b = (big_m % mi, mi)\n        x0, x1 = (1, 0)\n        while b != 0:\n            q = a // b\n            a, b = (b, a % b)\n            x0, x1 = (x1, x0 - q * x1)\n        inv_val = x0 % mi\n        term = rems[i] % mi * big_m * inv_val\n        ans = (ans + term) % total_m\n    return ans",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "discrete_log_baby_step_giant_step",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Solves discrete logarithm g^x = h mod p via Shanks' baby-step giant-step algorithm.",
+    "pseudocode": "1. Guard prime modulus p <= 2 and edge case h == 1.\n2. Set step size m = ceil(sqrt(p)).\n3. Precompute baby steps g^j mod p in hash map for j in [0, m-1].\n4. Compute giant step multiplier g^(-m) mod p.\n5. Iterate giant steps h * (g^(-m))^i mod p; match table lookup to return x = i*m + j.",
+    "invariants": [
+      "Returns x such that pow(g, x, p) == h % p when solution exists.",
+      "Runs in O(sqrt(p)) time and space via time-space tradeoff."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "for x in range(p): if pow(g, x, p) == h: return x",
+        "failure_mechanism": "Linear scan has O(p) complexity which times out on large primes.",
+        "counterexample_input": "g=3, h=13, p=10007",
+        "verified_fix": "Precompute baby steps up to sqrt(p) and search with giant steps."
+      }
+    ],
+    "source_code": "def discrete_log_baby_step_giant_step(g: int, h: int, p: int) -> int:\n    val_p = int(abs(p))\n    if val_p <= 2:\n        return 0\n    val_g = int(g) % val_p\n    val_h = int(h) % val_p\n    if val_h == 1:\n        return 0\n    m = int(math.isqrt(val_p)) + 1\n    table = {}\n    cur = 1\n    for j in range(m):\n        if cur not in table:\n            table[cur] = j\n        cur = cur * val_g % val_p\n    factor = pow(cur, val_p - 2, val_p)\n    gamma = val_h\n    for i in range(m + 1):\n        if gamma in table:\n            return i * m + table[gamma]\n        gamma = gamma * factor % val_p\n    return -1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "euler_totient_phi_factorized",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Computes Euler's totient phi(n) from the list of prime factors with multiplicity.",
+    "pseudocode": "1. Extract clean prime factors > 1.\n2. Count prime multiplicities p^k.\n3. For each prime power, multiply phi accumulator by (p - 1) * p^(k - 1).\n4. Return total count of coprime integers.",
+    "invariants": [
+      "Returns exact count of positive integers <= n that are coprime to n.",
+      "Multiplicative: phi(a * b) == phi(a) * phi(b) for coprime a, b."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "phi = math.prod(p - 1 for p in clean)",
+        "failure_mechanism": "Fails when prime factors have multiplicity k > 1 by omitting p^(k-1) powers.",
+        "counterexample_input": "prime_factors=[2, 2, 3, 3]",
+        "verified_fix": "Group prime powers and multiply by p^(k-1) * (p - 1)."
+      }
+    ],
+    "source_code": "def euler_totient_phi_factorized(prime_factors: list[int]) -> int:\n    clean = [int(abs(x)) for x in prime_factors if int(abs(x)) > 1]\n    if not clean:\n        return 1\n    counts = {}\n    for p in clean:\n        counts[p] = counts.get(p, 0) + 1\n    phi = 1\n    for p, k in counts.items():\n        phi = phi * (p - 1) * p ** (k - 1)\n    return phi",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "mobius_inversion_mu",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Evaluates the Mobius function mu(n) from the prime factors of n.",
+    "pseudocode": "1. Filter prime factors > 1.\n2. Detect repeated prime factors; return 0 if square prime factor found.\n3. Return -1 for odd number of distinct prime factors, or 1 for even.",
+    "invariants": [
+      "Returns 0 if any prime factor is repeated (n has squared prime factor).",
+      "Returns (-1)^k where k is the number of distinct prime factors for square-free n."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (-1) ** len(prime_factors)",
+        "failure_mechanism": "Fails to return 0 for integers divisible by a square prime p^2.",
+        "counterexample_input": "prime_factors=[2, 2, 3]",
+        "verified_fix": "Track seen primes in a set and return 0 upon detecting duplicates."
+      }
+    ],
+    "source_code": "def mobius_inversion_mu(prime_factors: list[int]) -> int:\n    clean = [int(abs(x)) for x in prime_factors if int(abs(x)) > 1]\n    if not clean:\n        return 1\n    seen = set()\n    for p in clean:\n        if p in seen:\n            return 0\n        seen.add(p)\n    count = len(clean)\n    return -1 if count % 2 == 1 else 1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "divisor_sigma_function",
+    "param_types": [
+      "list[int]",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes divisor sum sigma_k(n) from prime factors with multiplicity.",
+    "pseudocode": "1. Extract power k and prime factor multiplicities.\n2. If k == 0, multiply (a + 1) for each prime power to count divisors.\n3. If k > 0, compute (p^(k*(a+1)) - 1) / (p^k - 1) for each prime.\n4. Return total divisor sum.",
+    "invariants": [
+      "Computes sum of k-th powers of all positive divisors of n.",
+      "Reduces to divisor counting function d(n) when k = 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sigma = math.prod((p ** (a + 1) - 1) // (p - 1) for p, a in counts.items())",
+        "failure_mechanism": "Hardcodes power k = 1 and gives incorrect values for general k != 1.",
+        "counterexample_input": "prime_factors=[2, 3], k=0",
+        "verified_fix": "Branch on k == 0 for divisor count and use p^(k*(a+1)) - 1 / (p^k - 1) for k > 0."
+      }
+    ],
+    "source_code": "def divisor_sigma_function(prime_factors: list[int], k: int) -> int:\n    power = max(0, int(k))\n    clean = [int(abs(x)) for x in prime_factors if int(abs(x)) > 1]\n    if not clean:\n        return 1\n    counts = {}\n    for p in clean:\n        counts[p] = counts.get(p, 0) + 1\n    sigma = 1\n    for p, a in counts.items():\n        if power == 0:\n            sigma = sigma * (a + 1)\n        else:\n            num = p ** (power * (a + 1)) - 1\n            den = p ** power - 1\n            sigma = sigma * (num // den)\n    return sigma",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "carmichael_lambda_function",
+    "param_types": [
+      "list[list[int]]"
+    ],
+    "return_type": "int",
+    "summary": "Computes Carmichael's universal exponent lambda(n) from prime power factorization.",
+    "pseudocode": "1. Parse list of [prime, exponent] pairs.\n2. For each factor, compute lambda(p^k), applying special power of 2 reduction for k >= 3.\n3. Accumulate overall least common multiple of all component exponents.\n4. Return lambda(n).",
+    "invariants": [
+      "Computes smallest positive integer m such that a^m == 1 mod n for all coprime a.",
+      "Satisfies lambda(n) divides phi(n) with lambda(n) == phi(n) / 2 for powers of 2 >= 8."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lam = (p - 1) * (p ** (k - 1)) for all p",
+        "failure_mechanism": "Fails for p = 2 and k >= 3 where the multiplicative group is not cyclic.",
+        "counterexample_input": "prime_factor_powers=[[2, 3]]",
+        "verified_fix": "Branch on p == 2 and k >= 3 to set lambda(2^k) = 2^(k-2)."
+      }
+    ],
+    "source_code": "def carmichael_lambda_function(prime_factor_powers: list[list[int]]) -> int:\n    if not prime_factor_powers:\n        return 1\n    factors = []\n    for pair in prime_factor_powers:\n        if isinstance(pair, (list, tuple)) and len(pair) >= 2:\n            p = int(abs(pair[0]))\n            k = int(abs(pair[1]))\n            if p > 1 and k > 0:\n                factors.append((p, k))\n    if not factors:\n        return 1\n    lcm_val = 1\n    for p, k in factors:\n        if p == 2:\n            if k == 1:\n                lam = 1\n            elif k == 2:\n                lam = 2\n            else:\n                lam = 1 << k - 2\n        else:\n            lam = (p - 1) * p ** (k - 1)\n        u, v = (lcm_val, lam)\n        while v != 0:\n            u, v = (v, u % v)\n        lcm_val = lcm_val * lam // u\n    return lcm_val",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "primitive_root_check",
+    "param_types": [
+      "int",
+      "int",
+      "list[int]"
+    ],
+    "return_type": "bool",
+    "summary": "Tests whether g is a primitive root modulo prime p using prime factors of p - 1.",
+    "pseudocode": "1. Guard prime p <= 2 and base g <= 1.\n2. Extract unique prime factors of p - 1.\n3. For each prime factor q, verify pow(g, (p-1)/q, p) != 1.\n4. Return True if all tests pass, else False.",
+    "invariants": [
+      "Returns True if and only if base g generates the cyclic group (Z/pZ)*.",
+      "Verifies order strictly equals p - 1 across all maximal subgroups."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "all(pow(g, d, p) != 1 for d in range(1, p - 1))",
+        "failure_mechanism": "Exhaustive order check is O(p) and infeasible for cryptographic moduli.",
+        "counterexample_input": "g=2, p=65537, prime_factors_p_minus_1=[2]",
+        "verified_fix": "Test only maximal proper divisors (p - 1) / q for distinct prime factors q."
+      }
+    ],
+    "source_code": "def primitive_root_check(g: int, p: int, prime_factors_p_minus_1: list[int]) -> bool:\n    val_p = int(abs(p))\n    if val_p <= 2:\n        return False\n    base = int(g) % val_p\n    if base <= 1:\n        return False\n    distinct_factors = set((int(abs(q)) for q in prime_factors_p_minus_1 if int(abs(q)) > 1))\n    if not distinct_factors:\n        return False\n    order = val_p - 1\n    for q in distinct_factors:\n        if pow(base, order // q, val_p) == 1:\n            return False\n    return True",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "sieve_of_eratosthenes_range",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Executes segmented sieve of Eratosthenes across the range [start, stop].",
+    "pseudocode": "1. Guard start >= 2 and limit range length to 500.\n2. Sieve base primes up to sqrt(stop).\n3. Sieve segment [start, stop] marking composite multiples.\n4. Collect and return prime list.",
+    "invariants": [
+      "Returns all prime numbers in the closed interval [start, stop].",
+      "Segmented sieve consumes O(stop - start) working memory without full array allocation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "sieve = [True] * (stop + 1); primes = [i for i in range(start, stop + 1) if sieve[i]]",
+        "failure_mechanism": "Allocates full range from 0 to stop, causing memory exhaustion for large start.",
+        "counterexample_input": "start=1000000, stop=1000100",
+        "verified_fix": "Use segmented sieve offsetting indices by start."
+      }
+    ],
+    "source_code": "def sieve_of_eratosthenes_range(start: int, stop: int) -> list[int]:\n    s = max(2, int(start))\n    e = max(s, min(int(stop), s + 500))\n    limit = int(math.isqrt(e)) + 1\n    base_sieve = [True] * (limit + 1)\n    base_primes = []\n    for p in range(2, limit + 1):\n        if base_sieve[p]:\n            base_primes.append(p)\n            for multiple in range(p * p, limit + 1, p):\n                base_sieve[multiple] = False\n    length = e - s + 1\n    seg_sieve = [True] * length\n    for p in base_primes:\n        first = (s + p - 1) // p * p\n        start_idx = max(first, p * p)\n        for m in range(start_idx, e + 1, p):\n            seg_sieve[m - s] = False\n    primes = []\n    for idx in range(length):\n        if seg_sieve[idx]:\n            primes.append(s + idx)\n    return primes",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "farey_sequence_next_term",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Computes the consecutive term in Farey sequence F_n following a/b and c/d.",
+    "pseudocode": "1. Validate order n and positive denominators b, d.\n2. Compute step multiplier k = (n + b) // d.\n3. Compute next numerator p = k*c - a.\n4. Compute next denominator q = k*d - b.\n5. Return (p, q).",
+    "invariants": [
+      "Generates consecutive irreducible fraction in Farey sequence F_n in O(1) time.",
+      "Preserves unimodular determinant: c * next_q - d * next_p == 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "k = order // d",
+        "failure_mechanism": "Incorrect floor multiplier calculation fails Farey mediant step property.",
+        "counterexample_input": "n=5, a=1, b=3, c=1, d=2",
+        "verified_fix": "Use exact recurrence formula k = (n + b) // d."
+      }
+    ],
+    "source_code": "def farey_sequence_next_term(n: int, a: int, b: int, c: int, d: int) -> tuple[int, int]:\n    order = max(1, int(abs(n)))\n    b_val = max(1, int(abs(b)))\n    d_val = max(1, int(abs(d)))\n    a_val = int(a)\n    c_val = int(c)\n    k = (order + b_val) // d_val\n    next_p = k * c_val - a_val\n    next_q = k * d_val - b_val\n    return (next_p, next_q)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "stern_brocot_fraction_tree",
+    "param_types": [
+      "str"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Evaluates the rational fraction at the end of a Stern-Brocot tree traversal path.",
+    "pseudocode": "1. Parse directions from string ('L' and 'R').\n2. Initialize left mediator (0, 1) and right mediator (1, 0).\n3. Traverse path updating left or right ancestor mediant.\n4. Return mediant fraction (numerator, denominator).",
+    "invariants": [
+      "Returns irreducible fraction with gcd(numerator, denominator) == 1.",
+      "Binary search in Stern-Brocot tree provides unique representation for every positive rational."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Updating left bound on 'L' instead of 'R'",
+        "failure_mechanism": "Inverts monotonic tree ordering.",
+        "counterexample_input": "path='LR'",
+        "verified_fix": "Branch left updates right ancestor, branch right updates left ancestor."
+      }
+    ],
+    "source_code": "def stern_brocot_fraction_tree(path: str) -> tuple[int, int]:\n    p_str = str(path).upper()\n    l_num, l_den = (0, 1)\n    r_num, r_den = (1, 0)\n    for char in p_str:\n        m_num = l_num + r_num\n        m_den = l_den + r_den\n        if char == 'L':\n            r_num, r_den = (m_num, m_den)\n        elif char == 'R':\n            l_num, l_den = (m_num, m_den)\n    final_num = l_num + r_num\n    final_den = l_den + r_den\n    return (final_num, final_den)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "continued_fraction_expansion",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes continued fraction partial quotients [a0; a1, a2, ...] of rational p / q.",
+    "pseudocode": "1. Guard zero denominator.\n2. Iteratively perform Euclidean division p = a * q + r.\n3. Append quotient a and advance (p, q) = (q, r).\n4. Return list of partial quotients.",
+    "invariants": [
+      "Computes unique finite continued fraction expansion [a0; a1, ..., ak] for rational p/q.",
+      "All partial quotients a_i for i >= 1 are strictly positive integers."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p, q = q, p % q with negative numbers",
+        "failure_mechanism": "Python truncated/floored division on negative numerators requires careful sign preservation.",
+        "counterexample_input": "numerator=-7, denominator=3, max_terms=10",
+        "verified_fix": "Use standard Euclidean floor division p // q and p - a * q."
+      }
+    ],
+    "source_code": "def continued_fraction_expansion(numerator: int, denominator: int, max_terms: int) -> list[int]:\n    p = int(numerator)\n    q = int(denominator)\n    if q == 0:\n        return [p]\n    limit = max(1, min(int(abs(max_terms)), 50))\n    terms = []\n    while q != 0 and len(terms) < limit:\n        a = p // q\n        terms.append(a)\n        p, q = (q, p - a * q)\n    return terms",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "continued_fraction_convergents",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[list[int]]",
+    "summary": "Generates successive rational convergents h_n / k_n from continued fraction partial quotients.",
+    "pseudocode": "1. Parse list of integer coefficients.\n2. Initialize base recurrences h_{-2}=0, h_{-1}=1, k_{-2}=1, k_{-1}=0.\n3. Compute h_n = a_n * h_{n-1} + h_{n-2} and k_n = a_n * k_{n-1} + k_{n-2}.\n4. Return list of [numerator, denominator] pairs.",
+    "invariants": [
+      "Successive convergents satisfy determinant identity: h_n * k_{n-1} - h_{n-1} * k_n == (-1)^(n-1).",
+      "Provides best rational approximations to the real number represented by the continued fraction."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Initializing h_curr = 0, k_curr = 1",
+        "failure_mechanism": "Shifts recurrence index and produces inverted or invalid convergents.",
+        "counterexample_input": "partial_quotients=[3, 7, 15, 1]",
+        "verified_fix": "Initialize standard base states (h_{-2}, h_{-1}) = (0, 1) and (k_{-2}, k_{-1}) = (1, 0)."
+      }
+    ],
+    "source_code": "def continued_fraction_convergents(partial_quotients: list[int]) -> list[list[int]]:\n    coeffs = [int(x) for x in partial_quotients]\n    if not coeffs:\n        return []\n    convergents = []\n    h_prev, h_curr = (0, 1)\n    k_prev, k_curr = (1, 0)\n    for a in coeffs:\n        h_next = a * h_curr + h_prev\n        k_next = a * k_curr + k_prev\n        convergents.append([h_next, k_next])\n        h_prev, h_curr = (h_curr, h_next)\n        k_prev, k_curr = (k_curr, k_next)\n    return convergents",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "pell_equation_fundamental_solution",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Finds the minimal fundamental solution (x1, y1) to Pell's equation x^2 - d*y^2 = 1.",
+    "pseudocode": "1. Guard d nonsquare: if d square return (1, 0).\n2. Expand continued fraction of sqrt(d) using periodic recurrence.\n3. Track convergents h_n / k_n.\n4. Stop at first convergent satisfying h_n^2 - d * k_n^2 == 1.\n5. Return (h_n, k_n).",
+    "invariants": [
+      "Returned tuple (x, y) strictly satisfies x^2 - d * y^2 == 1.",
+      "Yields minimal non-trivial positive integer solution (x1, y1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Stopping at x^2 - d*y^2 == -1",
+        "failure_mechanism": "Fails when period of continued fraction expansion is odd, where first solution satisfies x^2 - d*y^2 = -1.",
+        "counterexample_input": "d_nonsquare=13",
+        "verified_fix": "Continue iterating convergents until x^2 - d*y^2 == 1 is strictly reached."
+      }
+    ],
+    "source_code": "def pell_equation_fundamental_solution(d_nonsquare: int) -> tuple[int, int]:\n    d = int(abs(d_nonsquare))\n    r = int(math.isqrt(d))\n    if r * r == d or d <= 1:\n        return (1, 0)\n    m = 0\n    s = 1\n    a = r\n    h_prev, h_curr = (0, 1)\n    k_prev, k_curr = (1, 0)\n    h_next = a * h_curr + h_prev\n    k_next = a * k_curr + k_prev\n    h_prev, h_curr = (h_curr, h_next)\n    k_prev, k_curr = (k_curr, k_next)\n    limit = 500\n    step = 0\n    while step < limit:\n        if h_curr * h_curr - d * k_curr * k_curr == 1:\n            return (h_curr, k_curr)\n        m = s * a - m\n        s = (d - m * m) // s\n        a = (r + m) // s\n        h_next = a * h_curr + h_prev\n        k_next = a * k_curr + k_prev\n        h_prev, h_curr = (h_curr, h_next)\n        k_prev, k_curr = (k_curr, k_next)\n        step = step + 1\n    return (h_curr, k_curr)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "pythagorean_triple_primitive",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int, int]",
+    "summary": "Generates primitive Pythagorean triple (a, b, c) via Euclid's formula from generators m, n.",
+    "pseudocode": "1. Guard m > n > 0.\n2. Ensure gcd(m, n) == 1 and opposite parity.\n3. Compute a = m^2 - n^2, b = 2*m*n, c = m^2 + n^2.\n4. Return sorted leg pair and hypotenuse (min(a,b), max(a,b), c).",
+    "invariants": [
+      "Generated triple strictly satisfies side1^2 + side2^2 == c^2.",
+      "Yields primitive triple with gcd(side1, side2, c) == 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "a = m*m - n*n; b = 2*m*n; c = m*m + n*n without coprime check",
+        "failure_mechanism": "Produces non-primitive triples when m and n share common factors or have identical parity.",
+        "counterexample_input": "m=6, n=2",
+        "verified_fix": "Divide by gcd(m, n) and enforce opposite parity."
+      }
+    ],
+    "source_code": "def pythagorean_triple_primitive(m: int, n: int) -> tuple[int, int, int]:\n    val_m = max(2, int(abs(m)))\n    val_n = max(1, min(int(abs(n)), val_m - 1))\n    u, v = (val_m, val_n)\n    while v != 0:\n        u, v = (v, u % v)\n    g = u\n    val_m = val_m // g\n    val_n = val_n // g\n    if (val_m - val_n) % 2 == 0:\n        val_m = val_m + 1\n    a = val_m * val_m - val_n * val_n\n    b = 2 * val_m * val_n\n    c = val_m * val_m + val_n * val_n\n    side1 = min(a, b)\n    side2 = max(a, b)\n    return (side1, side2, c)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "gaussian_integer_gcd",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int]",
+    "summary": "Computes greatest common divisor of Gaussian integers alpha and beta in Z[i].",
+    "pseudocode": "1. Guard beta != 0.\n2. Compute complex division alpha / beta.\n3. Round real and imaginary quotient parts to nearest integers.\n4. Compute remainder rem = alpha - q * beta.\n5. Iterate Euclidean steps until remainder vanishes; return final divisor.",
+    "invariants": [
+      "Computes greatest common divisor in Euclidean domain Z[i].",
+      "Norm of remainder strictly decreases at each division step."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "qr = num_r // den; qi = num_i // den",
+        "failure_mechanism": "Truncating integer division instead of rounding to nearest integer violates Gaussian norm decrease.",
+        "counterexample_input": "a_re=5, a_im=3, b_re=2, b_im=1",
+        "verified_fix": "Round quotient to nearest Gaussian integer."
+      }
+    ],
+    "source_code": "def gaussian_integer_gcd(a_re: int, a_im: int, b_re: int, b_im: int) -> tuple[int, int]:\n    ar, ai = (int(a_re), int(a_im))\n    br, bi = (int(b_re), int(b_im))\n    step = 0\n    while (br != 0 or bi != 0) and step < 50:\n        den = br * br + bi * bi\n        num_r = ar * br + ai * bi\n        num_i = ai * br - ar * bi\n        qr = (2 * num_r + den) // (2 * den) if den > 0 else 0\n        qi = (2 * num_i + den) // (2 * den) if den > 0 else 0\n        rem_r = ar - (qr * br - qi * bi)\n        rem_i = ai - (qr * bi + qi * br)\n        ar, ai = (br, bi)\n        br, bi = (rem_r, rem_i)\n        step = step + 1\n    return (ar, ai)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "gaussian_integer_norm",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Evaluates algebraic field norm N(a + bi) = a^2 + b^2 of Gaussian integer.",
+    "pseudocode": "1. Parse real part r and imaginary part i.\n2. Compute exact integer sum of squares r^2 + i^2.\n3. Return field norm.",
+    "invariants": [
+      "Multiplicative norm: N(alpha * beta) == N(alpha) * N(beta).",
+      "Positive definite: N(alpha) >= 0 with equality if and only if alpha == 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "math.sqrt(re**2 + im**2)",
+        "failure_mechanism": "Returns floating-point complex modulus instead of exact algebraic integer field norm.",
+        "counterexample_input": "re=3, im=4",
+        "verified_fix": "Compute exact integer sum of squares r^2 + i^2."
+      }
+    ],
+    "source_code": "def gaussian_integer_norm(re: int, im: int) -> int:\n    r = int(re)\n    i = int(im)\n    norm_val = r * r + i * i\n    return norm_val",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "quaternion_hamilton_multiply",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes Hamilton product of two 4D quaternions q1 and q2.",
+    "pseudocode": "1. Parse 4 components (w, x, y, z) for each quaternion with length padding.\n2. Compute scalar real component w = w1*w2 - x1*x2 - y1*y2 - z1*z2.\n3. Compute vector components x, y, z via cross and scalar terms.\n4. Return 4-element list [w, x, y, z].",
+    "invariants": [
+      "Associative division algebra: (p * q) * r == p * (q * r).",
+      "Norm multiplicativity: |p * q| == |p| * |q|."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Commuting vector cross product terms in x, y, z",
+        "failure_mechanism": "Quaternion multiplication is non-commutative; swapping signs inverts rotation direction.",
+        "counterexample_input": "q1=[0, 1, 0, 0], q2=[0, 0, 1, 0]",
+        "verified_fix": "Preserve exact Hamilton multiplication table rules: i*j=k, j*i=-k."
+      }
+    ],
+    "source_code": "def quaternion_hamilton_multiply(q1: list[float], q2: list[float]) -> list[float]:\n    p = [float(x) for x in q1] if len(q1) >= 4 else [1.0, 0.0, 0.0, 0.0]\n    q = [float(x) for x in q2] if len(q2) >= 4 else [1.0, 0.0, 0.0, 0.0]\n    w1, x1, y1, z1 = (p[0], p[1], p[2], p[3])\n    w2, x2, y2, z2 = (q[0], q[1], q[2], q[3])\n    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2\n    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2\n    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2\n    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2\n    return [w, x, y, z]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "quaternion_conjugate_norm",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "tuple[list[float], float]",
+    "summary": "Evaluates algebraic conjugate and squared Euclidean norm of quaternion.",
+    "pseudocode": "1. Parse 4 components [w, x, y, z].\n2. Compute conjugate [w, -x, -y, -z].\n3. Compute squared norm w^2 + x^2 + y^2 + z^2.\n4. Return tuple (conjugate, sq_norm).",
+    "invariants": [
+      "Satisfies q * conj(q) == (|q|^2, 0, 0, 0).",
+      "Conjugate involution: conj(conj(q)) == q."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "conj = [-w, -x, -y, -z]",
+        "failure_mechanism": "Negating the scalar part computes quaternion antipodal negation rather than algebraic conjugate.",
+        "counterexample_input": "q=[1.0, 2.0, 3.0, 4.0]",
+        "verified_fix": "Preserve scalar real component sign and negate only imaginary components."
+      }
+    ],
+    "source_code": "def quaternion_conjugate_norm(q: list[float]) -> tuple[list[float], float]:\n    v = [float(x) for x in q] if len(q) >= 4 else [1.0, 0.0, 0.0, 0.0]\n    w, x, y, z = (v[0], v[1], v[2], v[3])\n    conj = [w, -x, -y, -z]\n    sq_norm = w * w + x * x + y * y + z * z\n    return (conj, sq_norm)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "quaternion_inverse_4d",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes quaternion multiplicative inverse q^(-1) = conj(q) / |q|^2.",
+    "pseudocode": "1. Parse 4 components [w, x, y, z].\n2. Compute squared norm sq_norm.\n3. If near zero, return identity [1.0, 0.0, 0.0, 0.0].\n4. Divide conjugate components by sq_norm.\n5. Return inverse quaternion.",
+    "invariants": [
+      "Satisfies q * inv(q) == (1.0, 0.0, 0.0, 0.0) within floating precision.",
+      "Scale invariant: inv(c * q) == (1/c) * inv(q)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "inv = [w / sq_norm, x / sq_norm, y / sq_norm, z / sq_norm]",
+        "failure_mechanism": "Failing to conjugate imaginary units computes reciprocal magnitude without orientation inversion.",
+        "counterexample_input": "q=[0.0, 1.0, 0.0, 0.0]",
+        "verified_fix": "Divide conjugate components [w, -x, -y, -z] by squared Euclidean norm."
+      }
+    ],
+    "source_code": "def quaternion_inverse_4d(q: list[float]) -> list[float]:\n    v = [float(x) for x in q] if len(q) >= 4 else [1.0, 0.0, 0.0, 0.0]\n    w, x, y, z = (v[0], v[1], v[2], v[3])\n    sq_norm = w * w + x * x + y * y + z * z\n    if sq_norm < 1e-15:\n        return [1.0, 0.0, 0.0, 0.0]\n    inv_w = w / sq_norm\n    inv_x = -x / sq_norm\n    inv_y = -y / sq_norm\n    inv_z = -z / sq_norm\n    return [inv_w, inv_x, inv_y, inv_z]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "polynomial_divmod_synthetic",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "tuple[list[float], list[float]]",
+    "summary": "Executes polynomial long division with remainder: P(x) = Q(x)*D(x) + R(x).",
+    "pseudocode": "1. Trim trailing zeros from dividend and divisor.\n2. Check degrees: if deg(num) < deg(den), return ([0.0], dividend).\n3. In descending degree loop, compute quotient term and subtract scaled divisor from remainder.\n4. Trim remainder and return (quotient, remainder).",
+    "invariants": [
+      "Polynomial identity holds: P(x) == Q(x) * D(x) + R(x).",
+      "Degree of remainder is strictly less than degree of divisor."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Modifying dividend in-place",
+        "failure_mechanism": "Mutates caller's argument list, violating pure function and sandbox invariants.",
+        "counterexample_input": "dividend=[1.0, 2.0, 1.0], divisor=[1.0, 1.0]",
+        "verified_fix": "Make a defensive copy: rem = list(num)."
+      }
+    ],
+    "source_code": "def polynomial_divmod_synthetic(dividend: list[float], divisor: list[float]) -> tuple[list[float], list[float]]:\n    num = [float(x) for x in dividend] if dividend else [0.0]\n    den = [float(x) for x in divisor] if divisor else [1.0]\n    while len(den) > 1 and abs(den[-1]) < 1e-12:\n        den.pop()\n    lead = den[-1] if abs(den[-1]) > 1e-12 else 1.0\n    rem = list(num)\n    deg_num = len(rem) - 1\n    deg_den = len(den) - 1\n    if deg_num < deg_den:\n        return ([0.0], rem)\n    quot = [0.0] * (deg_num - deg_den + 1)\n    for i in range(deg_num - deg_den, -1, -1):\n        factor = rem[i + deg_den] / lead\n        quot[i] = factor\n        for j in range(deg_den + 1):\n            rem[i + j] = rem[i + j] - factor * den[j]\n    while len(rem) > 1 and abs(rem[-1]) < 1e-12:\n        rem.pop()\n    return (quot, rem)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "polynomial_gcd_euclidean",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes greatest common divisor polynomial using Euclidean algorithm with monic normalization.",
+    "pseudocode": "1. Trim trailing zeros from input coefficient lists.\n2. Iteratively perform polynomial division remainder steps a, b = b, a % b.\n3. Upon reaching zero remainder, normalize leading coefficient to 1.0.\n4. Return monic gcd polynomial.",
+    "invariants": [
+      "Returns monic polynomial dividing both input polynomials.",
+      "Degree of gcd(A, B) is bounded by min(deg(A), deg(B))."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Omitting monic leading coefficient normalization",
+        "failure_mechanism": "Returns arbitrary scalar multiple depending on intermediate quotient steps.",
+        "counterexample_input": "p1=[2.0, 4.0, 2.0], p2=[4.0, 8.0, 4.0]",
+        "verified_fix": "Divide all coefficients by leading coefficient."
+      }
+    ],
+    "source_code": "def polynomial_gcd_euclidean(p1: list[float], p2: list[float]) -> list[float]:\n    a = [float(x) for x in p1] if p1 else [0.0]\n    b = [float(x) for x in p2] if p2 else [0.0]\n    while len(a) > 1 and abs(a[-1]) < 1e-12:\n        a.pop()\n    while len(b) > 1 and abs(b[-1]) < 1e-12:\n        b.pop()\n    step = 0\n    while (len(b) > 1 or abs(b[0]) > 1e-12) and step < 20:\n        rem = list(a)\n        deg_a = len(rem) - 1\n        deg_b = len(b) - 1\n        if deg_a >= deg_b and abs(b[-1]) > 1e-12:\n            lead = b[-1]\n            for i in range(deg_a - deg_b, -1, -1):\n                fac = rem[i + deg_b] / lead\n                for j in range(deg_b + 1):\n                    rem[i + j] = rem[i + j] - fac * b[j]\n        while len(rem) > 1 and abs(rem[-1]) < 1e-12:\n            rem.pop()\n        a, b = (b, rem)\n        step = step + 1\n    lead_a = a[-1] if abs(a[-1]) > 1e-12 else 1.0\n    monic = [coef / lead_a for coef in a]\n    return monic",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "polynomial_resultant_sylvester",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Sylvester resultant of two polynomials of degree up to 2.",
+    "pseudocode": "1. Trim trailing zero coefficients.\n2. Compute degrees deg_a and deg_b.\n3. Evaluate closed Bezout/Sylvester determinant formula based on degrees.\n4. Return scalar resultant.",
+    "invariants": [
+      "Resultant equals 0 if and only if polynomials share a common root over C.",
+      "Homogeneous in coefficients with deg(Res) == deg(A) + deg(B)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Building dense full NxN matrix determinant via arbitrary recursion",
+        "failure_mechanism": "Exceeds AST limits and recursion depth on polynomials.",
+        "counterexample_input": "p1=[1.0, 2.0, 1.0], p2=[1.0, 1.0]",
+        "verified_fix": "Use closed algebraic Bezout / Sylvester expansion for degree <= 2 components."
+      }
+    ],
+    "source_code": "def polynomial_resultant_sylvester(p1: list[float], p2: list[float]) -> float:\n    a = [float(x) for x in p1] if p1 else [0.0]\n    b = [float(x) for x in p2] if p2 else [0.0]\n    while len(a) > 1 and abs(a[-1]) < 1e-12:\n        a.pop()\n    while len(b) > 1 and abs(b[-1]) < 1e-12:\n        b.pop()\n    deg_a = len(a) - 1\n    deg_b = len(b) - 1\n    if deg_a <= 0 or deg_b <= 0:\n        return float(a[0] ** max(1, deg_b) * b[0] ** max(1, deg_a))\n    if deg_a == 1 and deg_b == 1:\n        return float(a[1] * b[0] - a[0] * b[1])\n    a0 = a[0]\n    a1 = a[1] if deg_a >= 1 else 0.0\n    a2 = a[2] if deg_a >= 2 else 0.0\n    b0 = b[0]\n    b1 = b[1] if deg_b >= 1 else 0.0\n    b2 = b[2] if deg_b >= 2 else 0.0\n    if deg_a == 2 and deg_b == 1:\n        res = a2 * b0 ** 2 - a1 * b0 * b1 + a0 * b1 ** 2\n        return float(res)\n    if deg_a == 1 and deg_b == 2:\n        res = b2 * a0 ** 2 - b1 * a0 * a1 + b0 * a1 ** 2\n        return float(res)\n    t1 = a2 * b0 - a0 * b2\n    t2 = a2 * b1 - a1 * b2\n    t3 = a1 * b0 - a0 * b1\n    det = t1 * t1 - t2 * t3\n    return float(det)",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "berlekamp_massey_linear_recurrence",
+    "param_types": [
+      "list[int]",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes shortest LFSR feedback connection polynomial over F_p using Berlekamp-Massey algorithm.",
+    "pseudocode": "1. Guard prime modulus p >= 2.\n2. Initialize connection polynomial C(x) = 1 and correction polynomial B(x) = 1.\n3. For each sequence element, compute discrepancy d.\n4. If d != 0, update C(x) = C(x) - (d/b) * x^m * B(x).\n5. Return minimal connection polynomial coefficients.",
+    "invariants": [
+      "Finds connection polynomial of minimal degree generating the given sequence.",
+      "Degree L satisfies 2*L <= N for sequences generated by LFSR of length L."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "inv_b = 1 // d",
+        "failure_mechanism": "Integer division crashes or truncates instead of computing modular inverse in F_p.",
+        "counterexample_input": "sequence=[1, 1, 0, 1, 0, 0], prime_mod=2",
+        "verified_fix": "Use Fermat's little theorem modular inverse pow(inv_b, p - 2, p)."
+      }
+    ],
+    "source_code": "def berlekamp_massey_linear_recurrence(sequence: list[int], prime_mod: int) -> list[int]:\n    p = max(2, int(abs(prime_mod)))\n    s = [int(x) % p for x in sequence]\n    n = len(s)\n    if n == 0:\n        return [1]\n    c = [1]\n    b = [1]\n    l = 0\n    m = 1\n    inv_b = 1\n    for i in range(n):\n        d = s[i]\n        for j in range(1, l + 1):\n            d = (d + c[j] * s[i - j]) % p\n        if d == 0:\n            m = m + 1\n        else:\n            t = list(c)\n            fac = d * pow(inv_b, p - 2, p) % p\n            deg_needed = len(b) + m\n            while len(c) < deg_needed:\n                c.append(0)\n            for k in range(len(b)):\n                c[k + m] = (c[k + m] - fac * b[k]) % p\n            if 2 * l <= i:\n                l = i + 1 - l\n                b = t\n                inv_b = d\n                m = 1\n            else:\n                m = m + 1\n    return [coef % p for coef in c]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "integer_square_root_newton",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes integer floor square root using integer Newton-Raphson iteration.",
+    "pseudocode": "1. Guard n <= 0 return 0, n < 4 return 1.\n2. Initialize estimate using bit length: x0 = 1 << ((bits + 1) // 2).\n3. Iterate x1 = (x0 + n // x0) // 2.\n4. When x1 >= x0, return x0.",
+    "invariants": [
+      "Result r strictly satisfies r * r <= n < (r + 1) * (r + 1).",
+      "Converges quadratically without floating-point roundoff or overflow."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "int(math.sqrt(n))",
+        "failure_mechanism": "Double precision floating-point mantissa overflows for integers larger than 2^53.",
+        "counterexample_input": "n=10000001",
+        "verified_fix": "Use pure integer Newton-Raphson iteration with bit-length initialization."
+      }
+    ],
+    "source_code": "def integer_square_root_newton(n: int) -> int:\n    val = int(n)\n    if val <= 0:\n        return 0\n    if val < 4:\n        return 1\n    x0 = 1 << (val.bit_length() + 1) // 2\n    while True:\n        x1 = (x0 + val // x0) // 2\n        if x1 >= x0:\n            return x0\n        x0 = x1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "integer_cube_root_newton",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes integer floor cube root using pure integer Newton iteration.",
+    "pseudocode": "1. Guard n <= 0 return 0, n < 8 return 1.\n2. Initialize estimate using bit length: x0 = 1 << ((bits + 2) // 3).\n3. Iterate x1 = (2*x0 + n // (x0*x0)) // 3.\n4. When x1 >= x0, return x0.",
+    "invariants": [
+      "Result r satisfies r^3 <= n < (r + 1)^3.",
+      "Pure integer arithmetic avoids floating-point precision loss."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "int(n ** (1/3))",
+        "failure_mechanism": "Float exponentiation produces 999999999 instead of 1000000000 due to inexact binary fractions.",
+        "counterexample_input": "n=1000001",
+        "verified_fix": "Use exact integer Newton cubic iteration."
+      }
+    ],
+    "source_code": "def integer_cube_root_newton(n: int) -> int:\n    val = int(n)\n    if val <= 0:\n        return 0\n    if val < 8:\n        return 1\n    x0 = 1 << (val.bit_length() + 2) // 3\n    while True:\n        x1 = (2 * x0 + val // (x0 * x0)) // 3\n        if x1 >= x0:\n            return x0\n        x0 = x1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "lucas_sequence_v_mod",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes k-th Lucas sequence term V_k(P, Q) mod m.",
+    "pseudocode": "1. Guard modulus m and index k.\n2. Initialize base cases V_0 = 2 mod m, V_1 = P mod m.\n3. Step through recurrence V_{n+1} = (P*V_n - Q*V_{n-1}) mod m.\n4. Return term V_k.",
+    "invariants": [
+      "Satisfies recurrence V_{n+1} == P * V_n - Q * V_{n-1} mod m.",
+      "For P=1, Q=-1, generates Lucas numbers L_k mod m."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v_next = p * v1 - q * v0 without modular reduction",
+        "failure_mechanism": "Arbitrary precision growth exhausts memory on large sequence indices.",
+        "counterexample_input": "p=3, q=1, k=1000, m=10007",
+        "verified_fix": "Reduce modulo m at every step of recurrence."
+      }
+    ],
+    "source_code": "def lucas_sequence_v_mod(p: int, q: int, k: int, m: int) -> int:\n    mod = max(1, int(abs(m)))\n    idx = max(0, int(k))\n    if mod == 1:\n        return 0\n    p_val = int(p) % mod\n    q_val = int(q) % mod\n    if idx == 0:\n        return 2 % mod\n    if idx == 1:\n        return p_val\n    v0 = 2 % mod\n    v1 = p_val\n    for _ in range(2, idx + 1):\n        v_next = (p_val * v1 - q_val * v0) % mod\n        v0, v1 = (v1, v_next)\n    return v1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "lucas_sequence_u_mod",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes k-th Lucas sequence term U_k(P, Q) mod m.",
+    "pseudocode": "1. Guard modulus m and index k.\n2. Initialize base cases U_0 = 0, U_1 = 1 mod m.\n3. Step through recurrence U_{n+1} = (P*U_n - Q*U_{n-1}) mod m.\n4. Return term U_k.",
+    "invariants": [
+      "Satisfies recurrence U_{n+1} == P * U_n - Q * U_{n-1} mod m.",
+      "For P=1, Q=-1, generates Fibonacci sequence F_k mod m."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Initializing u0 = 1, u1 = 1",
+        "failure_mechanism": "Shifts sequence index by 1 and violates Lucas base condition U_0 = 0.",
+        "counterexample_input": "p=1, q=-1, k=2, m=100",
+        "verified_fix": "Initialize u0 = 0 and u1 = 1."
+      }
+    ],
+    "source_code": "def lucas_sequence_u_mod(p: int, q: int, k: int, m: int) -> int:\n    mod = max(1, int(abs(m)))\n    idx = max(0, int(k))\n    if mod == 1:\n        return 0\n    p_val = int(p) % mod\n    q_val = int(q) % mod\n    if idx == 0:\n        return 0\n    if idx == 1:\n        return 1 % mod\n    u0 = 0\n    u1 = 1 % mod\n    for _ in range(2, idx + 1):\n        u_next = (p_val * u1 - q_val * u0) % mod\n        u0, u1 = (u1, u_next)\n    return u1",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "catalan_number_mod",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes n-th Catalan number C_n = (1/(n+1)) * binom(2n, n) modulo m.",
+    "pseudocode": "1. Guard index n and modulus m.\n2. Evaluate product formula C_n = prod_{k=2}^n (n + k) / k with exact integer division.\n3. Return result modulo m.",
+    "invariants": [
+      "Computes exact number of Dyck paths of length 2n modulo m.",
+      "Non-negative integer sequence strictly satisfying C_0=1, C_1=1, C_2=2, C_3=5."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "math.comb(2*n, n) // (n + 1) with large n and modular arithmetic",
+        "failure_mechanism": "Direct factorial computation causes giant intermediate integers before modular division.",
+        "counterexample_input": "n=20, m=10007",
+        "verified_fix": "Accumulate exact integer factors iteratively using product formula."
+      }
+    ],
+    "source_code": "def catalan_number_mod(n: int, m: int) -> int:\n    mod = max(1, int(abs(m)))\n    idx = max(0, int(n))\n    if mod == 1:\n        return 0\n    if idx <= 1:\n        return 1 % mod\n    num = 1\n    for k in range(2, idx + 1):\n        num = num * (idx + k) // k\n    return num % mod",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "bell_number_triangle",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes n-th Bell number B_n using Bell triangle (Aitken's array).",
+    "pseudocode": "1. Guard index n <= 25.\n2. Initialize first row [1].\n3. Iteratively construct next row starting with previous row's last element.\n4. Return last element of n-th row.",
+    "invariants": [
+      "Computes total number of partitions of a set of n elements.",
+      "Satisfies Dobinski formula moments and Bell triangle recurrence."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Recursive sum B(n) = sum(comb(n-1, k)*B(k)) without memoization",
+        "failure_mechanism": "Exponential recursion tree O(2^n) causes stack overflow and timeout.",
+        "counterexample_input": "n=20",
+        "verified_fix": "Use iterative Bell triangle with O(n^2) time and O(n) space."
+      }
+    ],
+    "source_code": "def bell_number_triangle(n: int) -> int:\n    idx = max(0, min(int(abs(n)), 25))\n    if idx <= 1:\n        return 1\n    row = [1]\n    for i in range(1, idx):\n        next_row = [row[-1]]\n        for j in range(i):\n            next_row.append(next_row[j] + row[j])\n        row = next_row\n    return row[-1]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "stirling_number_second_kind",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes Stirling number of the second kind S(n, k) using dynamic programming.",
+    "pseudocode": "1. Guard boundaries: k > n or k < 0 return 0, k == 0 return 1 if n == 0 else 0.\n2. Initialize DP table for S(n, k).\n3. Advance using recurrence S(i, j) = j * S(i-1, j) + S(i-1, j-1).\n4. Return S(n, k).",
+    "invariants": [
+      "Partitions n labelled objects into k non-empty unlabelled subsets.",
+      "Satisfies recurrence S(n, k) == k * S(n-1, k) + S(n-1, k-1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dp[j] = j * dp[j] + dp[j-1] in-place without previous row buffering",
+        "failure_mechanism": "Overwrites DP values from current row, producing incorrect combinatorial counts.",
+        "counterexample_input": "n=5, k=3",
+        "verified_fix": "Buffer into next_dp row before advancing to next step."
+      }
+    ],
+    "source_code": "def stirling_number_second_kind(n: int, k: int) -> int:\n    n_val = max(0, int(n))\n    k_val = max(0, int(k))\n    if k_val > n_val or k_val < 0:\n        return 0\n    if k_val == 0:\n        return 1 if n_val == 0 else 0\n    if k_val == 1 or k_val == n_val:\n        return 1\n    dp = [0] * (k_val + 1)\n    dp[0] = 1\n    for i in range(1, n_val + 1):\n        next_dp = [0] * (k_val + 1)\n        for j in range(1, min(i, k_val) + 1):\n            next_dp[j] = j * dp[j] + dp[j - 1]\n        dp = next_dp\n    return dp[k_val]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "partitions_integer_euler",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes integer partition function p(n) via Euler's pentagonal number recurrence.",
+    "pseudocode": "1. Guard n < 0 return 0, n <= 1 return 1.\n2. Limit n to 60.\n3. Initialize DP array p[0..n] with p[0] = 1.\n4. For each i, sum alternating contributions from generalized pentagonal numbers k(3k +- 1)/2.\n5. Return p[n].",
+    "invariants": [
+      "Computes number of unrestricted partitions of integer n.",
+      "Runs in O(n*sqrt(n)) via Euler pentagonal recurrence."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "Recursive partition search",
+        "failure_mechanism": "Exponential time complexity O(e^(sqrt(n))) fails on moderate n.",
+        "counterexample_input": "n=50",
+        "verified_fix": "Use dynamic programming with Euler pentagonal number recurrence."
+      }
+    ],
+    "source_code": "def partitions_integer_euler(n: int) -> int:\n    val = int(n)\n    if val < 0:\n        return 0\n    if val <= 1:\n        return 1\n    limit = min(val, 60)\n    p = [0] * (limit + 1)\n    p[0] = 1\n    for i in range(1, limit + 1):\n        total = 0\n        k = 1\n        while True:\n            g1 = k * (3 * k - 1) // 2\n            g2 = k * (3 * k + 1) // 2\n            if g1 > i and g2 > i:\n                break\n            sign = 1 if k % 2 == 1 else -1\n            if g1 <= i:\n                total = total + sign * p[i - g1]\n            if g2 <= i:\n                total = total + sign * p[i - g2]\n            k = k + 1\n        p[i] = total\n    return p[limit]",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "frobenius_coin_problem_two",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Solves the Frobenius coin problem for two coprime coin denominations a and b.",
+    "pseudocode": "1. Guard a <= 1 or b <= 1.\n2. Compute gcd(a, b); if gcd != 1 return -1 (infinite unpayable amounts).\n3. Compute Frobenius conductor amount g = a*b - a - b.\n4. Return g.",
+    "invariants": [
+      "Solves Sylvester's theorem: largest non-representable amount is a*b - a - b.",
+      "Returns -1 if gcd(a, b) > 1 (infinitely many non-representable values)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "g = a * b - a - b without checking gcd(a, b) == 1",
+        "failure_mechanism": "Returns a finite number for non-coprime coins when no Frobenius number exists.",
+        "counterexample_input": "a=4, b=6",
+        "verified_fix": "Check gcd(a, b) == 1 via Euclidean algorithm and return -1 if > 1."
+      }
+    ],
+    "source_code": "def frobenius_coin_problem_two(a: int, b: int) -> int:\n    val_a = int(a)\n    val_b = int(b)\n    if val_a <= 1 or val_b <= 1:\n        return -1\n    u, v = (val_a, val_b)\n    while v != 0:\n        u, v = (v, u % v)\n    if u != 1:\n        return -1\n    g_val = val_a * val_b - val_a - val_b\n    return g_val",
+    "domain": "number_theory_and_algebra"
+  },
+  {
+    "name": "lehmer_random_generator_step",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Executes one iteration step of Lehmer's multiplicative linear congruential generator.",
+    "pseudocode": "1. Guard modulus m >= 2 and multiplier a.\n2. Normalize state: if state == 0 reseed to 1.\n3. Compute next state (state * a) mod m.\n4. Return next state.",
+    "invariants": [
+      "Park-Miller multiplicative congruential generator step strictly in [1, m - 1].",
+      "Full period of length m - 1 when mult is a primitive root modulo prime mod."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "next_state = (curr * mult) % mod without non-zero seed check",
+        "failure_mechanism": "Seed 0 causes absorbing state where all future values remain 0.",
+        "counterexample_input": "state=0, a=48271, m=65537",
+        "verified_fix": "If curr == 0, reseed to 1 to preserve multiplicative group orbit."
+      }
+    ],
+    "source_code": "def lehmer_random_generator_step(state: int, a: int, m: int) -> int:\n    mod = max(2, int(abs(m)))\n    mult = int(a) % mod\n    curr = int(abs(state)) % mod\n    if curr == 0:\n        curr = 1\n    next_state = curr * mult % mod\n    return next_state",
+    "domain": "number_theory_and_algebra"
+  }
+]

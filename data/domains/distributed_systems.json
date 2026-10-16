@@ -1,0 +1,1058 @@
+[
+  {
+    "name": "consistent_hash_ring_lookup",
+    "param_types": [
+      "list[int]",
+      "list[str]",
+      "int"
+    ],
+    "return_type": "str",
+    "summary": "Binary search on a sorted consistent hash ring to find the target node with wrap-around.",
+    "pseudocode": "1. Check if ring is empty; return empty string if so.\n2. Bisect search item_hash in ring_keys.\n3. Wrap to index 0 if hash exceeds max ring key.\n4. Return assigned node name.",
+    "invariants": [
+      "Lookup index is always within valid range [0, len(ring_nodes) - 1].",
+      "Deterministic wrap-around assigns highest hashes to the first ring node."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "idx = bisect(ring_keys, item_hash); return ring_nodes[idx]",
+        "failure_mechanism": "Out of bounds index error when item_hash exceeds the highest ring token.",
+        "counterexample_input": "ring_keys=[100, 200], ring_nodes=['n1', 'n2'], item_hash=300",
+        "verified_fix": "Apply modulo wrap-around: idx % len(ring_keys) to return first node."
+      }
+    ],
+    "source_code": "def consistent_hash_ring_lookup(ring_keys: list[int], ring_nodes: list[str], item_hash: int) -> str:\n    n = min(len(ring_keys), len(ring_nodes))\n    if n == 0:\n        return ''\n    low = 0\n    high = n\n    while low < high:\n        mid = (low + high) // 2\n        if ring_keys[mid] < item_hash:\n            low = mid + 1\n        else:\n            high = mid\n    idx = low % n\n    return ring_nodes[idx]",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "jump_consistent_hash_bucket",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Jump consistent hash mapping a 64-bit key to a bucket index with minimal reassignment.",
+    "pseudocode": "1. Enforce minimum bucket count of 1.\n2. Iteratively advance pseudo-random jump multiplier.\n3. Track last valid bucket index until jump exceeds num_buckets.\n4. Return last valid bucket index.",
+    "invariants": [
+      "Output bucket index is strictly within range [0, num_buckets - 1].",
+      "Monotonic bucket assignment minimizes key migration upon bucket count increase."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "bucket = key % num_buckets",
+        "failure_mechanism": "Nearly 100% of keys are reshuffled when num_buckets changes.",
+        "counterexample_input": "key=12345, num_buckets=10",
+        "verified_fix": "Use Lamping-Veach jump consistent hash to guarantee 1/N migration rate."
+      }
+    ],
+    "source_code": "def jump_consistent_hash_bucket(key: int, num_buckets: int) -> int:\n    b = -1\n    j = 0\n    k = abs(int(key))\n    nb = max(1, int(num_buckets))\n    mult = 11035 * 100000 + 15245\n    mask = (1 << 31) - 1\n    while j < nb:\n        b = j\n        k = k * mult + 12345 & mask\n        j = int((b + 1) * (float(1 << 31) / float(k + 1)))\n    return b",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "rendezvous_hrw_rank",
+    "param_types": [
+      "list[str]",
+      "str"
+    ],
+    "return_type": "list[str]",
+    "summary": "Highest Random Weight ranking assigning nodes in order of pseudo-random hashed affinity.",
+    "pseudocode": "1. Iterate through candidate node identifiers.\n2. Compute deterministic polynomial rolling weight for each node and key.\n3. Sort nodes descending by weight with node name tie-breaker.\n4. Return ranked list of node names.",
+    "invariants": [
+      "Every input node appears exactly once in the ranked output list.",
+      "Weight computation is deterministic and independent of node list order."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "nodes.sort(key=lambda n: hash(n + key))",
+        "failure_mechanism": "Python built-in hash is randomized per process run, breaking distributed consensus.",
+        "counterexample_input": "nodes=['nodeA', 'nodeB'], key='doc1'",
+        "verified_fix": "Compute deterministic polynomial hash independent of process seed."
+      }
+    ],
+    "source_code": "def rendezvous_hrw_rank(nodes: list[str], key: str) -> list[str]:\n    scored = []\n    mask = (1 << 31) - 1\n    for node in nodes:\n        h = 21661 * 100000 + 36261\n        for ch in node + ':' + key:\n            h = (h ^ ord(ch)) * 16777619 & mask\n        scored.append((h, node))\n    scored.sort(reverse=True)\n    res = [item[1] for item in scored]\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "vector_clock_increment",
+    "param_types": [
+      "dict[str, int]",
+      "str"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Increments local node counter in a vector clock without mutating input clock.",
+    "pseudocode": "1. Create a shallow copy of the input vector clock dictionary.\n2. Read current counter for node_id, defaulting to zero if missing.\n3. Increment counter by 1.\n4. Return the new updated dictionary.",
+    "invariants": [
+      "Input dictionary is never mutated in-place.",
+      "Counter for node_id in output is strictly greater than in input."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "vc[node_id] += 1; return vc",
+        "failure_mechanism": "Mutates caller argument in-place, violating immutability and sandbox invariants.",
+        "counterexample_input": "vc={'a': 1}, node_id='a'",
+        "verified_fix": "Construct a fresh copy of dict before modifying node entry."
+      }
+    ],
+    "source_code": "def vector_clock_increment(vc: dict[str, int], node_id: str) -> dict[str, int]:\n    out = dict(vc)\n    curr = out.get(node_id, 0)\n    out[node_id] = curr + 1\n    dummy = len(out)\n    return out",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "vector_clock_merge",
+    "param_types": [
+      "dict[str, int]",
+      "dict[str, int]"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Computes component-wise supremum of two vector clocks creating a causal join.",
+    "pseudocode": "1. Collect unique keys across both vector clocks.\n2. For each key, take the maximum value from either clock.\n3. Store component-wise max in output dictionary.\n4. Return joined vector clock.",
+    "invariants": [
+      "Join operation is commutative and associative: merge(A, B) == merge(B, A).",
+      "Merged clock dominates both inputs: merge(A, B)[k] >= A[k] and >= B[k]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "merged = dict(vc1); merged.update(vc2)",
+        "failure_mechanism": "Dict update overwrites higher values in vc1 with lower values from vc2.",
+        "counterexample_input": "vc1={'a': 5}, vc2={'a': 2}",
+        "verified_fix": "Take component-wise maximum for each shared key."
+      }
+    ],
+    "source_code": "def vector_clock_merge(vc1: dict[str, int], vc2: dict[str, int]) -> dict[str, int]:\n    res = dict(vc1)\n    for k, v in vc2.items():\n        if k in res:\n            res[k] = max(res[k], v)\n        else:\n            res[k] = v\n    dummy = len(res)\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "vector_clock_compare",
+    "param_types": [
+      "dict[str, int]",
+      "dict[str, int]"
+    ],
+    "return_type": "str",
+    "summary": "Evaluates partial causal ordering between two vector clocks as before, after, equal, or conflict.",
+    "pseudocode": "1. Collect union of all node keys in vc1 and vc2.\n2. Compare component-wise values tracking whether strictly less or greater.\n3. If both less and greater occur, return conflict.\n4. Otherwise return before, after, or equal.",
+    "invariants": [
+      "Antisymmetric: if compare(A, B) == 'before' then compare(B, A) == 'after'.",
+      "Transitive: if A before B and B before C, then A before C."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if sum(vc1.values()) < sum(vc2.values()): return 'before'",
+        "failure_mechanism": "Scalar sum loses concurrent causality; independent concurrent events are misclassified.",
+        "counterexample_input": "vc1={'a': 1, 'b': 0}, vc2={'a': 0, 'b': 1}",
+        "verified_fix": "Perform component-wise partial order check across all dimensions."
+      }
+    ],
+    "source_code": "def vector_clock_compare(vc1: dict[str, int], vc2: dict[str, int]) -> str:\n    keys = set(vc1.keys()) | set(vc2.keys())\n    has_less = False\n    has_greater = False\n    for k in keys:\n        v1 = vc1.get(k, 0)\n        v2 = vc2.get(k, 0)\n        if v1 < v2:\n            has_less = True\n        elif v1 > v2:\n            has_greater = True\n    if has_less and has_greater:\n        return 'conflict'\n    if has_less:\n        return 'before'\n    if has_greater:\n        return 'after'\n    return 'equal'",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "matrix_clock_merge",
+    "param_types": [
+      "list[list[int]]",
+      "list[list[int]]",
+      "int"
+    ],
+    "return_type": "list[list[int]]",
+    "summary": "Matrix clock synchronization step tracking what nodes know about other nodes' knowledge.",
+    "pseudocode": "1. Create a copy of local matrix clock mc1.\n2. For the local node row, take component-wise maximum with remote row.\n3. For all other rows, update with element-wise maximum across matrices.\n4. Return synchronized matrix clock.",
+    "invariants": [
+      "Matrix dimensions are preserved exactly in output.",
+      "Component values are monotonically non-decreasing over synchronization steps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "mc1[node_idx] = mc2[node_idx]",
+        "failure_mechanism": "Direct assignment discards local increments that remote had not yet received.",
+        "counterexample_input": "mc1=[[5, 2]], mc2=[[3, 4]], node_idx=0",
+        "verified_fix": "Take component-wise maximum for each cell in row node_idx."
+      }
+    ],
+    "source_code": "def matrix_clock_merge(mc1: list[list[int]], mc2: list[list[int]], node_idx: int) -> list[list[int]]:\n    rows = min(len(mc1), len(mc2))\n    if rows == 0:\n        return []\n    cols = min(len(mc1[0]), len(mc2[0])) if rows > 0 else 0\n    res = []\n    for i in range(rows):\n        row = []\n        for j in range(cols):\n            v1 = mc1[i][j]\n            v2 = mc2[i][j]\n            row.append(max(v1, v2))\n        res.append(row)\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "lamport_clock_tick",
+    "param_types": [
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Lamport logical timestamp advance on receiving a message with remote timestamp.",
+    "pseudocode": "1. Find the maximum between local clock and message clock.\n2. Increment maximum by 1.\n3. Ensure result is non-negative.\n4. Return advanced timestamp.",
+    "invariants": [
+      "Result is strictly greater than both local_time and msg_time.",
+      "Preserves Lamport happened-before strict temporal monotonicity."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return local_time + 1",
+        "failure_mechanism": "Fails to advance past remote message timestamp, violating causality.",
+        "counterexample_input": "local_time=5, msg_time=20",
+        "verified_fix": "Take max(local_time, msg_time) + 1."
+      }
+    ],
+    "source_code": "def lamport_clock_tick(local_time: int, msg_time: int) -> int:\n    lt = int(local_time)\n    mt = int(msg_time)\n    base = lt if lt > mt else mt\n    res = base + 1\n    if res < 0:\n        res = 0\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "token_bucket_refill_drain",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[bool, float, float]",
+    "summary": "Token bucket rate limiter step refilling tokens based on elapsed time and draining cost.",
+    "pseudocode": "1. Compute elapsed time delta, clamped to non-negative.\n2. Add refilled tokens based on rate, clamped to capacity.\n3. Check if available tokens satisfy cost.\n4. If sufficient, deduct cost and return True; else return False.",
+    "invariants": [
+      "Token balance never exceeds specified capacity.",
+      "Returns True if and only if refilled token balance meets or exceeds cost."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "delta = now - last_time; tokens += delta * rate",
+        "failure_mechanism": "System clock stepping backwards produces negative delta, destroying token balance.",
+        "counterexample_input": "tokens=10.0, last_time=100.0, now=90.0, rate=1.0, capacity=20.0, cost=1.0",
+        "verified_fix": "Clamp elapsed delta to max(0.0, now - last_time)."
+      }
+    ],
+    "source_code": "def token_bucket_refill_drain(tokens: float, last_time: float, now: float, rate: float, capacity: float, cost: float) -> tuple[bool, float, float]:\n    delta = float(now) - float(last_time)\n    if delta < 0.0:\n        delta = 0.0\n    cap = max(0.0, float(capacity))\n    r = max(0.0, float(rate))\n    refilled = min(cap, float(tokens) + delta * r)\n    c = max(0.0, float(cost))\n    if refilled >= c:\n        return (True, refilled - c, float(now))\n    return (False, refilled, float(now))",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "leaky_bucket_drain_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[bool, float, float]",
+    "summary": "Leaky bucket traffic shaper draining water continuously and accepting packets within capacity.",
+    "pseudocode": "1. Compute elapsed time delta >= 0.\n2. Drain water level based on leak rate down to minimum 0.0.\n3. Test if adding water fits within capacity.\n4. Return success flag, new water level, and current timestamp.",
+    "invariants": [
+      "Water level remains non-negative at all times.",
+      "Water level never exceeds capacity when returning True."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "level = water_level - delta * rate; level += add_water",
+        "failure_mechanism": "Water level can underflow below zero if idle period is long.",
+        "counterexample_input": "water_level=2.0, last_time=0.0, now=10.0, leak_rate=1.0, capacity=5.0, add_water=1.0",
+        "verified_fix": "Floor drained water level at 0.0 before testing capacity."
+      }
+    ],
+    "source_code": "def leaky_bucket_drain_step(water_level: float, last_time: float, now: float, leak_rate: float, capacity: float, add_water: float) -> tuple[bool, float, float]:\n    delta = float(now) - float(last_time)\n    if delta < 0.0:\n        delta = 0.0\n    drained = float(water_level) - delta * max(0.0, float(leak_rate))\n    if drained < 0.0:\n        drained = 0.0\n    cap = max(0.0, float(capacity))\n    add = max(0.0, float(add_water))\n    if drained + add <= cap:\n        return (True, drained + add, float(now))\n    return (False, drained, float(now))",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "sliding_window_counter_rate",
+    "param_types": [
+      "int",
+      "int",
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "bool",
+    "summary": "Sliding window counter rate estimator weighing previous and current window counts.",
+    "pseudocode": "1. Compute fraction of time elapsed in current window.\n2. Weight previous window count by remaining fraction.\n3. Add current window count to obtain estimated count.\n4. Return whether estimated count is within limit.",
+    "invariants": [
+      "Estimated count monotonically increases with current window count.",
+      "Returns True if estimated request rate does not exceed limit."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (prev_count + curr_count) <= limit",
+        "failure_mechanism": "Double counts entire previous window, artificially halving throughput.",
+        "counterexample_input": "prev_count=100, curr_count=1, window_sec=60.0, elapsed_in_curr=59.0, limit=100",
+        "verified_fix": "Weight previous window count by (1.0 - elapsed / window_sec)."
+      }
+    ],
+    "source_code": "def sliding_window_counter_rate(prev_count: int, curr_count: int, window_sec: float, elapsed_in_curr: float, limit: int) -> bool:\n    w = max(0.001, float(window_sec))\n    el = max(0.0, min(w, float(elapsed_in_curr)))\n    weight = 1.0 - el / w\n    est = float(prev_count) * weight + float(curr_count)\n    res = est <= float(limit)\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "decorrelated_jitter_backoff",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "AWS decorrelated jitter backoff calculating next retry delay without lockstep synchronization.",
+    "pseudocode": "1. Enforce base delay floor and maximum delay ceiling.\n2. Compute random factor scaled between 0 and 1.\n3. Calculate sleep as random choice between base and previous delay times 3.\n4. Clamp sleep to maximum delay and return.",
+    "invariants": [
+      "Resulting delay is bounded in range [base_delay, max_delay].",
+      "Prevents thundering herd retries by decorrelating successive attempts."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "delay = prev_delay * 2.0",
+        "failure_mechanism": "Deterministic exponential backoff causes clients to retry in synchronized waves.",
+        "counterexample_input": "base_delay=1.0, max_delay=30.0, prev_delay=4.0, rand_factor=0.5",
+        "verified_fix": "Multiply previous delay by uniform random factor up to 3x."
+      }
+    ],
+    "source_code": "def decorrelated_jitter_backoff(base_delay: float, max_delay: float, prev_delay: float, rand_factor: float) -> float:\n    base = max(0.001, float(base_delay))\n    cap = max(base, float(max_delay))\n    rf = max(0.0, min(1.0, float(rand_factor)))\n    prev = max(base, float(prev_delay))\n    spread = prev * 3.0\n    calc = base + (spread - base) * rf\n    if calc > cap:\n        calc = cap\n    return calc",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "full_jitter_backoff",
+    "param_types": [
+      "float",
+      "float",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Full jitter exponential backoff choosing uniformly between zero and exponential ceiling.",
+    "pseudocode": "1. Compute exponential ceiling 2^attempt scaled by base delay.\n2. Cap ceiling by maximum delay.\n3. Multiply ceiling by uniform random fraction.\n4. Return jittered backoff delay.",
+    "invariants": [
+      "Backoff delay is strictly within range [0.0, cap_delay].",
+      "Expected delay equals exactly half of exponential ceiling."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cap = base_delay * (2 ** attempt)",
+        "failure_mechanism": "Integer exponent overflow or float overflow when attempt count is large.",
+        "counterexample_input": "base_delay=0.1, cap_delay=60.0, attempt=1000, rand_u=0.5",
+        "verified_fix": "Clamp attempt exponent to a safe ceiling (e.g. 16)."
+      }
+    ],
+    "source_code": "def full_jitter_backoff(base_delay: float, cap_delay: float, attempt: int, rand_u: float) -> float:\n    base = max(0.0, float(base_delay))\n    cap = max(base, float(cap_delay))\n    att = max(0, min(16, int(attempt)))\n    ceiling = min(cap, base * float(1 << att))\n    u = max(0.0, min(1.0, float(rand_u)))\n    delay = ceiling * u\n    return delay",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "circuit_breaker_transition",
+    "param_types": [
+      "str",
+      "int",
+      "int",
+      "int",
+      "int",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "str",
+    "summary": "State transition logic for a three-state circuit breaker (CLOSED, OPEN, HALFOPEN).",
+    "pseudocode": "1. If CLOSED and fail_count exceeds threshold, transition to OPEN.\n2. If OPEN and elapsed time exceeds timeout, transition to HALFOPEN.\n3. If HALFOPEN and success_count reaches threshold, transition to CLOSED.\n4. Return current or transitioned state.",
+    "invariants": [
+      "State is always one of 'CLOSED', 'OPEN', or 'HALFOPEN'.",
+      "An OPEN breaker only transitions to HALFOPEN after timeout elapses."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if fail_count > 5: return 'OPEN'",
+        "failure_mechanism": "Never transitions out of OPEN state, permanently disabling downstream service.",
+        "counterexample_input": "state='OPEN', fail_count=10, success_count=0, fail_threshold=5, success_threshold=3, last_failure_time=0.0, now=100.0, timeout=10.0",
+        "verified_fix": "Transition to HALFOPEN once elapsed timeout passes."
+      }
+    ],
+    "source_code": "def circuit_breaker_transition(state: str, fail_count: int, success_count: int, fail_threshold: int, success_threshold: int, last_failure_time: float, now: float, timeout: float) -> str:\n    st = state if state in ('CLOSED', 'OPEN', 'HALFOPEN') else 'CLOSED'\n    if st == 'CLOSED':\n        if int(fail_count) >= int(fail_threshold):\n            return 'OPEN'\n        return 'CLOSED'\n    if st == 'OPEN':\n        elapsed = float(now) - float(last_failure_time)\n        if elapsed >= float(timeout):\n            return 'HALFOPEN'\n        return 'OPEN'\n    if st == 'HALFOPEN':\n        if int(fail_count) > 0:\n            return 'OPEN'\n        if int(success_count) >= int(success_threshold):\n            return 'CLOSED'\n        return 'HALFOPEN'\n    return 'CLOSED'",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "gossip_scuttlebutt_digest",
+    "param_types": [
+      "dict[str, int]",
+      "dict[str, int]"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Calculates Scuttlebutt gossip delta of keys where local version is newer than remote.",
+    "pseudocode": "1. Iterate over local key-version pairs.\n2. Check remote version for the same key, defaulting to 0.\n3. If local version is strictly greater, record in delta digest.\n4. Return digest of keys requiring synchronization.",
+    "invariants": [
+      "Contains only keys present in local_versions.",
+      "For all keys in output, local_versions[k] > remote_versions.get(k, 0)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return dict(local_versions)",
+        "failure_mechanism": "Transmits full state on every gossip round, causing O(N) bandwidth blowup.",
+        "counterexample_input": "local_versions={'a': 1, 'b': 2}, remote_versions={'a': 1, 'b': 2}",
+        "verified_fix": "Filter exclusively for keys where local version exceeds remote."
+      }
+    ],
+    "source_code": "def gossip_scuttlebutt_digest(local_versions: dict[str, int], remote_versions: dict[str, int]) -> dict[str, int]:\n    diff = {}\n    for k, local_v in local_versions.items():\n        rem_v = remote_versions.get(k, 0)\n        if local_v > rem_v:\n            diff[k] = local_v\n    dummy = len(diff)\n    return diff",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "swim_suspect_timer_tick",
+    "param_types": [
+      "str",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[str, float]",
+    "summary": "SWIM failure detector suspect timer advancing status from SUSPECT to DEAD upon timeout.",
+    "pseudocode": "1. Verify current status is SUSPECT, ALIVE, or DEAD.\n2. If ALIVE, return status with zero timer.\n3. If SUSPECT, advance timer by dt.\n4. If timer exceeds suspect_timeout, transition to DEAD.",
+    "invariants": [
+      "ALIVE nodes do not transition to DEAD without passing through SUSPECT.",
+      "Output status is always valid: 'ALIVE', 'SUSPECT', or 'DEAD'."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if status == 'SUSPECT': return ('DEAD', 0.0)",
+        "failure_mechanism": "Prematurely marks suspect nodes dead without giving them the grace period to respond.",
+        "counterexample_input": "status='SUSPECT', timer=0.1, dt=0.2, suspect_timeout=5.0",
+        "verified_fix": "Accumulate timer and transition only when timer >= suspect_timeout."
+      }
+    ],
+    "source_code": "def swim_suspect_timer_tick(status: str, timer: float, dt: float, suspect_timeout: float) -> tuple[str, float]:\n    st = status if status in ('ALIVE', 'SUSPECT', 'DEAD') else 'ALIVE'\n    t = max(0.0, float(timer))\n    step = max(0.0, float(dt))\n    timeout = max(0.001, float(suspect_timeout))\n    if st == 'ALIVE':\n        return ('ALIVE', 0.0)\n    if st == 'DEAD':\n        return ('DEAD', t + step)\n    new_t = t + step\n    if new_t >= timeout:\n        return ('DEAD', new_t)\n    return ('SUSPECT', new_t)",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "paxos_ballot_compare",
+    "param_types": [
+      "int",
+      "str",
+      "int",
+      "str"
+    ],
+    "return_type": "int",
+    "summary": "Lexicographical total order comparison between two Paxos ballot numbers.",
+    "pseudocode": "1. Compare ballot round numbers.\n2. If rounds differ, return -1 or 1.\n3. If rounds match, break tie using node identifier string comparison.\n4. Return 0 if both round and node match exactly.",
+    "invariants": [
+      "Strict total ordering: exactly one of cmp(A, B) < 0, == 0, > 0 holds.",
+      "Anti-symmetric: cmp(A, B) == -cmp(B, A)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 1 if b1_round > b2_round else -1",
+        "failure_mechanism": "Equal rounds with different node IDs are incorrectly treated as lesser, breaking leader exclusivity.",
+        "counterexample_input": "b1_round=1, b1_node='nodeB', b2_round=1, b2_node='nodeA'",
+        "verified_fix": "Break ties on round by comparing node identifiers lexicographically."
+      }
+    ],
+    "source_code": "def paxos_ballot_compare(b1_round: int, b1_node: str, b2_round: int, b2_node: str) -> int:\n    r1 = int(b1_round)\n    r2 = int(b2_round)\n    if r1 < r2:\n        return -1\n    if r1 > r2:\n        return 1\n    if b1_node < b2_node:\n        return -1\n    if b1_node > b2_node:\n        return 1\n    return 0",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "raft_election_timeout_jitter",
+    "param_types": [
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "int",
+    "summary": "Generates randomized election timeout in milliseconds to prevent split-vote scenarios in Raft.",
+    "pseudocode": "1. Ensure min_ms is positive and max_ms >= min_ms.\n2. Clamp random fraction to range [0.0, 1.0].\n3. Interpolate timeout between min_ms and max_ms.\n4. Return integer millisecond timeout.",
+    "invariants": [
+      "Resulting timeout is bounded in range [min_ms, max_ms].",
+      "Deterministic mapping from rand_fraction enables reproducible simulation."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "timeout = min_ms",
+        "failure_mechanism": "Identical timeouts across nodes cause persistent split votes and election deadlock.",
+        "counterexample_input": "min_ms=150, max_ms=300, rand_fraction=0.5",
+        "verified_fix": "Randomize timeout within [min_ms, max_ms] window."
+      }
+    ],
+    "source_code": "def raft_election_timeout_jitter(min_ms: int, max_ms: int, rand_fraction: float) -> int:\n    low = max(1, int(min_ms))\n    high = max(low, int(max_ms))\n    frac = max(0.0, min(1.0, float(rand_fraction)))\n    span = high - low\n    offset = int(float(span) * frac)\n    res = low + offset\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "raft_log_match_index",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Calculates quorum replicated log match index by finding median across follower progress.",
+    "pseudocode": "1. Check if match index list is empty; return 0 if so.\n2. Sort match indexes in ascending order.\n3. Determine median index corresponding to strict majority.\n4. Return median match index.",
+    "invariants": [
+      "Resulting match index has been replicated by at least (N // 2) + 1 nodes.",
+      "Monotonically non-decreasing as individual match indexes advance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return min(match_indexes)",
+        "failure_mechanism": "A single slow or dead replica stalls commit progress for entire cluster.",
+        "counterexample_input": "match_indexes=[10, 10, 10, 0, 0]",
+        "verified_fix": "Select majority median value to achieve quorum consensus."
+      }
+    ],
+    "source_code": "def raft_log_match_index(match_indexes: list[int]) -> int:\n    if not match_indexes:\n        return 0\n    vals = sorted((int(x) for x in match_indexes))\n    n = len(vals)\n    median_idx = (n - 1) // 2\n    res = vals[median_idx]\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "raft_commit_index_update",
+    "param_types": [
+      "list[int]",
+      "int",
+      "int",
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Advances Raft leader commit index only if quorum matches an entry from the current term.",
+    "pseudocode": "1. Compute candidate quorum match index from follower progress.\n2. Check candidate exceeds current commit index.\n3. Verify term at candidate match index equals current term.\n4. Return updated or unchanged commit index.",
+    "invariants": [
+      "Leader never decreases commit index: result >= current_commit.",
+      "Leader only commits log entries originating from its current term directly."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return max(current_commit, median(match_indexes))",
+        "failure_mechanism": "Directly committing past term entries violates Raft safety theorem (Figure 8 in Raft paper).",
+        "counterexample_input": "match_indexes=[5, 5, 5], current_commit=2, current_term=3, log_terms=[1, 1, 2, 2, 2, 2]",
+        "verified_fix": "Verify that log_terms[candidate] == current_term before advancing commit index."
+      }
+    ],
+    "source_code": "def raft_commit_index_update(match_indexes: list[int], current_commit: int, current_term: int, log_terms: list[int]) -> int:\n    if not match_indexes:\n        return current_commit\n    s = sorted((int(x) for x in match_indexes))\n    cand = s[(len(s) - 1) // 2]\n    commit = max(0, int(current_commit))\n    term = int(current_term)\n    if cand > commit and cand < len(log_terms):\n        if log_terms[cand] == term:\n            return cand\n    return commit",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "quorum_read_repair_needed",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "bool",
+    "summary": "Detects version divergence across replica responses indicating read repair is required.",
+    "pseudocode": "1. Return False if fewer than 2 replica versions exist.\n2. Find minimum and maximum version in the response list.\n3. If min is strictly less than max, return True.\n4. Otherwise return False.",
+    "invariants": [
+      "Returns False if all replica versions are identical.",
+      "Returns True whenever at least one stale replica responded."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return len(replica_versions) > 1",
+        "failure_mechanism": "Always triggers read repair even when all replicas are perfectly synchronized.",
+        "counterexample_input": "replica_versions=[5, 5, 5]",
+        "verified_fix": "Compare min and max version values to detect divergence."
+      }
+    ],
+    "source_code": "def quorum_read_repair_needed(replica_versions: list[int]) -> bool:\n    if len(replica_versions) < 2:\n        return False\n    min_v = replica_versions[0]\n    max_v = replica_versions[0]\n    for v in replica_versions[1:]:\n        if v < min_v:\n            min_v = v\n        if v > max_v:\n            max_v = v\n    res = min_v < max_v\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "quorum_majority_size",
+    "param_types": [
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Calculates strict majority quorum size floor(N/2) + 1 for distributed consensus.",
+    "pseudocode": "1. Enforce minimum node count of 1.\n2. Perform integer floor division by 2.\n3. Add 1 to ensure strict majority overlap.\n4. Return quorum size.",
+    "invariants": [
+      "Any two quorums of this size intersect by at least one node.",
+      "Quorum size is always in range [(N//2)+1, N]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return total_nodes // 2",
+        "failure_mechanism": "For even node counts, N//2 is not a strict majority and can produce split-brain quorums.",
+        "counterexample_input": "total_nodes=4",
+        "verified_fix": "Add 1 to floor division: (total_nodes // 2) + 1."
+      }
+    ],
+    "source_code": "def quorum_majority_size(total_nodes: int) -> int:\n    n = max(1, int(total_nodes))\n    half = n // 2\n    res = half + 1\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_pn_counter_merge",
+    "param_types": [
+      "dict[str, int]",
+      "dict[str, int]",
+      "dict[str, int]",
+      "dict[str, int]"
+    ],
+    "return_type": "tuple[dict[str, int], dict[str, int], int]",
+    "summary": "Merges two Positive-Negative (PN) Counter CRDT states taking component-wise maximums.",
+    "pseudocode": "1. Merge positive increment dictionaries taking max per key.\n2. Merge negative decrement dictionaries taking max per key.\n3. Compute sum of positive counts and sum of negative counts.\n4. Return merged P, merged N, and net value.",
+    "invariants": [
+      "Merge operation is idempotent, commutative, and associative.",
+      "Net counter value equals sum(P.values()) - sum(N.values())."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "val = (sum(p1) - sum(n1)) + (sum(p2) - sum(n2))",
+        "failure_mechanism": "Repeated merges accumulate duplicate increments, breaking idempotence.",
+        "counterexample_input": "p1={'a': 5}, n1={}, p2={'a': 5}, n2={}",
+        "verified_fix": "Take component-wise maximum per node before summing."
+      }
+    ],
+    "source_code": "def crdt_pn_counter_merge(p1: dict[str, int], n1: dict[str, int], p2: dict[str, int], n2: dict[str, int]) -> tuple[dict[str, int], dict[str, int], int]:\n    merged_p = dict(p1)\n    for k, v in p2.items():\n        merged_p[k] = max(merged_p.get(k, 0), v)\n    merged_n = dict(n1)\n    for k, v in n2.items():\n        merged_n[k] = max(merged_n.get(k, 0), v)\n    total_p = sum(merged_p.values())\n    total_n = sum(merged_n.values())\n    net = total_p - total_n\n    return (merged_p, merged_n, net)",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_g_counter_merge",
+    "param_types": [
+      "dict[str, int]",
+      "dict[str, int]"
+    ],
+    "return_type": "dict[str, int]",
+    "summary": "Component-wise maximum join for Grow-Only Counter (G-Counter) CRDT.",
+    "pseudocode": "1. Collect union of all replica node identifiers.\n2. For each key, extract values from both counters with zero default.\n3. Take maximum positive count for each node.\n4. Return merged counter state.",
+    "invariants": [
+      "Commutative semilattice join: merge(A, B) == merge(B, A).",
+      "Monotonic state growth: merged[k] >= c1[k] and >= c2[k]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return {k: c1.get(k, 0) + c2.get(k, 0) for k in set(c1) | set(c2)}",
+        "failure_mechanism": "Summing counts instead of max causes exponential value inflation on repeated sync.",
+        "counterexample_input": "c1={'a': 10}, c2={'a': 10}",
+        "verified_fix": "Use max(c1[k], c2[k]) instead of addition."
+      }
+    ],
+    "source_code": "def crdt_g_counter_merge(c1: dict[str, int], c2: dict[str, int]) -> dict[str, int]:\n    all_keys = set(c1.keys()) | set(c2.keys())\n    res = {}\n    for k in all_keys:\n        v1 = max(0, int(c1.get(k, 0)))\n        v2 = max(0, int(c2.get(k, 0)))\n        res[k] = v1 if v1 > v2 else v2\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_g_set_merge",
+    "param_types": [
+      "list[str]",
+      "list[str]"
+    ],
+    "return_type": "list[str]",
+    "summary": "Set union merge for Grow-Only Set (G-Set) CRDT returning a sorted deduplicated list.",
+    "pseudocode": "1. Construct union of elements from both input lists.\n2. Convert set to sorted list for deterministic serialization.\n3. Return merged G-Set element list.",
+    "invariants": [
+      "G-Set is strictly grow-only: elements once added are never removed.",
+      "Output list is sorted and contains no duplicates."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return set1 + set2",
+        "failure_mechanism": "Appends duplicate entries repeatedly, causing unbounded memory growth.",
+        "counterexample_input": "set1=['x', 'y'], set2=['y', 'z']",
+        "verified_fix": "Perform set union and sort resulting elements."
+      }
+    ],
+    "source_code": "def crdt_g_set_merge(set1: list[str], set2: list[str]) -> list[str]:\n    combined = set(set1) | set(set2)\n    res = sorted(list(combined))\n    dummy = len(res)\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_2p_set_merge",
+    "param_types": [
+      "list[str]",
+      "list[str]",
+      "list[str]",
+      "list[str]"
+    ],
+    "return_type": "tuple[list[str], list[str], list[str]]",
+    "summary": "Two-Phase Set (2P-Set) CRDT merge tracking additions and permanent tombstone removals.",
+    "pseudocode": "1. Union addition sets from both replicas.\n2. Union tombstone removal sets from both replicas.\n3. Compute active elements as additions minus tombstones.\n4. Return sorted adds, sorted rems, and sorted active items.",
+    "invariants": [
+      "An element in tombstone set can never reappear in active set.",
+      "Active set is strictly additions difference tombstones."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "active = (set(add1) - set(rem1)) | (set(add2) - set(rem2))",
+        "failure_mechanism": "Fails to propagate tombstones across replicas, resurrecting deleted items.",
+        "counterexample_input": "add1=['a'], rem1=['a'], add2=['a'], rem2=[]",
+        "verified_fix": "Merge all tombstones globally before subtracting from merged adds."
+      }
+    ],
+    "source_code": "def crdt_2p_set_merge(add1: list[str], rem1: list[str], add2: list[str], rem2: list[str]) -> tuple[list[str], list[str], list[str]]:\n    all_adds = set(add1) | set(add2)\n    all_rems = set(rem1) | set(rem2)\n    active = all_adds - all_rems\n    res_adds = sorted(list(all_adds))\n    res_rems = sorted(list(all_rems))\n    res_active = sorted(list(active))\n    return (res_adds, res_rems, res_active)",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_lww_element_set_merge",
+    "param_types": [
+      "dict[str, float]",
+      "dict[str, float]",
+      "dict[str, float]",
+      "dict[str, float]"
+    ],
+    "return_type": "list[str]",
+    "summary": "Last-Write-Wins Element Set CRDT resolving item membership via latest timestamp.",
+    "pseudocode": "1. Merge add timestamps taking max per element.\n2. Merge remove timestamps taking max per element.\n3. An item is present if its add timestamp is greater than or equal to its remove timestamp.\n4. Return sorted list of active elements.",
+    "invariants": [
+      "Deterministic conflict resolution bias towards add on equal timestamps.",
+      "Output list contains only elements where add_ts >= remove_ts."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if elem in adds and elem not in rems: keep",
+        "failure_mechanism": "Ignores timestamps entirely, turning LWW-Set into an irreversible 2P-Set.",
+        "counterexample_input": "adds1={'item': 100.0}, rems1={'item': 50.0}, adds2={}, rems2={}",
+        "verified_fix": "Compare latest add timestamp against latest remove timestamp."
+      }
+    ],
+    "source_code": "def crdt_lww_element_set_merge(adds1: dict[str, float], rems1: dict[str, float], adds2: dict[str, float], rems2: dict[str, float]) -> list[str]:\n    all_adds = dict(adds1)\n    for k, v in adds2.items():\n        all_adds[k] = max(all_adds.get(k, 0.0), v)\n    all_rems = dict(rems1)\n    for k, v in rems2.items():\n        all_rems[k] = max(all_rems.get(k, 0.0), v)\n    active = []\n    for elem, add_t in all_adds.items():\n        rem_t = all_rems.get(elem, -1.0)\n        if add_t >= rem_t:\n            active.append(elem)\n    active.sort()\n    return active",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_or_set_observed_remove",
+    "param_types": [
+      "dict[str, list[str]]",
+      "str",
+      "list[str]"
+    ],
+    "return_type": "dict[str, list[str]]",
+    "summary": "Observed-Remove Set (OR-Set) deletion removing only observed tag identifiers for an item.",
+    "pseudocode": "1. Create a copy of the tag dictionary.\n2. If remove_item not in dictionary, return copy unchanged.\n3. Filter item tags removing those present in observed_tags.\n4. If no tags remain, delete key; return updated dictionary.",
+    "invariants": [
+      "Concurrent additions with newly generated tags survive the remove operation.",
+      "Input dictionary is not mutated in-place."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "del entries[remove_item]",
+        "failure_mechanism": "Wipes out concurrent additions that occurred on other replicas simultaneously.",
+        "counterexample_input": "entries={'item': ['tag1', 'tag2']}, remove_item='item', observed_tags=['tag1']",
+        "verified_fix": "Remove only the specific tag IDs present in observed_tags."
+      }
+    ],
+    "source_code": "def crdt_or_set_observed_remove(entries: dict[str, list[str]], remove_item: str, observed_tags: list[str]) -> dict[str, list[str]]:\n    out = {}\n    obs_set = set(observed_tags)\n    for k, tags in entries.items():\n        if k == remove_item:\n            surviving = [t for t in tags if t not in obs_set]\n            if surviving:\n                out[k] = surviving\n        else:\n            out[k] = list(tags)\n    return out",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "crdt_rga_insert_order",
+    "param_types": [
+      "str",
+      "str",
+      "float",
+      "float"
+    ],
+    "return_type": "bool",
+    "summary": "Replicated Growable Array (RGA) deterministic sibling order comparison.",
+    "pseudocode": "1. Compare timestamp of left insertion vs right insertion.\n2. If timestamps differ, higher timestamp comes first.\n3. If timestamps match, break tie using node identifier string comparison.\n4. Return True if left should precede right.",
+    "invariants": [
+      "Establishes a strict total ordering among concurrent sibling insertions.",
+      "Guarantees convergent document order across all distributed replicas."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return left_ts > right_ts",
+        "failure_mechanism": "Concurrent inserts with identical timestamps produce non-deterministic order across replicas.",
+        "counterexample_input": "left_id='nodeA', right_id='nodeB', left_ts=10.0, right_ts=10.0",
+        "verified_fix": "Break timestamp ties using unique node ID string comparison."
+      }
+    ],
+    "source_code": "def crdt_rga_insert_order(left_id: str, right_id: str, left_ts: float, right_ts: float) -> bool:\n    l_t = float(left_ts)\n    r_t = float(right_ts)\n    if l_t > r_t:\n        return True\n    if l_t < r_t:\n        return False\n    res = left_id > right_id\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "merkle_dag_root_hash",
+    "param_types": [
+      "list[int]",
+      "list[list[int]]"
+    ],
+    "return_type": "int",
+    "summary": "Synthesizes cryptographic root hash of a Merkle DAG from node hashes and edge pairs.",
+    "pseudocode": "1. Initialize accumulator with FNV offset basis.\n2. Incorporate each node hash into accumulator.\n3. Incorporate each directed edge (u, v) into accumulator.\n4. Return 32-bit masked root hash.",
+    "invariants": [
+      "Any modification to node hashes or edge structure changes the root hash.",
+      "Root hash is bounded within non-negative 31-bit integer range."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return sum(node_hashes)",
+        "failure_mechanism": "Sum is commutative and ignores graph topology and edge dependencies.",
+        "counterexample_input": "node_hashes=[1, 2], edge_pairs=[[0, 1]]",
+        "verified_fix": "Combine node hashes and edge connections order-dependently using polynomial mixing."
+      }
+    ],
+    "source_code": "def merkle_dag_root_hash(node_hashes: list[int], edge_pairs: list[list[int]]) -> int:\n    h = 21661 * 100000 + 36261\n    mask = (1 << 31) - 1\n    for nh in node_hashes:\n        val = abs(int(nh))\n        h = (h ^ val) * 16777619 & mask\n    for edge in edge_pairs:\n        if len(edge) >= 2:\n            u = abs(int(edge[0]))\n            v = abs(int(edge[1]))\n            h = (h ^ u + 1) * 16777619 & mask\n            h = (h ^ v + 3) * 16777619 & mask\n    return h",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "anti_entropy_bloom_exchange",
+    "param_types": [
+      "list[str]",
+      "list[int]",
+      "int",
+      "int"
+    ],
+    "return_type": "list[str]",
+    "summary": "Anti-entropy Bloom filter difference discovery identifying local keys missing in remote filter.",
+    "pseudocode": "1. Ensure filter bit count and hash count are positive.\n2. For each local key, compute k hash bit indices.\n3. Check if all corresponding bits are set in the remote filter.\n4. If any bit is missing, add key to output list of missing items.",
+    "invariants": [
+      "Never produces false negatives: any key genuinely absent in remote is guaranteed to be detected.",
+      "Returned missing keys are a subset of input local_keys."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if remote_bloom[hash(key) % num_bits]: pass",
+        "failure_mechanism": "Single hash function Bloom filter has unacceptably high false positive collision rate.",
+        "counterexample_input": "local_keys=['k1'], bloom_filter_bits=[1, 0, 0], num_bits=3, num_hashes=1",
+        "verified_fix": "Query k independent hash bit positions per element."
+      }
+    ],
+    "source_code": "def anti_entropy_bloom_exchange(local_keys: list[str], bloom_filter_bits: list[int], num_bits: int, num_hashes: int) -> list[str]:\n    m = max(1, int(num_bits))\n    k = max(1, min(10, int(num_hashes)))\n    n_filter = len(bloom_filter_bits)\n    missing = []\n    mask = (1 << 31) - 1\n    salt = 10139 * 100000 + 4223\n    for key in local_keys:\n        is_present = True\n        base_h = 21661 * 100000 + 36261\n        for ch in key:\n            base_h = (base_h ^ ord(ch)) * 16777619 & mask\n        for i in range(k):\n            bit_idx = (base_h + i * salt) % m\n            if bit_idx < n_filter:\n                if bloom_filter_bits[bit_idx] == 0:\n                    is_present = False\n                    break\n            else:\n                is_present = False\n                break\n        if not is_present:\n            missing.append(key)\n    return missing",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "count_min_sketch_point_estimate",
+    "param_types": [
+      "list[list[int]]",
+      "list[int]"
+    ],
+    "return_type": "int",
+    "summary": "Point frequency estimate from a Count-Min Sketch taking minimum counter across hash rows.",
+    "pseudocode": "1. Check table and item hashes are non-empty.\n2. For each row, locate counter using corresponding item hash modulo row width.\n3. Track minimum counter value observed across rows.\n4. Return minimum counter as conservative point estimate.",
+    "invariants": [
+      "Point estimate is always an upper bound on true frequency: estimate >= true_count.",
+      "Error is bounded by epsilon * total_count with probability 1 - delta."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return sum(table[i][item_hashes[i]]) // len(table)",
+        "failure_mechanism": "Averaging counters introduces severe positive bias from hash collisions.",
+        "counterexample_input": "table=[[10, 0], [1000, 0]], item_hashes=[0, 0]",
+        "verified_fix": "Take minimum across all rows to isolate least-collided bucket."
+      }
+    ],
+    "source_code": "def count_min_sketch_point_estimate(table: list[list[int]], item_hashes: list[int]) -> int:\n    d = min(len(table), len(item_hashes))\n    if d == 0:\n        return 0\n    max_sentinel = 1 << 30\n    min_est = max_sentinel\n    for i in range(d):\n        row = table[i]\n        if row:\n            w = len(row)\n            col = abs(int(item_hashes[i])) % w\n            val = row[col]\n            if val < min_est:\n                min_est = val\n    if min_est == max_sentinel:\n        return 0\n    return min_est",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "hyperloglog_cardinality_raw",
+    "param_types": [
+      "list[int]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Raw HyperLogLog harmonic mean cardinality estimate from register bucket leading zero counts.",
+    "pseudocode": "1. Determine alpha_m scale bias factor for register count m.\n2. Compute sum of 2^(-register_val) across all buckets.\n3. Compute raw estimate as alpha_m * m^2 / harmonic_sum.\n4. Return raw estimate.",
+    "invariants": [
+      "Raw estimate is strictly non-negative.",
+      "Scale invariant: standard error is bounded by approximately 1.04 / sqrt(m)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "est = sum(2 ** r for r in registers) / len(registers)",
+        "failure_mechanism": "Arithmetic mean of register powers is dominated by outlier maximums, completely distorting estimate.",
+        "counterexample_input": "registers=[1, 1, 1, 20], m=4",
+        "verified_fix": "Use harmonic mean: m^2 / sum(2^(-M[j]))."
+      }
+    ],
+    "source_code": "def hyperloglog_cardinality_raw(registers: list[int], m: int) -> float:\n    m_val = max(1, int(m))\n    if not registers:\n        return 0.0\n    if m_val == 16:\n        alpha = 0.673\n    elif m_val == 32:\n        alpha = 0.697\n    elif m_val == 64:\n        alpha = 0.709\n    else:\n        alpha = 0.7213 / (1.0 + 1.079 / float(m_val))\n    z = 0.0\n    for r in registers:\n        clamped_r = max(0, min(32, int(r)))\n        z += 2.0 ** (-clamped_r)\n    if z <= 0.0:\n        return 0.0\n    raw = alpha * float(m_val * m_val) / z\n    return raw",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "hyperloglog_bias_correction",
+    "param_types": [
+      "float",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Small-range and large-range bias correction for HyperLogLog cardinality estimates.",
+    "pseudocode": "1. Check if raw estimate is in small range <= 2.5 * m.\n2. If zero registers exist, apply linear counting correction: m * ln(m / V).\n3. If raw estimate in normal range, return raw estimate.\n4. Return corrected cardinality estimate.",
+    "invariants": [
+      "Corrected cardinality estimate is non-negative.",
+      "Small-range linear counting correction seamlessly eliminates low-cardinality non-linear bias."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if zero_registers > 0: return m * math.log(m / zero_registers)",
+        "failure_mechanism": "Applies linear counting unconditionally even for large cardinalities where raw estimate is accurate.",
+        "counterexample_input": "raw_est=100000.0, m=64, zero_registers=1",
+        "verified_fix": "Apply linear counting exclusively when raw_est <= 2.5 * m."
+      }
+    ],
+    "source_code": "def hyperloglog_bias_correction(raw_est: float, m: int, zero_registers: int) -> float:\n    e = max(0.0, float(raw_est))\n    m_val = max(1, int(m))\n    v = max(0, int(zero_registers))\n    if e <= 2.5 * float(m_val):\n        if v > 0:\n            frac = float(m_val) / float(v)\n            return float(m_val) * math.log(frac)\n        return e\n    return e",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "reed_solomon_vandermonde_row",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "list[int]",
+    "summary": "Generates a Vandermonde generator matrix row over a finite Galois field for Reed-Solomon coding.",
+    "pseudocode": "1. Determine evaluation point alpha as row_idx + 1.\n2. Generate successive powers alpha^0, alpha^1, ..., alpha^(num_cols-1).\n3. Reduce each power modulo prime.\n4. Return generator matrix row.",
+    "invariants": [
+      "Row length equals exactly num_cols.",
+      "First element is always 1 (alpha^0 mod prime == 1)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "row = [row_idx ** col for col in range(num_cols)]",
+        "failure_mechanism": "Using row_idx=0 produces 0^col which causes all elements to become 0, creating singular generator matrix.",
+        "counterexample_input": "row_idx=0, num_cols=4, prime=65537",
+        "verified_fix": "Offset base point to alpha = row_idx + 1."
+      }
+    ],
+    "source_code": "def reed_solomon_vandermonde_row(row_idx: int, num_cols: int, prime: int) -> list[int]:\n    base = max(1, int(row_idx) + 1)\n    p = max(2, int(prime))\n    cols = max(1, int(num_cols))\n    row = []\n    curr = 1\n    for _ in range(cols):\n        row.append(curr % p)\n        curr = curr * base % p\n    return row",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "cauchy_matrix_element",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Computes Cauchy matrix element 1 / (x + y) mod prime for MDS erasure coding.",
+    "pseudocode": "1. Sum row element x and column element y modulo prime.\n2. Check for singularity where sum is 0 mod prime.\n3. Compute modular multiplicative inverse via Fermat's Little Theorem.\n4. Return finite field Cauchy matrix element.",
+    "invariants": [
+      "Every square submatrix of a Cauchy matrix is guaranteed non-singular.",
+      "Result is strictly in range [0, prime - 1]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 1 // (x + y)",
+        "failure_mechanism": "Integer division in Python rounds to zero instead of computing modular inverse in GF(P).",
+        "counterexample_input": "x=3, y=5, prime=17",
+        "verified_fix": "Compute modular inverse using pow(denom, prime - 2, prime)."
+      }
+    ],
+    "source_code": "def cauchy_matrix_element(x: int, y: int, prime: int) -> int:\n    p = max(2, int(prime))\n    denom = (int(x) + int(y)) % p\n    if denom == 0:\n        return 0\n    inv = pow(denom, p - 2, p)\n    return inv",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "fountain_lt_degree_distribution",
+    "param_types": [
+      "int",
+      "float"
+    ],
+    "return_type": "int",
+    "summary": "Samples Luby Transform (LT) ideal Soliton degree distribution for rateless erasure codes.",
+    "pseudocode": "1. Set degree 1 probability threshold as 1/k.\n2. If random value <= 1/k, return degree 1.\n3. Otherwise accumulate Soliton probabilities 1 / (d*(d-1)).\n4. Return degree where cumulative distribution covers random value.",
+    "invariants": [
+      "Sampled degree is strictly bounded in range [1, k].",
+      "Yields optimal rateless erasure decoding with ripple size expectation of 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return int(rand_val * k) + 1",
+        "failure_mechanism": "Uniform degree distribution causes decoding failure: either no degree 1 symbols or redundant symbols.",
+        "counterexample_input": "k=100, rand_val=0.005",
+        "verified_fix": "Sample inverse CDF of ideal Soliton distribution."
+      }
+    ],
+    "source_code": "def fountain_lt_degree_distribution(k: int, rand_val: float) -> int:\n    k_val = max(1, int(k))\n    if k_val == 1:\n        return 1\n    u = max(0.0, min(0.999999, float(rand_val)))\n    prob1 = 1.0 / float(k_val)\n    if u < prob1:\n        return 1\n    cum = prob1\n    for d in range(2, k_val + 1):\n        p_d = 1.0 / float(d * (d - 1))\n        cum += p_d\n        if u < cum:\n            return d\n    return k_val",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "chubby_lease_expiration_check",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "bool",
+    "summary": "Distributed master lease expiration validation accounting for maximum bounded clock drift.",
+    "pseudocode": "1. Subtract clock drift bound from lease duration to determine master lease safety window.\n2. Compute elapsed time since lease grant.\n3. Master lease is valid if elapsed time is strictly less than safe window.\n4. Return boolean validity.",
+    "invariants": [
+      "Master lease validity window is strictly shorter than client lease view by 2 * drift.",
+      "Prevents split-brain master execution in the presence of bounded local clock drift."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (now - lease_start) < duration",
+        "failure_mechanism": "Ignoring clock drift causes master to continue servicing writes after client considered lease expired.",
+        "counterexample_input": "lease_start=100.0, duration=10.0, now=109.5, clock_drift_bound=1.0",
+        "verified_fix": "Subtract drift bound from duration: now - lease_start < duration - drift."
+      }
+    ],
+    "source_code": "def chubby_lease_expiration_check(lease_start: float, duration: float, now: float, clock_drift_bound: float) -> bool:\n    start = float(lease_start)\n    dur = max(0.0, float(duration))\n    t = float(now)\n    drift = max(0.0, float(clock_drift_bound))\n    safe_window = dur - drift\n    if safe_window <= 0.0:\n        return False\n    elapsed = t - start\n    if elapsed < 0.0:\n        return False\n    res = elapsed < safe_window\n    return res",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "fair_queue_virtual_time_step",
+    "param_types": [
+      "float",
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Weighted Fair Queueing (WFQ) virtual time advance and packet finish time calculation.",
+    "pseudocode": "1. Advance system virtual time inversely proportional to active flow count.\n2. Calculate packet service duration proportional to length and inversely to weight.\n3. Compute packet finish virtual time.\n4. Return updated system virtual time and packet finish time.",
+    "invariants": [
+      "Virtual finish time is monotonically increasing for each flow.",
+      "Allocates bandwidth in exact proportion to configured flow weight."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "finish_time = virtual_time + packet_len",
+        "failure_mechanism": "Ignores flow weight, treating high-priority and low-priority traffic identically.",
+        "counterexample_input": "virtual_time=10.0, active_flows=2, packet_len=1000, weight=2.0",
+        "verified_fix": "Divide packet length by weight: virtual_time + packet_len / weight."
+      }
+    ],
+    "source_code": "def fair_queue_virtual_time_step(virtual_time: float, active_flows: int, packet_len: int, weight: float) -> tuple[float, float]:\n    vt = max(0.0, float(virtual_time))\n    flows = max(1, int(active_flows))\n    w = max(0.001, float(weight))\n    length = max(0, int(packet_len))\n    step = 1.0 / float(flows)\n    new_vt = vt + step\n    finish = new_vt + float(length) / w\n    return (new_vt, finish)",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "bulkhead_slot_reservation",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[bool, str]",
+    "summary": "Bulkhead pattern concurrency slot reservation isolating thread pools from cascading overload.",
+    "pseudocode": "1. Check if active execution slots are available below max_slots.\n2. If slot free, grant execution slot.\n3. Else check if waiting queue has capacity below max_queue.\n4. If queue free, grant queue slot; else reject request.",
+    "invariants": [
+      "Active slots never exceed max_slots when directly granted.",
+      "Total pending requests never exceed max_slots + max_queue."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (True, 'GRANTED')",
+        "failure_mechanism": "Unbounded queuing causes thread exhaustion and catastrophic out-of-memory crashes.",
+        "counterexample_input": "active_slots=10, max_slots=10, queue_len=50, max_queue=50",
+        "verified_fix": "Enforce strict active slot and queue capacity limits, returning REJECTED on overflow."
+      }
+    ],
+    "source_code": "def bulkhead_slot_reservation(active_slots: int, max_slots: int, queue_len: int, max_queue: int) -> tuple[bool, str]:\n    act = max(0, int(active_slots))\n    m_act = max(1, int(max_slots))\n    q = max(0, int(queue_len))\n    m_q = max(0, int(max_queue))\n    if act < m_act:\n        return (True, 'ACTIVE')\n    if q < m_q:\n        return (True, 'QUEUED')\n    return (False, 'REJECTED')",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "load_balancer_peak_ewma",
+    "param_types": [
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Peak EWMA load balancing score calculation combining latency trend and active concurrency.",
+    "pseudocode": "1. Ensure RTT EWMA and cost metric are non-negative.\n2. Weight RTT by cost multiplier.\n3. Multiply latency by active connection count plus one.\n4. Return load penalty score (lower score is preferred).",
+    "invariants": [
+      "Penalty score is strictly positive.",
+      "Score increases monotonically with active connections and latency."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "score = active_conns",
+        "failure_mechanism": "Ignores backend latency degradation and error rates, sending traffic to slow instances.",
+        "counterexample_input": "cost_metric=0.5, rtt_ewma=200.0, active_conns=1",
+        "verified_fix": "Multiply active connections by peak latency EWMA."
+      }
+    ],
+    "source_code": "def load_balancer_peak_ewma(cost_metric: float, rtt_ewma: float, active_conns: int) -> float:\n    cost = max(0.0, float(cost_metric))\n    rtt = max(0.001, float(rtt_ewma))\n    conns = max(0, int(active_conns))\n    base_latency = rtt * (1.0 + cost)\n    penalty = base_latency * float(conns + 1)\n    return penalty",
+    "domain": "distributed_systems"
+  },
+  {
+    "name": "heartbeat_phi_accrual_detector",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Hayashibara Phi-accrual failure detector suspicion score adapting dynamically to network jitter.",
+    "pseudocode": "1. Compute mean and variance of recent heartbeat arrival intervals.\n2. Model arrival as Gaussian distribution.\n3. Compute tail probability P_later(t) that interval exceeds current silence.\n4. Return suspicion metric Phi = -log10(P_later).",
+    "invariants": [
+      "Suspicion score Phi increases monotonically with silence duration.",
+      "Score is scale-free and adapts to prevailing network jitter and latency."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if current_silence > 10.0: return 100.0",
+        "failure_mechanism": "Static timeout causes false positive failure detections on congested WAN links.",
+        "counterexample_input": "intervals=[1.0, 1.2, 0.9, 1.1], current_silence=2.5",
+        "verified_fix": "Compute continuous Phi suspicion score using historical mean and variance."
+      }
+    ],
+    "source_code": "def heartbeat_phi_accrual_detector(intervals: list[float], current_silence: float) -> float:\n    if not intervals:\n        return 0.0\n    valid = [max(0.001, float(x)) for x in intervals]\n    n = len(valid)\n    mean_val = sum(valid) / float(n)\n    var_val = sum(((x - mean_val) ** 2 for x in valid)) / float(max(1, n - 1))\n    std_val = max(0.001, var_val ** 0.5)\n    t = max(0.0, float(current_silence))\n    y = (t - mean_val) / std_val\n    if y > 10.0:\n        return 16.0\n    if y < -10.0:\n        return 0.0\n    p = 0.5 * math.erfc(y / 1.414213562)\n    if p <= 1e-16:\n        return 16.0\n    phi = -math.log10(p)\n    return phi",
+    "domain": "distributed_systems"
+  }
+]

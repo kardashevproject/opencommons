@@ -1,0 +1,1061 @@
+[
+  {
+    "name": "cross_entropy_with_logits",
+    "param_types": [
+      "list[float]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Numerically stable multi-class cross entropy loss using max subtraction logsumexp.",
+    "pseudocode": "1. Find maximum logit to prevent exponential overflow.\n2. Compute sum of exp(logit - max_logit).\n3. Compute target log-probability as target_logit - max_logit - ln(sum_exp).\n4. Return negative target log-probability.",
+    "invariants": [
+      "Loss value is strictly non-negative: result >= 0.0.",
+      "Loss is invariant under uniform scalar addition to all logits."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p = math.exp(logits[target]) / sum(math.exp(x) for x in logits); return -math.log(p)",
+        "failure_mechanism": "Direct exp calculation overflows to Inf for logits > 709, causing NaN loss.",
+        "counterexample_input": "logits=[1000.0, 1001.0], target_idx=1",
+        "verified_fix": "Subtract max(logits) before exponentiating."
+      }
+    ],
+    "source_code": "def cross_entropy_with_logits(logits: list[float], target_idx: int) -> float:\n    if not logits:\n        return 0.0\n    idx = max(0, min(len(logits) - 1, int(target_idx)))\n    max_l = max(logits)\n    sum_exp = 0.0\n    for x in logits:\n        sum_exp += math.exp(x - max_l)\n    lse = max_l + math.log(max(1e-15, sum_exp))\n    target_logit = logits[idx]\n    loss = lse - target_logit\n    return max(0.0, loss)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "focal_loss_with_logits",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Binary focal loss with dynamic modulating factor down-weighting easy examples.",
+    "pseudocode": "1. Compute sigmoid probability p from logit using numerically stable formulation.\n2. Compute target probability pt based on binary target.\n3. Compute modulating weight factor (1 - pt)^gamma.\n4. Return modulated negative log probability loss.",
+    "invariants": [
+      "Focal loss is non-negative for all inputs.",
+      "Reduces to standard binary cross entropy when gamma equals 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p = 1.0 / (1.0 + math.exp(-logit)); loss = -((1-p)**gamma) * math.log(p)",
+        "failure_mechanism": "Negative logit causes exp(-logit) overflow and log(p) underflow.",
+        "counterexample_input": "logit=-100.0, target=1.0, gamma=2.0, alpha=0.25",
+        "verified_fix": "Use stable log-sigmoid branch for negative logits."
+      }
+    ],
+    "source_code": "def focal_loss_with_logits(logit: float, target: float, gamma: float, alpha: float) -> float:\n    z = float(logit)\n    y = max(0.0, min(1.0, float(target)))\n    g = max(0.0, float(gamma))\n    a = max(0.0, min(1.0, float(alpha)))\n    if z >= 0.0:\n        p = 1.0 / (1.0 + math.exp(-z))\n    else:\n        exp_z = math.exp(z)\n        p = exp_z / (1.0 + exp_z)\n    p = max(1e-15, min(1.0 - 1e-15, p))\n    pt = p if y > 0.5 else 1.0 - p\n    alpha_t = a if y > 0.5 else 1.0 - a\n    modulating = (1.0 - pt) ** g\n    ce = -math.log(pt)\n    loss = alpha_t * modulating * ce\n    return max(0.0, loss)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "triplet_margin_loss",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Triplet margin ranking loss penalizing anchor-negative distances closer than anchor-positive plus margin.",
+    "pseudocode": "1. Compute Euclidean distance d_ap between anchor and positive vectors.\n2. Compute Euclidean distance d_an between anchor and negative vectors.\n3. Compute loss as max(0.0, d_ap - d_an + margin).\n4. Return scalar margin loss.",
+    "invariants": [
+      "Loss is strictly zero whenever d_an >= d_ap + margin.",
+      "Loss is non-negative: result >= 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return d_ap - d_an + margin",
+        "failure_mechanism": "Without max(0, ...), well-separated triplets produce negative loss, destroying gradient updates.",
+        "counterexample_input": "anchor=[0.0], positive=[0.1], negative=[10.0], margin=1.0",
+        "verified_fix": "Apply max(0.0, diff) hinge threshold."
+      }
+    ],
+    "source_code": "def triplet_margin_loss(anchor: list[float], positive: list[float], negative: list[float], margin: float) -> float:\n    n = min(len(anchor), len(positive), len(negative))\n    if n == 0:\n        return 0.0\n    sum_ap = 0.0\n    sum_an = 0.0\n    for i in range(n):\n        diff_p = anchor[i] - positive[i]\n        diff_n = anchor[i] - negative[i]\n        sum_ap += diff_p * diff_p\n        sum_an += diff_n * diff_n\n    d_ap = math.sqrt(sum_ap)\n    d_an = math.sqrt(sum_an)\n    m = max(0.0, float(margin))\n    loss = max(0.0, d_ap - d_an + m)\n    return loss",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "contrastive_margin_loss",
+    "param_types": [
+      "float",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Siamese contrastive margin loss penalizing distant similar pairs and close dissimilar pairs.",
+    "pseudocode": "1. Ensure distance is non-negative.\n2. If similar pair (label == 1), loss is 0.5 * d^2.\n3. If dissimilar pair (label == 0), loss is 0.5 * max(0.0, margin - d)^2.\n4. Return scalar contrastive loss.",
+    "invariants": [
+      "Loss is zero for dissimilar pairs whose distance exceeds margin.",
+      "Loss is non-negative: result >= 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "loss = 0.5 * (label * d + (1 - label) * (margin - d))",
+        "failure_mechanism": "Linear formulation allows negative loss and lacks quadratic curvature for gradient descent.",
+        "counterexample_input": "d=5.0, label=0, margin=1.0",
+        "verified_fix": "Use quadratic formulation with max(0, margin - d) hinge."
+      }
+    ],
+    "source_code": "def contrastive_margin_loss(d: float, label: int, margin: float) -> float:\n    dist = max(0.0, float(d))\n    m = max(0.0, float(margin))\n    if label == 1:\n        return 0.5 * dist * dist\n    diff = max(0.0, m - dist)\n    res = 0.5 * diff * diff\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "cosine_similarity_loss",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Cosine embedding loss measuring angular deviation from target alignment.",
+    "pseudocode": "1. Compute dot product and vector L2 norms.\n2. Divide dot product by product of norms with epsilon stabilization.\n3. Compute loss based on target direction (1 for parallel, -1 for opposite).\n4. Return scalar cosine loss.",
+    "invariants": [
+      "Loss is bounded in range [0.0, 2.0].",
+      "Loss is scale-invariant: invariant under positive scaling of either vector."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cos = dot(u, v) / (norm(u) * norm(v))",
+        "failure_mechanism": "Zero norm vector causes ZeroDivisionError.",
+        "counterexample_input": "u=[0.0, 0.0], v=[1.0, 1.0], target=1.0",
+        "verified_fix": "Add epsilon threshold to denominator norm product."
+      }
+    ],
+    "source_code": "def cosine_similarity_loss(u: list[float], v: list[float], target: float) -> float:\n    n = min(len(u), len(v))\n    if n == 0:\n        return 0.0\n    dot = 0.0\n    norm_u = 0.0\n    norm_v = 0.0\n    for i in range(n):\n        dot += u[i] * v[i]\n        norm_u += u[i] * u[i]\n        norm_v += v[i] * v[i]\n    denom = math.sqrt(norm_u) * math.sqrt(norm_v)\n    if denom <= 1e-12:\n        return 1.0\n    cos_sim = max(-1.0, min(1.0, dot / denom))\n    y = 1.0 if target >= 0.0 else -1.0\n    loss = 1.0 - y * cos_sim\n    return max(0.0, loss)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "smooth_l1_loss",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Smooth L1 (Huber) regression loss with quadratic behavior for small errors and linear for large.",
+    "pseudocode": "1. Compute absolute difference |diff|.\n2. Ensure transition threshold beta > 0.\n3. If absolute diff < beta, return 0.5 * diff^2 / beta.\n4. Else return |diff| - 0.5 * beta.",
+    "invariants": [
+      "Continuous first derivative at transition boundary |diff| == beta.",
+      "Loss is non-negative and symmetric: loss(-x) == loss(x)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if abs(diff) < 1.0: return 0.5 * diff ** 2; return abs(diff) - 0.5",
+        "failure_mechanism": "Hardcoding beta=1.0 prevents adaptation to different task loss scales.",
+        "counterexample_input": "diff=0.05, beta=0.01",
+        "verified_fix": "Parameterize threshold beta and scale quadratic region by 1/beta."
+      }
+    ],
+    "source_code": "def smooth_l1_loss(diff: float, beta: float) -> float:\n    b = max(1e-06, float(beta))\n    val = abs(float(diff))\n    if val < b:\n        return 0.5 * val * val / b\n    res = val - 0.5 * b\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "quantile_pinball_loss",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Asymmetric pinball loss for quantile regression penalizing over- and under-estimates.",
+    "pseudocode": "1. Compute residual error e = y_true - y_pred.\n2. Clamp quantile tau to open interval (0, 1).\n3. If error is positive, loss is tau * error.\n4. If error is negative, loss is (tau - 1) * error. Return loss.",
+    "invariants": [
+      "Loss is strictly non-negative: result >= 0.0.",
+      "Minimizing expectation recovers the tau-th conditional quantile."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return tau * (y_true - y_pred)",
+        "failure_mechanism": "Linear loss without case splitting produces negative loss for over-predictions.",
+        "counterexample_input": "y_true=1.0, y_pred=5.0, tau=0.5",
+        "verified_fix": "Branch on sign of residual: tau * e if e >= 0 else (tau - 1.0) * e."
+      }
+    ],
+    "source_code": "def quantile_pinball_loss(y_true: float, y_pred: float, tau: float) -> float:\n    t = max(0.001, min(0.999, float(tau)))\n    err = float(y_true) - float(y_pred)\n    if err >= 0.0:\n        return t * err\n    res = (t - 1.0) * err\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "poly_loss_first_order",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "PolyLoss first-order polynomial modification adjusting standard cross entropy with linear term.",
+    "pseudocode": "1. Compute sigmoid probability p from logit.\n2. Identify target class probability pt.\n3. Compute base cross entropy loss -ln(pt).\n4. Add first-order polynomial correction epsilon * (1 - pt).",
+    "invariants": [
+      "Reduces to standard cross entropy when epsilon is 0.0.",
+      "Polynomial term dynamically adjusts gradient magnitude near decision boundary."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "loss = -math.log(p) + epsilon * p",
+        "failure_mechanism": "Incorrect sign in polynomial term inverts margin adjustment effect.",
+        "counterexample_input": "logit=2.0, target=1.0, epsilon=1.0",
+        "verified_fix": "Add epsilon * (1.0 - pt) to the negative log-likelihood."
+      }
+    ],
+    "source_code": "def poly_loss_first_order(logit: float, target: float, epsilon: float) -> float:\n    z = float(logit)\n    y = max(0.0, min(1.0, float(target)))\n    eps = float(epsilon)\n    if z >= 0.0:\n        p = 1.0 / (1.0 + math.exp(-z))\n    else:\n        exp_z = math.exp(z)\n        p = exp_z / (1.0 + exp_z)\n    p = max(1e-15, min(1.0 - 1e-15, p))\n    pt = p if y > 0.5 else 1.0 - p\n    ce = -math.log(pt)\n    poly = ce + eps * (1.0 - pt)\n    return max(0.0, poly)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "dice_loss_binary",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Sorensen-Dice coefficient loss for binary segmentation with smoothing parameter.",
+    "pseudocode": "1. Compute intersection sum of element-wise predictions and targets.\n2. Compute sum of predicted probabilities and sum of target masks.\n3. Compute Dice coefficient with Laplace smoothing.\n4. Return 1.0 - dice.",
+    "invariants": [
+      "Loss value is bounded in range [0.0, 1.0].",
+      "Loss is invariant under proportional scaling of mask dimensions."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "dice = (2 * intersection) / (sum_pred + sum_true)",
+        "failure_mechanism": "When both prediction and target are entirely zero, division by zero occurs.",
+        "counterexample_input": "y_pred=[0.0, 0.0], y_true=[0.0, 0.0], smooth=0.0",
+        "verified_fix": "Add positive smoothing parameter to numerator and denominator."
+      }
+    ],
+    "source_code": "def dice_loss_binary(y_pred: list[float], y_true: list[float], smooth: float) -> float:\n    n = min(len(y_pred), len(y_true))\n    s = max(1e-06, float(smooth))\n    if n == 0:\n        return 0.0\n    inter = 0.0\n    sum_p = 0.0\n    sum_t = 0.0\n    for i in range(n):\n        p = max(0.0, min(1.0, y_pred[i]))\n        t = max(0.0, min(1.0, y_true[i]))\n        inter += p * t\n        sum_p += p\n        sum_t += t\n    dice = (2.0 * inter + s) / (sum_p + sum_t + s)\n    loss = 1.0 - dice\n    return max(0.0, min(1.0, loss))",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "mish_activation",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Self-regularized non-monotonic activation function Mish: x * tanh(softplus(x)).",
+    "pseudocode": "1. Check if x exceeds upper threshold to avoid softplus exp overflow.\n2. For x > 20, softplus(x) approximates x.\n3. Otherwise compute softplus as ln(1 + exp(x)).\n4. Return x * tanh(softplus).",
+    "invariants": [
+      "Continuous, smooth, and non-monotonic with global minimum around -0.31.",
+      "Asymptotes to x as x -> infinity and 0 as x -> -infinity."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return x * math.tanh(math.log(1.0 + math.exp(x)))",
+        "failure_mechanism": "Direct math.exp(x) overflows for x > 709, returning NaN.",
+        "counterexample_input": "x=800.0",
+        "verified_fix": "Branch for large x > 20 where softplus(x) is numerically indistinguishable from x."
+      }
+    ],
+    "source_code": "def mish_activation(x: float) -> float:\n    val = float(x)\n    if val > 20.0:\n        sp = val\n    elif val < -20.0:\n        sp = math.exp(val)\n    else:\n        sp = math.log(1.0 + math.exp(val))\n    th = math.tanh(sp)\n    res = val * th\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "gelu_tanh_approximation",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Fast tanh-based approximation to Gaussian Error Linear Unit (GELU).",
+    "pseudocode": "1. Clamp input magnitude to prevent cubic polynomial overflow.\n2. Compute cubic polynomial term x + 0.044715 * x^3.\n3. Scale by sqrt(2 / pi) constant.\n4. Return 0.5 * x * (1.0 + tanh(scaled_poly)).",
+    "invariants": [
+      "Continuous and differentiable everywhere with standard transformer behavior.",
+      "Bounded below by approximately -0.17 at x = -0.75."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 0.5 * x * (1.0 + math.tanh(math.sqrt(2/math.pi) * (x + 0.044715 * x**3)))",
+        "failure_mechanism": "Large values of x cause x**3 to overflow float precision before tanh.",
+        "counterexample_input": "x=1e150",
+        "verified_fix": "Clamp input x in range [-50.0, 50.0] where tanh saturates to +/-1."
+      }
+    ],
+    "source_code": "def gelu_tanh_approximation(x: float) -> float:\n    val = max(-50.0, min(50.0, float(x)))\n    sqrt_2_pi = math.sqrt(2.0 / math.pi)\n    poly = val + 0.044715 * val ** 3\n    inner = sqrt_2_pi * poly\n    th = math.tanh(inner)\n    res = 0.5 * val * (1.0 + th)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "hard_swish_activation",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Piecewise linear hard-swish activation function used in mobile neural architectures.",
+    "pseudocode": "1. Compute shifted value x + 3.0.\n2. Clamp shifted value to range [0.0, 6.0].\n3. Divide clamped value by 6.0.\n4. Return x * hard_sigmoid.",
+    "invariants": [
+      "Strictly 0.0 for x <= -3.0.",
+      "Strictly linear x for x >= +3.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return x * (x + 3.0) / 6.0",
+        "failure_mechanism": "Without clamping, function becomes quadratic everywhere rather than piecewise linear.",
+        "counterexample_input": "x=-10.0",
+        "verified_fix": "Clamp (x + 3.0) to [0.0, 6.0] before multiplying by x."
+      }
+    ],
+    "source_code": "def hard_swish_activation(x: float) -> float:\n    val = float(x)\n    shifted = val + 3.0\n    clamped = max(0.0, min(6.0, shifted))\n    res = val * clamped / 6.0\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "leaky_relu_activation",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Leaky Rectified Linear Unit activation maintaining non-zero gradient for negative inputs.",
+    "pseudocode": "1. Verify slope parameter alpha is non-negative.\n2. If input x >= 0.0, return x.\n3. If input x < 0.0, return alpha * x.\n4. Return activated output.",
+    "invariants": [
+      "Identity function for all x >= 0.0.",
+      "Monotonically increasing for all positive alpha."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if x > 0: return x; return alpha * x",
+        "failure_mechanism": "Omits x == 0 handling and fails to validate alpha >= 0.",
+        "counterexample_input": "x=-5.0, alpha=-0.1",
+        "verified_fix": "Clamp alpha to non-negative range."
+      }
+    ],
+    "source_code": "def leaky_relu_activation(x: float, alpha: float) -> float:\n    val = float(x)\n    a = max(0.0, float(alpha))\n    if val >= 0.0:\n        return val\n    res = a * val\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "elu_activation",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Exponential Linear Unit (ELU) activation bringing mean activations closer to zero.",
+    "pseudocode": "1. Verify alpha is positive.\n2. If input x >= 0.0, return x.\n3. Else compute alpha * (exp(x) - 1.0) with clamped x to prevent underflow.\n4. Return activated output.",
+    "invariants": [
+      "Smooth transition and continuous derivative at x == 0.0 when alpha == 1.0.",
+      "Asymptotes to -alpha as x -> -infinity."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if x >= 0: return x; return alpha * math.exp(x) - alpha",
+        "failure_mechanism": "Subtractive cancellation when exp(x) is close to 1.0.",
+        "counterexample_input": "x=-1e-12, alpha=1.0",
+        "verified_fix": "Use math.expm1(x) for accurate evaluation near zero."
+      }
+    ],
+    "source_code": "def elu_activation(x: float, alpha: float) -> float:\n    val = float(x)\n    a = max(1e-06, float(alpha))\n    if val >= 0.0:\n        return val\n    clamped_x = max(-50.0, val)\n    res = a * math.expm1(clamped_x)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "selu_activation",
+    "param_types": [
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Scaled Exponential Linear Unit (SELU) inducing self-normalizing neural properties.",
+    "pseudocode": "1. Define fixed analytical constants scale lambda and alpha.\n2. If input x >= 0.0, return lambda * x.\n3. Else compute lambda * alpha * (exp(x) - 1.0).\n4. Return activated output.",
+    "invariants": [
+      "Fixed-point mapping maintains mean zero and unit variance across dense feedforward layers.",
+      "Analytical constants: lambda ~ 1.0507, alpha ~ 1.67326."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return 1.05 * (x if x >= 0 else 1.67 * (math.exp(x) - 1.0))",
+        "failure_mechanism": "Truncating SELU constants breaks the mathematical fixed-point attractor proof.",
+        "counterexample_input": "x=1.0",
+        "verified_fix": "Use high-precision analytical constants for lambda and alpha."
+      }
+    ],
+    "source_code": "def selu_activation(x: float) -> float:\n    val = float(x)\n    scale = 1.05070099\n    alpha = 1.67326324\n    if val >= 0.0:\n        return scale * val\n    clamped_x = max(-50.0, val)\n    res = scale * alpha * math.expm1(clamped_x)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "softmax_1d_temperature",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "1D Softmax with temperature scaling and max subtraction for numerical stability.",
+    "pseudocode": "1. Verify temperature is positive.\n2. Scale logits by 1.0 / temperature.\n3. Subtract maximum scaled logit.\n4. Exponentiate and normalize by partition sum.",
+    "invariants": [
+      "Every output element is in open interval (0.0, 1.0).",
+      "Sum of output probabilities equals 1.0 within floating point precision."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "exp_v = [math.exp(x / temp) for x in logits]; return [v / sum(exp_v) for v in exp_v]",
+        "failure_mechanism": "Small temperature causes x / temp to explode past 709, crashing with OverflowError.",
+        "counterexample_input": "logits=[10.0, 20.0], temperature=0.01",
+        "verified_fix": "Subtract max(scaled_logits) prior to exponentiation."
+      }
+    ],
+    "source_code": "def softmax_1d_temperature(logits: list[float], temperature: float) -> list[float]:\n    if not logits:\n        return []\n    temp = max(0.001, float(temperature))\n    scaled = [x / temp for x in logits]\n    max_l = max(scaled)\n    exps = [math.exp(x - max_l) for x in scaled]\n    total = sum(exps)\n    res = [e / total for e in exps]\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "log_softmax_1d",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Numerically stable 1D Log-Softmax avoiding underflow via LogSumExp formulation.",
+    "pseudocode": "1. Find maximum logit value.\n2. Compute LogSumExp as max_l + ln(sum(exp(x - max_l))).\n3. Subtract LogSumExp from each original logit.\n4. Return vector of log probabilities.",
+    "invariants": [
+      "Every output element is non-positive: out[i] <= 0.0.",
+      "exp(log_softmax) sums to 1.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return [math.log(p) for p in softmax(logits)]",
+        "failure_mechanism": "Softmax underflow to 0.0 causes math.log(0.0) ValueError/crash.",
+        "counterexample_input": "logits=[-1000.0, 0.0]",
+        "verified_fix": "Compute log_softmax directly as x_i - LogSumExp(x)."
+      }
+    ],
+    "source_code": "def log_softmax_1d(logits: list[float]) -> list[float]:\n    if not logits:\n        return []\n    max_l = max(logits)\n    sum_exp = sum((math.exp(x - max_l) for x in logits))\n    lse = max_l + math.log(max(1e-15, sum_exp))\n    res = [x - lse for x in logits]\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "layer_norm_1d",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "1D Layer Normalization with learnable affine parameters gamma and beta.",
+    "pseudocode": "1. Compute sample mean across features.\n2. Compute sample variance across features.\n3. Normalize feature vector: (x - mean) / sqrt(var + eps).\n4. Scale by gamma and shift by beta.",
+    "invariants": [
+      "Normalized features have mean 0.0 and variance 1.0 when gamma=1 and beta=0.",
+      "Output vector length matches input vector length."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "inv_std = 1.0 / math.sqrt(var)",
+        "failure_mechanism": "Zero variance feature vector causes division by zero.",
+        "counterexample_input": "x=[5.0, 5.0, 5.0], gamma=[1.0, 1.0, 1.0], beta=[0.0, 0.0, 0.0], eps=0.0",
+        "verified_fix": "Add epsilon inside square root: 1.0 / sqrt(var + eps)."
+      }
+    ],
+    "source_code": "def layer_norm_1d(x: list[float], gamma: list[float], beta: list[float], eps: float) -> list[float]:\n    n = len(x)\n    if n == 0:\n        return []\n    ep = max(1e-12, float(eps))\n    mean_val = sum(x) / float(n)\n    var_val = sum(((val - mean_val) ** 2 for val in x)) / float(n)\n    inv_std = 1.0 / math.sqrt(var_val + ep)\n    res = []\n    for i in range(n):\n        g = gamma[i] if i < len(gamma) else 1.0\n        b = beta[i] if i < len(beta) else 0.0\n        norm_val = (x[i] - mean_val) * inv_std\n        res.append(norm_val * g + b)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "group_norm_channel_slice",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Group normalization standardization for a single channel group slice.",
+    "pseudocode": "1. Compute mean across elements in group.\n2. Compute variance across elements in group.\n3. Standardize elements using 1.0 / sqrt(var + eps).\n4. Return standardized group slice.",
+    "invariants": [
+      "Standardized group slice has zero mean.",
+      "Standardized group slice has unit variance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "norm = (x - mean) / std",
+        "failure_mechanism": "Uniform channel values yield zero variance and division by zero.",
+        "counterexample_input": "x_group=[2.0, 2.0, 2.0], eps=0.0",
+        "verified_fix": "Add epsilon threshold inside square root standard deviation."
+      }
+    ],
+    "source_code": "def group_norm_channel_slice(x_group: list[float], eps: float) -> list[float]:\n    n = len(x_group)\n    if n == 0:\n        return []\n    ep = max(1e-12, float(eps))\n    mean_val = sum(x_group) / float(n)\n    var_val = sum(((x - mean_val) ** 2 for x in x_group)) / float(n)\n    inv_std = 1.0 / math.sqrt(var_val + ep)\n    res = [(x - mean_val) * inv_std for x in x_group]\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "batch_norm_inference_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Batch normalization deterministic inference step using running population statistics.",
+    "pseudocode": "1. Subtract running mean from feature activation.\n2. Divide by sqrt(running_var + eps).\n3. Scale by affine parameter gamma.\n4. Shift by affine parameter beta and return.",
+    "invariants": [
+      "Evaluates deterministically in O(1) time without batch dependencies.",
+      "Affine transformation preserves monotonic ordering when gamma > 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (x - running_mean) / math.sqrt(running_var) * gamma + beta",
+        "failure_mechanism": "Division by zero if running_var is zero.",
+        "counterexample_input": "x=1.0, running_mean=1.0, running_var=0.0, gamma=1.0, beta=0.0, eps=0.0",
+        "verified_fix": "Add epsilon parameter inside square root."
+      }
+    ],
+    "source_code": "def batch_norm_inference_step(x: float, running_mean: float, running_var: float, gamma: float, beta: float, eps: float) -> float:\n    ep = max(1e-12, float(eps))\n    v = max(0.0, float(running_var))\n    inv_std = 1.0 / math.sqrt(v + ep)\n    normalized = (float(x) - float(running_mean)) * inv_std\n    res = normalized * float(gamma) + float(beta)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "spectral_norm_power_iteration",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "list[list[float]]"
+    ],
+    "return_type": "tuple[list[float], list[float], float]",
+    "summary": "One step of power iteration to estimate the largest singular value for spectral normalization.",
+    "pseudocode": "1. Compute v_unnorm = W^T * u.\n2. Normalize v to unit L2 norm.\n3. Compute u_unnorm = W * v.\n4. Normalize u and compute Rayleigh quotient sigma = u^T * W * v.",
+    "invariants": [
+      "Vectors u and v remain unit norm: ||u||_2 == 1.0, ||v||_2 == 1.0.",
+      "Singular value estimate sigma is strictly non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v = [sum(W[i][j]*u[i] for i in range(m)) for j in range(n)]",
+        "failure_mechanism": "Without re-normalization, vector norms explode or vanish exponentially.",
+        "counterexample_input": "u=[1.0], v=[1.0], w_mat=[[10.0]]",
+        "verified_fix": "Normalize both vectors to unit L2 norm at each step."
+      }
+    ],
+    "source_code": "def spectral_norm_power_iteration(u: list[float], v: list[float], w_mat: list[list[float]]) -> tuple[list[float], list[float], float]:\n    rows = len(w_mat)\n    if rows == 0 or not w_mat[0]:\n        return (list(u), list(v), 0.0)\n    cols = len(w_mat[0])\n    v_new = [0.0] * cols\n    for j in range(cols):\n        s = 0.0\n        for i in range(min(rows, len(u))):\n            s += w_mat[i][j] * u[i]\n        v_new[j] = s\n    norm_v = math.sqrt(sum((x * x for x in v_new)))\n    v_normed = [x / max(1e-12, norm_v) for x in v_new]\n    u_new = [0.0] * rows\n    for i in range(rows):\n        s = 0.0\n        for j in range(cols):\n            s += w_mat[i][j] * v_normed[j]\n        u_new[i] = s\n    norm_u = math.sqrt(sum((x * x for x in u_new)))\n    u_normed = [x / max(1e-12, norm_u) for x in u_new]\n    sigma = sum((u_normed[i] * u_new[i] for i in range(rows)))\n    return (u_normed, v_normed, max(0.0, sigma))",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "warmup_cosine_decay_lr",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Learning rate schedule with linear warmup phase followed by half-period cosine decay.",
+    "pseudocode": "1. If step <= warmup_steps, interpolate linearly from min_lr to base_lr.\n2. If step > total_steps, return min_lr.\n3. In decay phase, compute cosine progress in range [0, pi].\n4. Return min_lr + 0.5 * (base_lr - min_lr) * (1 + cos(progress)).",
+    "invariants": [
+      "Learning rate is bounded in range [min_lr, base_lr].",
+      "Continuous transition between warmup and cosine decay phases."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if step < warmup: return base_lr * (step / warmup); return base_lr * 0.5 * (1 + cos(...))",
+        "failure_mechanism": "Neglecting min_lr floor decays learning rate all the way to 0.0 prematurely.",
+        "counterexample_input": "step=100, warmup_steps=10, total_steps=100, base_lr=0.001, min_lr=0.0001",
+        "verified_fix": "Decay towards min_lr: min_lr + 0.5 * (base_lr - min_lr) * (1 + cos)."
+      }
+    ],
+    "source_code": "def warmup_cosine_decay_lr(step: int, warmup_steps: int, total_steps: int, base_lr: float, min_lr: float) -> float:\n    s = max(0, int(step))\n    w = max(0, int(warmup_steps))\n    total = max(w + 1, int(total_steps))\n    base = max(0.0, float(base_lr))\n    floor_lr = max(0.0, float(min_lr))\n    if s < w:\n        frac = float(s) / float(max(1, w))\n        return floor_lr + (base - floor_lr) * frac\n    if s >= total:\n        return floor_lr\n    progress = float(s - w) / float(total - w)\n    cosine = math.cos(progress * 3.141592653589793)\n    lr = floor_lr + 0.5 * (base - floor_lr) * (1.0 + cosine)\n    return max(floor_lr, lr)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "linear_warmup_polynomial_decay",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Learning rate schedule with linear warmup and polynomial decay towards end learning rate.",
+    "pseudocode": "1. If step < warmup, interpolate linearly towards base_lr.\n2. If step >= total, return end_lr.\n3. Compute remaining fraction (1 - progress)^power.\n4. Return end_lr + (base_lr - end_lr) * remaining.",
+    "invariants": [
+      "Reaches exactly base_lr at step == warmup_steps.",
+      "Reaches exactly end_lr at step >= total_steps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lr = base_lr * ((1 - step / total) ** power)",
+        "failure_mechanism": "Step exceeding total causes negative base with fractional power, returning complex NaN.",
+        "counterexample_input": "step=150, warmup_steps=10, total_steps=100, base_lr=0.01, end_lr=0.0, power=0.5",
+        "verified_fix": "Clamp progress to [0.0, 1.0] before computing power."
+      }
+    ],
+    "source_code": "def linear_warmup_polynomial_decay(step: int, warmup_steps: int, total_steps: int, base_lr: float, end_lr: float, power: float) -> float:\n    s = max(0, int(step))\n    w = max(0, int(warmup_steps))\n    total = max(w + 1, int(total_steps))\n    base = max(0.0, float(base_lr))\n    end = max(0.0, float(end_lr))\n    p = max(0.1, float(power))\n    if s < w:\n        frac = float(s) / float(max(1, w))\n        return end + (base - end) * frac ** p\n    if s >= total:\n        return end\n    remain = 1.0 - float(s - w) / float(total - w)\n    decayed = (base - end) * max(0.0, remain) ** p\n    res = end + decayed\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "one_cycle_lr_schedule",
+    "param_types": [
+      "int",
+      "int",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Leslie Smith One-Cycle learning rate trajectory with initial rise, decay, and annihilation phase.",
+    "pseudocode": "1. Define peak step at 30% of total steps.\n2. Phase 1: ramp from initial_lr to max_lr.\n3. Phase 2: decay from max_lr down to initial_lr.\n4. Phase 3: final annihilation decay from initial_lr to min_lr.",
+    "invariants": [
+      "Maximum learning rate achieved at exactly peak step.",
+      "Learning rate is bounded in range [min_lr, max_lr]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return max_lr * (step / total_steps)",
+        "failure_mechanism": "Linear increase fails to decay, destabilizing model weights towards end of training.",
+        "counterexample_input": "step=90, total_steps=100, max_lr=0.01, init_div=25.0, final_div=1000.0",
+        "verified_fix": "Implement 3-phase ramp, decay, and annihilation trajectory."
+      }
+    ],
+    "source_code": "def one_cycle_lr_schedule(step: int, total_steps: int, max_lr: float, init_div: float, final_div: float) -> float:\n    s = max(0, min(int(step), int(total_steps)))\n    total = max(1, int(total_steps))\n    peak = max(0.0, float(max_lr))\n    init_lr = peak / max(1.0, float(init_div))\n    min_lr = init_lr / max(1.0, float(final_div))\n    step1 = int(0.3 * float(total))\n    if s <= step1:\n        frac = float(s) / float(max(1, step1))\n        return init_lr + (peak - init_lr) * frac\n    frac2 = float(s - step1) / float(max(1, total - step1))\n    res = peak - (peak - min_lr) * frac2\n    return max(min_lr, res)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "sgd_momentum_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "bool"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Stochastic Gradient Descent update step with classical or Nesterov accelerated momentum.",
+    "pseudocode": "1. Update velocity buffer v = momentum * v + grad.\n2. If Nesterov enabled, compute effective grad as grad + momentum * v.\n3. Else effective grad is v.\n4. Update parameter w = w - lr * effective_grad. Return (new_w, new_v).",
+    "invariants": [
+      "Velocity buffer accumulates gradient direction with momentum damping.",
+      "Deterministic update matching PyTorch SGD reference behavior."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v = momentum * v + grad; w = w - lr * v",
+        "failure_mechanism": "Misses Nesterov lookahead term when nesterov=True.",
+        "counterexample_input": "param=1.0, grad=0.5, velocity=0.1, lr=0.01, momentum=0.9, nesterov=True",
+        "verified_fix": "Add lookahead momentum * v to gradient when nesterov is enabled."
+      }
+    ],
+    "source_code": "def sgd_momentum_step(param: float, grad: float, velocity: float, lr: float, momentum: float, nesterov: bool) -> tuple[float, float]:\n    p = float(param)\n    g = float(grad)\n    v = float(velocity)\n    rate = max(0.0, float(lr))\n    m = max(0.0, min(0.999, float(momentum)))\n    new_v = m * v + g\n    if nesterov:\n        step_val = g + m * new_v\n    else:\n        step_val = new_v\n    new_p = p - rate * step_val\n    return (new_p, new_v)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "rmsprop_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "RMSprop adaptive optimizer parameter update dividing gradient by running root mean square.",
+    "pseudocode": "1. Update exponential average of squared gradients: v = alpha * v + (1 - alpha) * grad^2.\n2. Compute adaptive step size: lr / sqrt(v + eps).\n3. Update parameter: w = w - step_size * grad.\n4. Return (new_w, new_v).",
+    "invariants": [
+      "Squared gradient accumulator v remains strictly non-negative.",
+      "Scales step sizes inversely with gradient variance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v = alpha * v + (1 - alpha) * (grad ** 2); w = w - lr * grad / math.sqrt(v)",
+        "failure_mechanism": "Zero gradient initially causes division by zero when eps is omitted.",
+        "counterexample_input": "param=1.0, grad=0.0, square_avg=0.0, lr=0.01, alpha=0.99, eps=0.0",
+        "verified_fix": "Add epsilon threshold inside square root denominator."
+      }
+    ],
+    "source_code": "def rmsprop_step(param: float, grad: float, square_avg: float, lr: float, alpha: float, eps: float) -> tuple[float, float]:\n    p = float(param)\n    g = float(grad)\n    v = max(0.0, float(square_avg))\n    rate = max(0.0, float(lr))\n    a = max(0.0, min(0.999, float(alpha)))\n    ep = max(1e-12, float(eps))\n    new_v = a * v + (1.0 - a) * (g * g)\n    denom = math.sqrt(new_v + ep)\n    new_p = p - rate * g / denom\n    return (new_p, new_v)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "adagrad_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Adagrad optimizer step adapting learning rates dynamically using accumulated sum of squared gradients.",
+    "pseudocode": "1. Accumulate squared gradient into running sum: G = G + grad^2.\n2. Compute effective learning rate lr / sqrt(G + eps).\n3. Update parameter: w = w - effective_lr * grad.\n4. Return (new_w, new_G).",
+    "invariants": [
+      "Accumulator G is monotonically non-decreasing over optimization steps.",
+      "Effective step size monotonically decreases over training."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "accum_grad += grad; w -= lr * grad / math.sqrt(accum_grad)",
+        "failure_mechanism": "Accumulating raw gradients instead of squared gradients allows cancellations and negative accumulator.",
+        "counterexample_input": "param=1.0, grad=-2.0, accum_grad=1.0, lr=0.1, eps=1e-8",
+        "verified_fix": "Accumulate grad * grad."
+      }
+    ],
+    "source_code": "def adagrad_step(param: float, grad: float, accum_grad: float, lr: float, eps: float) -> tuple[float, float]:\n    p = float(param)\n    g = float(grad)\n    g_sq = max(0.0, float(accum_grad))\n    rate = max(0.0, float(lr))\n    ep = max(1e-12, float(eps))\n    new_acc = g_sq + g * g\n    denom = math.sqrt(new_acc + ep)\n    new_p = p - rate * g / denom\n    return (new_p, new_acc)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "radam_rectified_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "tuple[float, float, float]",
+    "summary": "Rectified Adam (RAdam) step adapting variance tractability and falling back to unadapted momentum.",
+    "pseudocode": "1. Update 1st and 2nd moments.\n2. Compute length of approximated degrees of freedom rho_t.\n3. If rho_t > 4, compute variance rectification factor r_t and update with adaptive step.\n4. Else update with unrectified momentum step.",
+    "invariants": [
+      "Stabilizes early training iterations without manual heuristic warmup.",
+      "Second moment remains non-negative at all steps."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "r_t = math.sqrt((rho_t - 4) / (rho_inf - 4))",
+        "failure_mechanism": "When rho_t <= 4, radicand is negative, causing ValueError in square root.",
+        "counterexample_input": "w=1.0, g=0.1, m=0.0, v=0.0, lr=0.001, beta1=0.9, beta2=0.999, step=1",
+        "verified_fix": "Check rho_t > 4 condition; fall back to unadapted momentum step when rho_t <= 4."
+      }
+    ],
+    "source_code": "def radam_rectified_step(w: float, g: float, m: float, v: float, lr: float, beta1: float, beta2: float, step: int) -> tuple[float, float, float]:\n    p = float(w)\n    grad = float(g)\n    b1 = max(0.0, min(0.999, float(beta1)))\n    b2 = max(0.0, min(0.999, float(beta2)))\n    t = max(1, int(step))\n    rate = max(0.0, float(lr))\n    new_m = b1 * float(m) + (1.0 - b1) * grad\n    new_v = b2 * float(v) + (1.0 - b2) * (grad * grad)\n    m_hat = new_m / (1.0 - b1 ** min(60, t))\n    rho_inf = 2.0 / (1.0 - b2) - 1.0\n    beta2_t = b2 ** min(60, t)\n    rho_t = rho_inf - 2.0 * float(t) * beta2_t / (1.0 - beta2_t)\n    if rho_t > 4.0:\n        v_hat = math.sqrt(new_v / (1.0 - beta2_t))\n        num = (rho_t - 4.0) * (rho_t - 2.0) * rho_inf\n        den = (rho_inf - 4.0) * (rho_inf - 2.0) * rho_t\n        r_t = math.sqrt(max(0.0, num / max(1e-09, den)))\n        new_p = p - rate * m_hat * r_t / max(1e-09, v_hat)\n    else:\n        new_p = p - rate * m_hat\n    return (new_p, new_m, new_v)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "lion_optimizer_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "EvoLved Sign Momentum (Lion) optimizer step with decoupled weight decay.",
+    "pseudocode": "1. Apply decoupled weight decay shrinkage to parameter.\n2. Compute interpolation c = beta1 * exp_avg + (1 - beta1) * grad.\n3. Compute sign update: sign(c).\n4. Update parameter and update running tracking buffer: exp_avg = beta2 * exp_avg + (1 - beta2) * grad.",
+    "invariants": [
+      "Parameter step direction is strictly determined by sign function {-1.0, 0.0, 1.0}.",
+      "Uniform update magnitude across all coordinate dimensions."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p = p - lr * sign(exp_avg)",
+        "failure_mechanism": "Fails to mix current gradient into update direction c, reducing convergence speed.",
+        "counterexample_input": "param=1.0, grad=0.5, exp_avg=0.0, lr=0.001, beta1=0.9, beta2=0.99, wd=0.01",
+        "verified_fix": "Interpolate current gradient with exp_avg via beta1 before sign evaluation."
+      }
+    ],
+    "source_code": "def lion_optimizer_step(param: float, grad: float, exp_avg: float, lr: float, beta1: float, beta2: float, wd: float) -> tuple[float, float]:\n    p = float(param)\n    g = float(grad)\n    m = float(exp_avg)\n    rate = max(0.0, float(lr))\n    b1 = max(0.0, min(0.999, float(beta1)))\n    b2 = max(0.0, min(0.999, float(beta2)))\n    decay = max(0.0, float(wd))\n    p_decayed = p * (1.0 - rate * decay)\n    c = b1 * m + (1.0 - b1) * g\n    sign_c = 1.0 if c > 0.0 else -1.0 if c < 0.0 else 0.0\n    new_p = p_decayed - rate * sign_c\n    new_m = b2 * m + (1.0 - b2) * g\n    return (new_p, new_m)",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "gradient_norm_clipping_vector",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[float]",
+    "summary": "Global L2 gradient vector clipping scaling components when norm exceeds maximum threshold.",
+    "pseudocode": "1. Compute sum of squared gradient components.\n2. Compute global L2 norm.\n3. If norm exceeds max_norm, scale vector by max_norm / norm.\n4. Else return gradient vector unchanged.",
+    "invariants": [
+      "Resulting L2 norm never exceeds max_norm threshold.",
+      "Preserves exact relative direction of the gradient vector."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return [min(max_norm, max(-max_norm, g)) for g in grads]",
+        "failure_mechanism": "Element-wise clamping distorts the gradient direction vector, altering optimization trajectory.",
+        "counterexample_input": "grads=[10.0, 1.0], max_norm=1.0",
+        "verified_fix": "Scale entire vector proportionally by max_norm / total_norm."
+      }
+    ],
+    "source_code": "def gradient_norm_clipping_vector(grads: list[float], max_norm: float) -> list[float]:\n    if not grads:\n        return []\n    cap = max(1e-12, float(max_norm))\n    sq_sum = sum((g * g for g in grads))\n    total_norm = math.sqrt(sq_sum)\n    if total_norm <= cap:\n        return list(grads)\n    scale = cap / total_norm\n    res = [g * scale for g in grads]\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "weight_decay_decoupled_shrink",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Decoupled weight decay parameter shrinkage step independent of gradient magnitude.",
+    "pseudocode": "1. Compute scale shrinkage factor 1.0 - lr * weight_decay.\n2. Floor shrinkage factor at 0.0 to prevent polarity reversal.\n3. Scale parameter by shrinkage factor.\n4. Return shrunk parameter.",
+    "invariants": [
+      "Parameter magnitude is monotonically non-increasing under decay.",
+      "Independent of gradient scale (decoupled AdamW / Loshchilov & Hutter formulation)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return param * (1.0 - lr * weight_decay)",
+        "failure_mechanism": "If lr * weight_decay > 1.0, parameter sign flips and magnitude grows exponentially.",
+        "counterexample_input": "param=1.0, lr=2.0, weight_decay=1.0",
+        "verified_fix": "Clamp shrinkage factor to non-negative range: max(0.0, 1.0 - lr * wd)."
+      }
+    ],
+    "source_code": "def weight_decay_decoupled_shrink(param: float, lr: float, weight_decay: float) -> float:\n    p = float(param)\n    rate = max(0.0, float(lr))\n    wd = max(0.0, float(weight_decay))\n    shrink = max(0.0, 1.0 - rate * wd)\n    res = p * shrink\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "ema_parameter_shadow_update",
+    "param_types": [
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Exponential Moving Average (EMA) parameter shadow update smoothing weight trajectories.",
+    "pseudocode": "1. Clamp decay factor to range [0.0, 1.0].\n2. Compute weighted interpolation shadow = decay * shadow + (1 - decay) * param.\n3. Return updated shadow parameter.",
+    "invariants": [
+      "Shadow parameter is a convex combination of previous shadow and current parameter.",
+      "Dampens SGD noise and improves model out-of-distribution generalization."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return shadow + decay * (param - shadow)",
+        "failure_mechanism": "Formula uses decay instead of (1 - decay) as step size towards param.",
+        "counterexample_input": "param=10.0, shadow=0.0, decay=0.999",
+        "verified_fix": "Use decay * shadow + (1.0 - decay) * param."
+      }
+    ],
+    "source_code": "def ema_parameter_shadow_update(param: float, shadow: float, decay: float) -> float:\n    p = float(param)\n    s = float(shadow)\n    d = max(0.0, min(1.0, float(decay)))\n    res = d * s + (1.0 - d) * p\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "attention_dot_product_scaled",
+    "param_types": [
+      "list[float]",
+      "list[list[float]]",
+      "int"
+    ],
+    "return_type": "list[float]",
+    "summary": "Scaled dot-product attention logits for a single query vector against key sequence.",
+    "pseudocode": "1. Compute scaling factor 1.0 / sqrt(d_k).\n2. For each key vector in sequence, compute dot product with query.\n3. Scale dot product by scaling factor.\n4. Return vector of unnormalized attention logits.",
+    "invariants": [
+      "Output vector length equals number of key vectors.",
+      "Prevents softmax gradient saturation by scaling variance to unit order."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "logits = [sum(q[i]*k[i] for i in range(len(q))) for k in keys]",
+        "failure_mechanism": "Omitting 1 / sqrt(d_k) causes large dot products to push softmax into regions of vanishing gradients.",
+        "counterexample_input": "query=[10.0, 10.0], keys=[[10.0, 10.0]], d_k=64",
+        "verified_fix": "Divide dot products by math.sqrt(d_k)."
+      }
+    ],
+    "source_code": "def attention_dot_product_scaled(query: list[float], keys: list[list[float]], d_k: int) -> list[float]:\n    if not query or not keys:\n        return []\n    dim = max(1, int(d_k))\n    scale = 1.0 / math.sqrt(float(dim))\n    d_q = len(query)\n    logits = []\n    for k in keys:\n        n = min(d_q, len(k))\n        dot = sum((query[i] * k[i] for i in range(n)))\n        logits.append(dot * scale)\n    return logits",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "causal_attention_mask_apply",
+    "param_types": [
+      "list[list[float]]",
+      "float"
+    ],
+    "return_type": "list[list[float]]",
+    "summary": "Applies causal autoregressive mask setting future token attention logits to negative mask value.",
+    "pseudocode": "1. Iterate through square attention logit matrix rows i and columns j.\n2. If j > i (future position), replace logit with mask_value.\n3. Else keep original logit value.\n4. Return masked attention matrix.",
+    "invariants": [
+      "Autoregressive causal invariant: all positions j > i receive mask_value.",
+      "Preserves existing past and current logits for j <= i."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if j >= i: logits[i][j] = mask_value",
+        "failure_mechanism": "Masks out the diagonal (j == i), preventing self-attention on the current token.",
+        "counterexample_input": "logits_matrix=[[1.0, 2.0], [3.0, 4.0]], mask_value=-1e9",
+        "verified_fix": "Strict inequality j > i preserves self-attention."
+      }
+    ],
+    "source_code": "def causal_attention_mask_apply(logits_matrix: list[list[float]], mask_value: float) -> list[list[float]]:\n    rows = len(logits_matrix)\n    if rows == 0:\n        return []\n    mask_v = float(mask_value)\n    masked = []\n    for i in range(rows):\n        row = logits_matrix[i]\n        cols = len(row)\n        new_row = []\n        for j in range(cols):\n            if j > i:\n                new_row.append(mask_v)\n            else:\n                new_row.append(row[j])\n        masked.append(new_row)\n    return masked",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "alibi_relative_bias_scalar",
+    "param_types": [
+      "int",
+      "int",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Attention with Linear Biases (ALiBi) scalar distance penalty enabling zero-shot length extrapolation.",
+    "pseudocode": "1. Compute relative position distance diff = key_idx - query_idx.\n2. If key is in the past (diff <= 0), bias is slope * diff.\n3. If key is in the future (diff > 0), bias is -inf or zero.\n4. Return linear relative positional bias.",
+    "invariants": [
+      "Penalizes distant past keys linearly with negative bias.",
+      "Zero positional bias when query_idx == key_idx."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return slope * abs(query_idx - key_idx)",
+        "failure_mechanism": "Positive bias rewards distant keys instead of penalizing them.",
+        "counterexample_input": "query_idx=10, key_idx=2, slope=0.5",
+        "verified_fix": "Apply negative slope penalty: slope * (key_idx - query_idx)."
+      }
+    ],
+    "source_code": "def alibi_relative_bias_scalar(query_idx: int, key_idx: int, slope: float) -> float:\n    q = int(query_idx)\n    k = int(key_idx)\n    m = max(0.0, float(slope))\n    diff = k - q\n    if diff > 0:\n        return -10000.0\n    res = m * float(diff)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "brier_score_binary",
+    "param_types": [
+      "list[float]",
+      "list[int]"
+    ],
+    "return_type": "float",
+    "summary": "Brier score strictly proper scoring rule evaluating probability forecast calibration.",
+    "pseudocode": "1. Compute squared difference (prob - target)^2 for each prediction.\n2. Average squared differences across all items.\n3. Return mean squared probability error.",
+    "invariants": [
+      "Brier score is bounded in range [0.0, 1.0].",
+      "Strictly proper scoring rule minimized if and only if predicted probabilities equal true conditional probabilities."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return sum(abs(p - t) for p, t in zip(probs, targets)) / len(probs)",
+        "failure_mechanism": "Mean absolute error is not a strictly proper scoring rule and incentives uncalibrated extreme forecasts.",
+        "counterexample_input": "probs=[0.8], targets=[1]",
+        "verified_fix": "Use squared error (p - t)^2."
+      }
+    ],
+    "source_code": "def brier_score_binary(probs: list[float], targets: list[int]) -> float:\n    n = min(len(probs), len(targets))\n    if n == 0:\n        return 0.0\n    total_sq = 0.0\n    for i in range(n):\n        p = max(0.0, min(1.0, float(probs[i])))\n        t = 1.0 if targets[i] > 0 else 0.0\n        diff = p - t\n        total_sq += diff * diff\n    res = total_sq / float(n)\n    return res",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "expected_calibration_error_1d",
+    "param_types": [
+      "list[float]",
+      "list[int]",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Expected Calibration Error (ECE) computing weighted gap between confidence and empirical accuracy.",
+    "pseudocode": "1. Partition predictions into equal-width probability bins.\n2. For each bin, compute average predicted confidence.\n3. Compute empirical accuracy within the bin.\n4. Return sample-weighted average absolute gap |acc - conf|.",
+    "invariants": [
+      "ECE is bounded within range [0.0, 1.0].",
+      "A perfectly calibrated classifier has ECE == 0.0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "ece = sum(abs(acc[b] - conf[b]) for b in bins) / len(bins)",
+        "failure_mechanism": "Unweighted average over-weights sparse outlier bins with very few samples.",
+        "counterexample_input": "probs=[0.9, 0.9, 0.1], targets=[1, 1, 0], num_bins=10",
+        "verified_fix": "Weight each bin's calibration error by (bin_count / total_samples)."
+      }
+    ],
+    "source_code": "def expected_calibration_error_1d(probs: list[float], targets: list[int], num_bins: int) -> float:\n    n = min(len(probs), len(targets))\n    b = max(1, min(100, int(num_bins)))\n    if n == 0:\n        return 0.0\n    bin_counts = [0] * b\n    bin_correct = [0.0] * b\n    bin_conf = [0.0] * b\n    for i in range(n):\n        p = max(0.0, min(1.0, float(probs[i])))\n        t = 1.0 if targets[i] > 0 else 0.0\n        bin_idx = min(b - 1, int(p * float(b)))\n        bin_counts[bin_idx] += 1\n        bin_conf[bin_idx] += p\n        bin_correct[bin_idx] += t\n    ece = 0.0\n    for j in range(b):\n        cnt = bin_counts[j]\n        if cnt > 0:\n            avg_conf = bin_conf[j] / float(cnt)\n            avg_acc = bin_correct[j] / float(cnt)\n            gap = abs(avg_acc - avg_conf)\n            weight = float(cnt) / float(n)\n            ece += weight * gap\n    return ece",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "roc_auc_trapezoidal_estimate",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Area Under the Receiver Operating Characteristic Curve (ROC-AUC) via trapezoidal numerical integration.",
+    "pseudocode": "1. Pair FPR and TPR points and sort by increasing FPR.\n2. Compute trapezoidal area for each adjacent segment.\n3. Sum trapezoidal areas: 0.5 * (tpr_next + tpr_curr) * (fpr_next - fpr_curr).\n4. Return total integrated ROC-AUC.",
+    "invariants": [
+      "AUC is bounded within range [0.0, 1.0].",
+      "Perfect classifier has AUC == 1.0; random classifier has AUC ~ 0.5."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "auc = sum(tpr[i] * (fpr[i+1] - fpr[i]) for i in range(n-1))",
+        "failure_mechanism": "Rectangular left-Riemann sum underestimates AUC for concave ROC curves.",
+        "counterexample_input": "fpr=[0.0, 0.5, 1.0], tpr=[0.0, 0.8, 1.0]",
+        "verified_fix": "Use trapezoidal rule: 0.5 * (tpr[i] + tpr[i+1]) * delta_fpr."
+      }
+    ],
+    "source_code": "def roc_auc_trapezoidal_estimate(fpr: list[float], tpr: list[float]) -> float:\n    n = min(len(fpr), len(tpr))\n    if n < 2:\n        return 0.5\n    pairs = []\n    for i in range(n):\n        x = max(0.0, min(1.0, float(fpr[i])))\n        y = max(0.0, min(1.0, float(tpr[i])))\n        pairs.append((x, y))\n    pairs.sort()\n    auc = 0.0\n    for j in range(len(pairs) - 1):\n        x0, y0 = pairs[j]\n        x1, y1 = pairs[j + 1]\n        dx = x1 - x0\n        if dx > 0.0:\n            auc += 0.5 * (y0 + y1) * dx\n    return max(0.0, min(1.0, auc))",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "pr_auc_interpolated_score",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Precision-Recall Area Under Curve (PR-AUC / Average Precision) calculation.",
+    "pseudocode": "1. Pair recall and precision points and sort by increasing recall.\n2. Compute trapezoidal area under precision-recall curve.\n3. Return integrated area bounded in [0.0, 1.0].",
+    "invariants": [
+      "PR-AUC is bounded within range [0.0, 1.0].",
+      "Informative metric under extreme class imbalance where ROC-AUC gives overly optimistic results."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return sum(precision) / len(precision)",
+        "failure_mechanism": "Simple average of precision ignores non-uniform recall spacing.",
+        "counterexample_input": "precision=[1.0, 0.5], recall=[0.1, 0.9]",
+        "verified_fix": "Integrate precision with respect to recall increments."
+      }
+    ],
+    "source_code": "def pr_auc_interpolated_score(precision: list[float], recall: list[float]) -> float:\n    n = min(len(precision), len(recall))\n    if n < 2:\n        return 0.0\n    pts = []\n    for i in range(n):\n        r = max(0.0, min(1.0, float(recall[i])))\n        p = max(0.0, min(1.0, float(precision[i])))\n        pts.append((r, p))\n    pts.sort()\n    area = 0.0\n    for j in range(len(pts) - 1):\n        r0, p0 = pts[j]\n        r1, p1 = pts[j + 1]\n        dr = r1 - r0\n        if dr > 0.0:\n            area += 0.5 * (p0 + p1) * dr\n    return max(0.0, min(1.0, area))",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "f1_score_from_confusion",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "F1 score harmonic mean of precision and recall computed from confusion counts.",
+    "pseudocode": "1. Ensure confusion counts are non-negative.\n2. Compute denominator as 2 * TP + FP + FN.\n3. If denominator is zero, return 0.0.\n4. Return 2 * TP / (2 * TP + FP + FN).",
+    "invariants": [
+      "F1 score is strictly bounded in range [0.0, 1.0].",
+      "Equals 1.0 if and only if FP == 0 and FN == 0 and TP > 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (2 * tp) / (2 * tp + fp + fn)",
+        "failure_mechanism": "ZeroDivisionError when model predicts all negative on negative data (tp=0, fp=0, fn=0).",
+        "counterexample_input": "tp=0, fp=0, fn=0",
+        "verified_fix": "Check denominator > 0 before dividing."
+      }
+    ],
+    "source_code": "def f1_score_from_confusion(tp: int, fp: int, fn: int) -> float:\n    t = max(0, int(tp))\n    f_p = max(0, int(fp))\n    f_n = max(0, int(fn))\n    denom = 2 * t + f_p + f_n\n    if denom == 0:\n        return 0.0\n    score = 2.0 * float(t) / float(denom)\n    return score",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "matthews_corrcoef_2x2",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Matthews Correlation Coefficient (MCC) evaluating 2x2 binary confusion matrix balance.",
+    "pseudocode": "1. Compute numerator: TP * TN - FP * FN.\n2. Compute product of all marginal totals.\n3. If product of marginals is zero, return 0.0.\n4. Return numerator / sqrt(product of marginals).",
+    "invariants": [
+      "MCC is strictly bounded in range [-1.0, +1.0].",
+      "+1.0 represents perfect prediction, 0.0 random guessing, -1.0 total inverse prediction."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "denom = math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))",
+        "failure_mechanism": "Zero marginal total causes division by zero when an entire row or column is empty.",
+        "counterexample_input": "tp=10, tn=0, fp=0, fn=0",
+        "verified_fix": "Return 0.0 whenever any marginal sum is zero."
+      }
+    ],
+    "source_code": "def matthews_corrcoef_2x2(tp: int, tn: int, fp: int, fn: int) -> float:\n    t_p = max(0, int(tp))\n    t_n = max(0, int(tn))\n    f_p = max(0, int(fp))\n    f_n = max(0, int(fn))\n    num = float(t_p * t_n - f_p * f_n)\n    d1 = float(t_p + f_p)\n    d2 = float(t_p + f_n)\n    d3 = float(t_n + f_p)\n    d4 = float(t_n + f_n)\n    if d1 <= 0.0 or d2 <= 0.0 or d3 <= 0.0 or (d4 <= 0.0):\n        return 0.0\n    denom = math.sqrt(d1 * d2 * d3 * d4)\n    mcc = num / denom\n    return max(-1.0, min(1.0, mcc))",
+    "domain": "machine_learning"
+  },
+  {
+    "name": "silhouette_sample_score",
+    "param_types": [
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Single-sample silhouette clustering coefficient measuring cohesion vs separation.",
+    "pseudocode": "1. Compute intra-cluster distance a and nearest-cluster distance b.\n2. Compute maximum between a and b.\n3. If max is zero, return 0.0.\n4. Return (b - a) / max(a, b).",
+    "invariants": [
+      "Silhouette score is bounded in range [-1.0, +1.0].",
+      "Positive score indicates sample is closer to its own cluster than neighboring clusters."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (b_dist - a_dist) / max(a_dist, b_dist)",
+        "failure_mechanism": "Zero distance for identical points causes division by zero.",
+        "counterexample_input": "a_dist=0.0, b_dist=0.0",
+        "verified_fix": "Check max(a, b) > 0 before dividing."
+      }
+    ],
+    "source_code": "def silhouette_sample_score(a_dist: float, b_dist: float) -> float:\n    a = max(0.0, float(a_dist))\n    b = max(0.0, float(b_dist))\n    denom = max(a, b)\n    if denom <= 1e-12:\n        return 0.0\n    score = (b - a) / denom\n    return max(-1.0, min(1.0, score))",
+    "domain": "machine_learning"
+  }
+]

@@ -1,0 +1,1029 @@
+[
+  {
+    "name": "welford_skewness_kurtosis",
+    "param_types": [
+      "int",
+      "float",
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[int, float, float, float, float]",
+    "summary": "Online recurrence update for sample mean, variance, skewness, and kurtosis moments.",
+    "pseudocode": "1. Increment sample count n = count + 1.\\n2. Compute delta = x - mean and scaled delta_n.\\n3. Update 4th, 3rd, and 2nd central moments via Terriberry recurrences.\\n4. Return updated moments.",
+    "invariants": [
+      "Sample count increments by exactly 1.",
+      "Second central moment m2 remains non-negative for real inputs."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "m4 = sum((x - mean) ** 4)",
+        "failure_mechanism": "Two-pass batch computation requires retaining all streaming elements in memory.",
+        "counterexample_input": "Streaming telemetry with 10M samples.",
+        "verified_fix": "Use online Terriberry-Welford recurrence accumulator."
+      }
+    ],
+    "source_code": "def welford_skewness_kurtosis(count: int, mean: float, m2: float, m3: float, m4: float, x: float) -> tuple[int, float, float, float, float]:\n    n1 = float(count)\n    n = n1 + 1.0\n    delta = float(x) - float(mean)\n    delta_n = delta / n\n    delta_n2 = delta_n * delta_n\n    term1 = delta * delta_n * n1\n    new_mean = float(mean) + delta_n\n    new_m4 = float(m4) + term1 * delta_n2 * (n * n - 3.0 * n + 3.0) + 6.0 * delta_n2 * float(m2) - 4.0 * delta_n * float(m3)\n    new_m3 = float(m3) + term1 * delta_n * (n - 2.0) - 3.0 * delta_n * float(m2)\n    new_m2 = float(m2) + term1\n    return (int(n), float(new_mean), float(new_m2), float(new_m3), float(new_m4))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "chan_parallel_variance_combine",
+    "param_types": [
+      "int",
+      "float",
+      "float",
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "tuple[int, float, float]",
+    "summary": "Chan-Golub-LeVeque parallel combination of sample count, mean, and sum of squared differences.",
+    "pseudocode": "1. Check empty subset edge cases.\\n2. Total count is na + nb.\\n3. Compute mean shift delta.\\n4. Update combined mean and combined m2.\\n5. Return (n_total, combined_mean, combined_m2).",
+    "invariants": [
+      "Total count equals na + nb.",
+      "Combined m2 is invariant to partition order of subsets A and B."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "combined_var = (var_a + var_b) / 2.0",
+        "failure_mechanism": "Ignoring difference in partition sample means severely underestimates combined variance.",
+        "counterexample_input": "na=100, mean_a=0.0, nb=100, mean_b=100.0",
+        "verified_fix": "Add cross-term delta^2 * (na * nb) / n_total to pooled m2."
+      }
+    ],
+    "source_code": "def chan_parallel_variance_combine(count_a: int, mean_a: float, m2_a: float, count_b: int, mean_b: float, m2_b: float) -> tuple[int, float, float]:\n    na = int(count_a)\n    nb = int(count_b)\n    if na <= 0:\n        return (nb, float(mean_b), float(m2_b))\n    if nb <= 0:\n        return (na, float(mean_a), float(m2_a))\n    n_total = na + nb\n    delta = float(mean_b) - float(mean_a)\n    combined_mean = float(mean_a) + delta * (float(nb) / float(n_total))\n    combined_m2 = float(m2_a) + float(m2_b) + (delta * delta) * (float(na) * float(nb) / float(n_total))\n    return (n_total, float(combined_mean), float(combined_m2))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "t_digest_centroid_merge",
+    "param_types": [
+      "list[float]",
+      "list[float]",
+      "int"
+    ],
+    "return_type": "tuple[list[float], list[float]]",
+    "summary": "Merges streaming t-digest quantile centroids subject to max centroid capacity bounds.",
+    "pseudocode": "1. Pair means and weights and sort ascending by mean.\\n2. Compute total weight and cluster capacity ceiling.\\n3. Accumulate centroids greedily under weight ceiling.\\n4. Return merged centroid means and weights.",
+    "invariants": [
+      "Total output weight equals total input weight.",
+      "Merged centroid means are strictly non-decreasing."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "items.sort(key=lambda x: x[1])",
+        "failure_mechanism": "Sorting by weight instead of mean destroys quantile distribution geometry.",
+        "counterexample_input": "means=[10.0, 1.0, 5.0], weights=[1.0, 1.0, 1.0]",
+        "verified_fix": "Sort centroids monotonically by mean prior to cluster merging."
+      }
+    ],
+    "source_code": "def t_digest_centroid_merge(means: list[float], weights: list[float], max_centroids: int) -> tuple[list[float], list[float]]:\n    n = min(len(means), len(weights))\n    if n == 0:\n        return ([], [])\n    items = []\n    for i in range(n):\n        items.append((float(means[i]), float(weights[i])))\n    items.sort()\n    total_w = sum(w for _, w in items)\n    cap = max(1, int(max_centroids))\n    max_w_per_cluster = max(1.0, total_w / float(cap))\n    out_means = []\n    out_weights = []\n    curr_m = items[0][0]\n    curr_w = items[0][1]\n    for i in range(1, n):\n        m_val, w_val = items[i]\n        if curr_w + w_val <= max_w_per_cluster:\n            new_w = curr_w + w_val\n            curr_m = (curr_m * curr_w + m_val * w_val) / new_w\n            curr_w = new_w\n        else:\n            out_means.append(float(curr_m))\n            out_weights.append(float(curr_w))\n            curr_m = m_val\n            curr_w = w_val\n    out_means.append(float(curr_m))\n    out_weights.append(float(curr_w))\n    return (out_means, out_weights)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "greenwald_khanna_quantile_summary",
+    "param_types": [
+      "list[tuple[float, int, int]]",
+      "float",
+      "float"
+    ],
+    "return_type": "list[tuple[float, int, int]]",
+    "summary": "Inserts observation into Greenwald-Khanna streaming quantile summary maintaining rank error bounds.",
+    "pseudocode": "1. Iterate through summary tuples (value, g, delta).\\n2. Find ordered insertion index for incoming value.\\n3. Calculate bounded uncertainty delta.\\n4. Insert new tuple and preserve sorted value order.",
+    "invariants": [
+      "Output summary contains exactly len(input) + 1 tuples.",
+      "Values in output tuples are monotonically increasing."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "max_delta = 0",
+        "failure_mechanism": "Setting delta to 0 everywhere prevents effective summary compression.",
+        "counterexample_input": "v=4.5, eps=0.05, n_items=1000",
+        "verified_fix": "Set delta based on 2 * eps * n boundary condition."
+      }
+    ],
+    "source_code": "def greenwald_khanna_quantile_summary(tuples_data: list[tuple[float, int, int]], v: float, eps: float) -> list[tuple[float, int, int]]:\n    val = float(v)\n    tolerance = max(1e-6, float(eps))\n    n_items = len(tuples_data)\n    if n_items == 0:\n        return [(val, 1, 0)]\n    res = []\n    inserted = False\n    for item in tuples_data:\n        x, g, delta = item\n        if not inserted and val < x:\n            max_delta = max(0, int(2.0 * tolerance * float(n_items)))\n            res.append((val, 1, max_delta))\n            inserted = True\n        res.append((float(x), int(g), int(delta)))\n    if not inserted:\n        res.append((val, 1, 0))\n    return res\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "kullback_leibler_discrete_div",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes discrete Kullback-Leibler divergence with absolute continuity safeguards.",
+    "pseudocode": "1. Normalize probability distributions p and q.\\n2. Check absolute continuity p << q.\\n3. Accumulate sum of p_i * ln(p_i / q_i) for positive support.\\n4. Clamp divergence >= 0.0 by Gibbs inequality.",
+    "invariants": [
+      "KL divergence is strictly non-negative (Gibbs inequality).",
+      "KL divergence is zero if and only if p and q are identical distributions."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "kl += pi * math.log(pi / qi)",
+        "failure_mechanism": "Division by zero crash or NaN when qi == 0 and pi > 0.",
+        "counterexample_input": "p=[0.5, 0.5], q=[1.0, 0.0]",
+        "verified_fix": "Safeguard support with continuity check returning upper ceiling if qi is zero."
+      }
+    ],
+    "source_code": "def kullback_leibler_discrete_div(p: list[float], q: list[float]) -> float:\n    n = min(len(p), len(q))\n    if n == 0:\n        return 0.0\n    sum_p = sum(max(0.0, float(x)) for x in p[:n])\n    sum_q = sum(max(0.0, float(x)) for x in q[:n])\n    if sum_p <= 0.0 or sum_q <= 0.0:\n        return 0.0\n    kl = 0.0\n    for i in range(n):\n        pi = max(0.0, float(p[i])) / sum_p\n        qi = max(0.0, float(q[i])) / sum_q\n        if pi > 1e-15:\n            if qi <= 1e-15:\n                return 1000.0\n            kl += pi * math.log(pi / qi)\n    return float(max(0.0, kl))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "jensen_shannon_metric_distance",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes true metric Jensen-Shannon distance as the square root of Jensen-Shannon divergence.",
+    "pseudocode": "1. Normalize probability vectors p and q.\\n2. Construct midpoint mixture distribution m = (p + q) / 2.\\n3. Compute symmetric divergence JSD = 0.5 * KL(p||m) + 0.5 * KL(q||m).\\n4. Return square root of non-negative JSD.",
+    "invariants": [
+      "Output satisfies metric axioms including triangle inequality.",
+      "Distance is bounded within [0, sqrt(ln(2))]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return jsd",
+        "failure_mechanism": "Raw JSD is a divergence that violates the triangle inequality.",
+        "counterexample_input": "p=[1, 0], q=[0, 1], r=[0.5, 0.5]",
+        "verified_fix": "Take the square root of JSD to obtain a true mathematical metric distance."
+      }
+    ],
+    "source_code": "def jensen_shannon_metric_distance(p: list[float], q: list[float]) -> float:\n    n = min(len(p), len(q))\n    if n == 0:\n        return 0.0\n    sum_p = sum(max(0.0, float(x)) for x in p[:n])\n    sum_q = sum(max(0.0, float(x)) for x in q[:n])\n    if sum_p <= 0.0 or sum_q <= 0.0:\n        return 0.0\n    jsd = 0.0\n    for i in range(n):\n        pi = max(0.0, float(p[i])) / sum_p\n        qi = max(0.0, float(q[i])) / sum_q\n        m = 0.5 * (pi + qi)\n        if m > 1e-15:\n            if pi > 1e-15:\n                jsd += 0.5 * pi * math.log(pi / m)\n            if qi > 1e-15:\n                jsd += 0.5 * qi * math.log(qi / m)\n    return float(math.sqrt(max(0.0, jsd)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "wasserstein_distance_1d_sorted",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates 1D Wasserstein-1 (Earth Mover's) distance by integrating absolute difference of empirical CDFs.",
+    "pseudocode": "1. Extract merged unique support points from sorted distributions.\\n2. Step through intervals computing empirical CDF of both samples.\\n3. Multiply interval width by absolute CDF difference.\\n4. Sum integral and return Wasserstein distance.",
+    "invariants": [
+      "Wasserstein distance is strictly non-negative.",
+      "Distance is zero if and only if sample distributions are identical."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "diff = sum(abs(u[i] - v[i]) for i in range(n)) / n",
+        "failure_mechanism": "Element-wise pairing only works if both samples have identical lengths.",
+        "counterexample_input": "len(u)=100, len(v)=200",
+        "verified_fix": "Integrate absolute difference between empirical cumulative distributions."
+      }
+    ],
+    "source_code": "def wasserstein_distance_1d_sorted(u_sorted: list[float], v_sorted: list[float]) -> float:\n    nu = len(u_sorted)\n    nv = len(v_sorted)\n    if nu == 0 or nv == 0:\n        return 0.0\n    u = [float(x) for x in u_sorted]\n    v = [float(x) for x in v_sorted]\n    all_vals = sorted(list(set(u + v)))\n    cdf_u = 0.0\n    cdf_v = 0.0\n    w_dist = 0.0\n    idx_u = 0\n    idx_v = 0\n    for i in range(len(all_vals) - 1):\n        val = all_vals[i]\n        next_val = all_vals[i + 1]\n        while idx_u < nu and u[idx_u] <= val:\n            idx_u += 1\n        while idx_v < nv and v[idx_v] <= val:\n            idx_v += 1\n        diff = abs(float(idx_u) / float(nu) - float(idx_v) / float(nv))\n        w_dist += diff * (next_val - val)\n    return float(w_dist)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "bhattacharyya_distance_multinomial",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Bhattacharyya distance measuring overlap between two discrete probability distributions.",
+    "pseudocode": "1. Normalize probability mass vectors p and q.\\n2. Sum square root of product of probabilities to obtain Bhattacharyya coefficient.\\n3. Clamp coefficient inside [1e-15, 1.0].\\n4. Return negative natural logarithm of coefficient.",
+    "invariants": [
+      "Bhattacharyya distance is symmetric: D_B(p, q) == D_B(q, p).",
+      "Distance is non-negative and zero when distributions are identical."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return -math.log(bc)",
+        "failure_mechanism": "Float precision drift yielding bc > 1.0 produces negative distance, or bc == 0 causes math domain error.",
+        "counterexample_input": "p=[1.0, 0.0], q=[0.0, 1.0]",
+        "verified_fix": "Clamp Bhattacharyya coefficient into [1e-15, 1.0] before taking natural log."
+      }
+    ],
+    "source_code": "def bhattacharyya_distance_multinomial(p: list[float], q: list[float]) -> float:\n    n = min(len(p), len(q))\n    if n == 0:\n        return 0.0\n    sum_p = sum(max(0.0, float(x)) for x in p[:n])\n    sum_q = sum(max(0.0, float(x)) for x in q[:n])\n    if sum_p <= 0.0 or sum_q <= 0.0:\n        return 0.0\n    bc = 0.0\n    for i in range(n):\n        pi = max(0.0, float(p[i])) / sum_p\n        qi = max(0.0, float(q[i])) / sum_q\n        bc += math.sqrt(pi * qi)\n    bc = max(1e-15, min(1.0, bc))\n    return float(-math.log(bc))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "hellinger_distance_discrete",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes normalized Hellinger distance between two discrete probability distributions.",
+    "pseudocode": "1. Normalize probability vectors p and q.\\n2. Sum squared differences of square roots of probabilities.\\n3. Scale by 1 / sqrt(2).\\n4. Clamp result within [0.0, 1.0].",
+    "invariants": [
+      "Hellinger distance is bounded in [0.0, 1.0].",
+      "Distance is symmetric with respect to input distributions."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "h = math.sqrt(sq_diff_sum)",
+        "failure_mechanism": "Omitting 1 / sqrt(2) normalizer causes distance to exceed 1.0 on orthogonal distributions.",
+        "counterexample_input": "p=[1.0, 0.0], q=[0.0, 1.0]",
+        "verified_fix": "Divide Euclidean norm of square-root differences by sqrt(2)."
+      }
+    ],
+    "source_code": "def hellinger_distance_discrete(p: list[float], q: list[float]) -> float:\n    n = min(len(p), len(q))\n    if n == 0:\n        return 0.0\n    sum_p = sum(max(0.0, float(x)) for x in p[:n])\n    sum_q = sum(max(0.0, float(x)) for x in q[:n])\n    if sum_p <= 0.0 or sum_q <= 0.0:\n        return 0.0\n    sq_diff_sum = 0.0\n    for i in range(n):\n        pi = max(0.0, float(p[i])) / sum_p\n        qi = max(0.0, float(q[i])) / sum_q\n        diff = math.sqrt(pi) - math.sqrt(qi)\n        sq_diff_sum += diff * diff\n    h = math.sqrt(max(0.0, sq_diff_sum)) / math.sqrt(2.0)\n    return float(min(1.0, max(0.0, h)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "renyi_entropy_alpha",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Calculates R\u00e9nyi entropy of order alpha with smooth Shannon entropy fallback as alpha approaches 1.",
+    "pseudocode": "1. Normalize probability distribution.\\n2. If alpha close to 1, compute Shannon entropy limit -sum(p * ln(p)).\\n3. Otherwise compute 1 / (1 - alpha) * ln(sum(p^alpha)).\\n4. Return non-negative entropy.",
+    "invariants": [
+      "R\u00e9nyi entropy is non-negative for all valid discrete distributions.",
+      "Monotonically non-increasing with respect to alpha."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "entropy = math.log(sum(pi ** a)) / (1.0 - a)",
+        "failure_mechanism": "Division by zero crash when alpha == 1.0.",
+        "counterexample_input": "p=[0.5, 0.5], alpha=1.0",
+        "verified_fix": "Detect |alpha - 1.0| < epsilon and evaluate Shannon entropy limit."
+      }
+    ],
+    "source_code": "def renyi_entropy_alpha(p: list[float], alpha: float) -> float:\n    a = float(alpha)\n    total = sum(max(0.0, float(x)) for x in p)\n    if total <= 0.0:\n        return 0.0\n    probs = [max(0.0, float(x)) / total for x in p if float(x) > 1e-15]\n    if not probs:\n        return 0.0\n    if abs(a - 1.0) < 1e-5:\n        return float(sum(-pi * math.log(pi) for pi in probs))\n    power_sum = sum(pi ** a for pi in probs)\n    if power_sum <= 0.0:\n        return 0.0\n    entropy = math.log(power_sum) / (1.0 - a)\n    return float(max(0.0, entropy))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "tsallis_entropy_nonextensive",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes Tsallis non-extensive entropy with Boltzmann-Gibbs logarithmic limit as q approaches 1.",
+    "pseudocode": "1. Normalize probabilities.\\n2. If q close to 1, return Shannon entropy limit.\\n3. Otherwise evaluate (1 - sum(p^q)) / (q - 1).\\n4. Clamp result non-negative.",
+    "invariants": [
+      "Tsallis entropy is non-negative for discrete probabilities.",
+      "Converges to standard Shannon entropy when q equals 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return (1.0 - sum(p**q)) / (q - 1.0)",
+        "failure_mechanism": "Division by zero singularity when parameter q == 1.0.",
+        "counterexample_input": "p=[0.5, 0.5], q=1.0",
+        "verified_fix": "Use L'Hopital Shannon entropy limit when |q - 1.0| < 1e-5."
+      }
+    ],
+    "source_code": "def tsallis_entropy_nonextensive(p: list[float], q_param: float) -> float:\n    q = float(q_param)\n    total = sum(max(0.0, float(x)) for x in p)\n    if total <= 0.0:\n        return 0.0\n    probs = [max(0.0, float(x)) / total for x in p if float(x) > 1e-15]\n    if not probs:\n        return 0.0\n    if abs(q - 1.0) < 1e-5:\n        return float(sum(-pi * math.log(pi) for pi in probs))\n    power_sum = sum(pi ** q for pi in probs)\n    entropy = (1.0 - power_sum) / (q - 1.0)\n    return float(max(0.0, entropy))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "mutual_information_discrete_joint",
+    "param_types": [
+      "list[list[float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes mutual information I(X; Y) from a 2D discrete joint probability matrix.",
+    "pseudocode": "1. Normalize joint matrix entries to sum to 1.0.\\n2. Compute marginal distributions p(x) and p(y).\\n3. Sum p(x,y) * ln(p(x,y) / (p(x) * p(y))) for non-zero cells.\\n4. Return non-negative mutual information in nats.",
+    "invariants": [
+      "Mutual information is non-negative (I(X; Y) >= 0).",
+      "I(X; Y) is zero if and only if X and Y are statistically independent."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "mi += p_xy * math.log(p_xy / (px * py))",
+        "failure_mechanism": "Log of zero crash on sparse cells where p(x,y) == 0.",
+        "counterexample_input": "p_xy=[[0.5, 0.0], [0.0, 0.5]]",
+        "verified_fix": "Skip summation when joint cell probability p(x,y) < 1e-15."
+      }
+    ],
+    "source_code": "def mutual_information_discrete_joint(p_xy: list[list[float]]) -> float:\n    nrows = len(p_xy)\n    if nrows == 0:\n        return 0.0\n    ncols = len(p_xy[0])\n    if ncols == 0:\n        return 0.0\n    total = sum(sum(max(0.0, float(c)) for c in row) for row in p_xy)\n    if total <= 0.0:\n        return 0.0\n    p = [[max(0.0, float(p_xy[r][c])) / total for c in range(ncols)] for r in range(nrows)]\n    px = [sum(p[r][c] for c in range(ncols)) for r in range(nrows)]\n    py = [sum(p[r][c] for r in range(nrows)) for c in range(ncols)]\n    mi = 0.0\n    for r in range(nrows):\n        for c in range(ncols):\n            prc = p[r][c]\n            if prc > 1e-15 and px[r] > 1e-15 and py[c] > 1e-15:\n                mi += prc * math.log(prc / (px[r] * py[c]))\n    return float(max(0.0, mi))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "conditional_entropy_xy",
+    "param_types": [
+      "list[list[float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes conditional entropy H(Y|X) from a joint probability matrix.",
+    "pseudocode": "1. Normalize joint matrix.\\n2. Compute marginal distribution p(x) for rows.\\n3. Sum -p(x,y) * ln(p(x,y) / p(x)) over valid support.\\n4. Return non-negative conditional entropy.",
+    "invariants": [
+      "Conditional entropy H(Y|X) is bounded within [0, H(Y)].",
+      "Conditioning never increases entropy (H(Y|X) <= H(Y))."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "h += -prc * math.log(prc)",
+        "failure_mechanism": "Computes joint entropy H(X, Y) instead of conditional entropy H(Y|X).",
+        "counterexample_input": "p_xy=[[0.5, 0.0], [0.0, 0.5]]",
+        "verified_fix": "Divide joint probability by marginal row probability px inside the logarithm."
+      }
+    ],
+    "source_code": "def conditional_entropy_xy(p_xy: list[list[float]]) -> float:\n    nrows = len(p_xy)\n    if nrows == 0:\n        return 0.0\n    ncols = len(p_xy[0])\n    if ncols == 0:\n        return 0.0\n    total = sum(sum(max(0.0, float(c)) for c in row) for row in p_xy)\n    if total <= 0.0:\n        return 0.0\n    p = [[max(0.0, float(p_xy[r][c])) / total for c in range(ncols)] for r in range(nrows)]\n    px = [sum(p[r][c] for c in range(ncols)) for r in range(nrows)]\n    h_cond = 0.0\n    for r in range(nrows):\n        if px[r] > 1e-15:\n            for c in range(ncols):\n                prc = p[r][c]\n                if prc > 1e-15:\n                    h_cond -= prc * math.log(prc / px[r])\n    return float(max(0.0, h_cond))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "variation_of_information_metric",
+    "param_types": [
+      "list[list[float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Variation of Information metric distance VI(X, Y) = H(X|Y) + H(Y|X).",
+    "pseudocode": "1. Normalize joint probability distribution.\\n2. Compute marginal distributions p(x) and p(y).\\n3. Compute marginal entropies H(X) and H(Y) and joint entropy H(X, Y).\\n4. Return VI = 2*H(X, Y) - H(X) - H(Y).",
+    "invariants": [
+      "Variation of Information is a metric (symmetric, triangle inequality).",
+      "VI(X, Y) is zero if and only if X and Y are deterministic bijections."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "vi = hx + hy",
+        "failure_mechanism": "Omits mutual information subtraction, failing metric property VI(X, X) == 0.",
+        "counterexample_input": "p_xy=[[0.5, 0.0], [0.0, 0.5]]",
+        "verified_fix": "Evaluate VI = H(X|Y) + H(Y|X) = 2*H(X,Y) - H(X) - H(Y)."
+      }
+    ],
+    "source_code": "def variation_of_information_metric(p_xy: list[list[float]]) -> float:\n    nrows = len(p_xy)\n    if nrows == 0:\n        return 0.0\n    ncols = len(p_xy[0])\n    if ncols == 0:\n        return 0.0\n    total = sum(sum(max(0.0, float(c)) for c in row) for row in p_xy)\n    if total <= 0.0:\n        return 0.0\n    p = [[max(0.0, float(p_xy[r][c])) / total for c in range(ncols)] for r in range(nrows)]\n    px = [sum(p[r][c] for c in range(ncols)) for r in range(nrows)]\n    py = [sum(p[r][c] for r in range(nrows)) for c in range(ncols)]\n    hx = sum(-x * math.log(x) for x in px if x > 1e-15)\n    hy = sum(-y * math.log(y) for y in py if y > 1e-15)\n    hxy = 0.0\n    for r in range(nrows):\n        for c in range(ncols):\n            prc = p[r][c]\n            if prc > 1e-15:\n                hxy -= prc * math.log(prc)\n    vi = 2.0 * hxy - hx - hy\n    return float(max(0.0, vi))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "huffman_tree_code_lengths",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[int]",
+    "summary": "Computes optimal prefix-free Huffman code lengths for an alphabet of symbol frequencies.",
+    "pseudocode": "1. Initialize leaf nodes with symbol index and weight.\\n2. Repeatedly extract two minimum weight trees and merge.\\n3. Traverse tree to record path depth for each leaf.\\n4. Return array of code lengths matching input order.",
+    "invariants": [
+      "Output length equals input frequencies length.",
+      "Satisfies Kraft-McMillan inequality: sum(2^(-L_i)) <= 1."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if len(nodes) == 1: return [0]",
+        "failure_mechanism": "A single symbol requires at least 1 bit (length 1) to be transmitted.",
+        "counterexample_input": "frequencies=[100]",
+        "verified_fix": "Ensure minimum code length of 1 for single symbol alphabets."
+      }
+    ],
+    "source_code": "def huffman_tree_code_lengths(frequencies: list[int]) -> list[int]:\n    n = len(frequencies)\n    if n == 0:\n        return []\n    if n == 1:\n        return [1]\n    nodes = []\n    for idx in range(n):\n        w = max(1, int(frequencies[idx]))\n        nodes.append((w, idx, [idx]))\n    lengths = [0] * n\n    while len(nodes) > 1:\n        nodes.sort(key=lambda item: item[0])\n        w1, _, syms1 = nodes.pop(0)\n        w2, _, syms2 = nodes.pop(0)\n        for s in syms1:\n            lengths[s] += 1\n        for s in syms2:\n            lengths[s] += 1\n        nodes.append((w1 + w2, -1, syms1 + syms2))\n    return [max(1, L) for L in lengths]\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "canonical_huffman_symbols",
+    "param_types": [
+      "list[int]"
+    ],
+    "return_type": "list[str]",
+    "summary": "Generates canonical Huffman bitstrings from symbol code lengths.",
+    "pseudocode": "1. Pair symbols with code lengths and sort ascending by length then symbol index.\\n2. Initialize code integer to 0.\\n3. Left-shift code integer by length difference for each symbol.\\n4. Format binary string representation with zero padding.\\n5. Return bitstrings in original symbol order.",
+    "invariants": [
+      "Canonical symbols are uniquely decodable without tree structure.",
+      "Bitstrings for identical length symbols form an ascending integer sequence."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "code += 1",
+        "failure_mechanism": "Failing to bit-shift left when code length increases causes prefix collisions.",
+        "counterexample_input": "code_lengths=[1, 2, 2]",
+        "verified_fix": "Left-shift code integer by (current_len - prev_len) before incrementing."
+      }
+    ],
+    "source_code": "def canonical_huffman_symbols(code_lengths: list[int]) -> list[str]:\n    n = len(code_lengths)\n    if n == 0:\n        return []\n    items = [(int(code_lengths[i]), i) for i in range(n)]\n    items.sort()\n    codes = [None] * n\n    curr_code = 0\n    prev_len = items[0][0]\n    for length, sym_idx in items:\n        if length > prev_len:\n            curr_code = curr_code << (length - prev_len)\n            prev_len = length\n        bits = ''\n        val = curr_code\n        for _ in range(length):\n            bits = str(val % 2) + bits\n            val = val // 2\n        codes[sym_idx] = bits\n        curr_code += 1\n    return codes\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "arithmetic_coding_rescaling_bounds",
+    "param_types": [
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "tuple[int, int, list[int]]",
+    "summary": "Renormalizes binary arithmetic coding interval bounds emitting standard E1/E2/E3 bits.",
+    "pseudocode": "1. Define quarter, half, and three-quarter thresholds.\\n2. Loop while bounds fall into E1 (upper half) or E2 (lower half).\\n3. Handle E3 underflow straddling midpoint by shifting and tracking pending bits.\\n4. Return updated (low, high, emitted_bits).",
+    "invariants": [
+      "Output low is strictly less than high.",
+      "Emitted bit values are strictly in {0, 1}."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "while high - low < quarter",
+        "failure_mechanism": "Without E3 midpoint straddle handling, precision underflow collapses the interval.",
+        "counterexample_input": "low=16383, high=16385, total_range=65536",
+        "verified_fix": "Detect E3 condition (low >= quarter and high < three_quarter) and expand around midpoint."
+      }
+    ],
+    "source_code": "def arithmetic_coding_rescaling_bounds(low: int, high: int, total_range: int) -> tuple[int, int, list[int]]:\n    lo = int(low)\n    hi = int(high)\n    rng = max(4, int(total_range))\n    half = rng // 2\n    quarter = half // 2\n    three_quarter = quarter * 3\n    bits = []\n    for _ in range(32):\n        if hi <= half:\n            bits.append(0)\n            lo = lo * 2\n            hi = hi * 2\n        elif lo >= half:\n            bits.append(1)\n            lo = (lo - half) * 2\n            hi = (hi - half) * 2\n        elif lo >= quarter and hi <= three_quarter:\n            lo = (lo - quarter) * 2\n            hi = (hi - quarter) * 2\n        else:\n            break\n    return (lo, hi, bits)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "asymmetric_numeral_systems_encode",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "int",
+    "summary": "Executes single-symbol rANS (range Asymmetric Numeral Systems) state encoding transition.",
+    "pseudocode": "1. Verify valid non-zero frequencies.\\n2. Divide state by symbol frequency.\\n3. Compute updated state = (state // freq) * total_freq + start + (state % freq).\\n4. Return next encoder state integer.",
+    "invariants": [
+      "Next state is strictly greater than current state.",
+      "State growth tracks theoretical Shannon entropy -log2(freq / total_freq)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "state = state * total_freq + start",
+        "failure_mechanism": "Omitting frequency scaling loses statistical compression efficiency.",
+        "counterexample_input": "state=10, freq=3, start=2, total_freq=8",
+        "verified_fix": "Use rANS step: (state // freq) * total_freq + start + (state % freq)."
+      }
+    ],
+    "source_code": "def asymmetric_numeral_systems_encode(state: int, symbol: int, freq: int, start: int, total_freq: int) -> int:\n    s = max(1, int(state))\n    f = max(1, int(freq))\n    b = max(0, int(start))\n    m = max(f + b, int(total_freq))\n    q = s // f\n    r = s % f\n    next_state = q * m + b + r\n    return int(next_state)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "kolmogorov_smirnov_2sample_stat",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes two-sample Kolmogorov-Smirnov test supremum statistic D comparing empirical distributions.",
+    "pseudocode": "1. Sort copies of sample 1 and sample 2.\\n2. Merge samples and step through sorted values.\\n3. Track empirical CDF heights for both samples.\\n4. Record maximum absolute difference across all points.",
+    "invariants": [
+      "KS statistic D is bounded in [0.0, 1.0].",
+      "Invariant under strictly monotonic increasing transformations."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "max(abs(s1[i] - s2[i]) for i in range(n))",
+        "failure_mechanism": "Compares sample values directly instead of cumulative empirical probabilities.",
+        "counterexample_input": "sample1=[1.0, 2.0], sample2=[10.0, 20.0]",
+        "verified_fix": "Compute supremum of |F1(x) - F2(x)| across shared sorted threshold sweep."
+      }
+    ],
+    "source_code": "def kolmogorov_smirnov_2sample_stat(sample1: list[float], sample2: list[float]) -> float:\n    n1 = len(sample1)\n    n2 = len(sample2)\n    if n1 == 0 or n2 == 0:\n        return 0.0\n    s1 = sorted([float(x) for x in sample1])\n    s2 = sorted([float(x) for x in sample2])\n    d_max = 0.0\n    i1 = 0\n    i2 = 0\n    while i1 < n1 and i2 < n2:\n        v1 = s1[i1]\n        v2 = s2[i2]\n        if v1 <= v2:\n            i1 += 1\n        else:\n            i2 += 1\n        cdf1 = float(i1) / float(n1)\n        cdf2 = float(i2) / float(n2)\n        diff = abs(cdf1 - cdf2)\n        if diff > d_max:\n            d_max = diff\n    return float(d_max)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "anderson_darling_stat_normal",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates Anderson-Darling goodness-of-fit test statistic against normal distribution.",
+    "pseudocode": "1. Standardize sorted sample values z_i = (x_i - mean) / std.\\n2. Evaluate standard normal CDF approximation for each point.\\n3. Sum tail-weighted log cumulative probabilities.\\n4. Return Anderson-Darling A^2 statistic.",
+    "invariants": [
+      "Anderson-Darling statistic A^2 is non-negative.",
+      "Places higher weight on distributional tails than Kolmogorov-Smirnov test."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "z = (x - mean) / std",
+        "failure_mechanism": "Division by zero if sample standard deviation is zero.",
+        "counterexample_input": "sorted_samples=[5.0, 5.0, 5.0], std=0.0",
+        "verified_fix": "Safeguard standard deviation with positive epsilon floor."
+      }
+    ],
+    "source_code": "def anderson_darling_stat_normal(sorted_samples: list[float], mean: float, std: float) -> float:\n    n = len(sorted_samples)\n    if n < 2:\n        return 0.0\n    s = max(1e-9, float(std))\n    m = float(mean)\n    s_vals = sorted([float(x) for x in sorted_samples])\n    cdfs = []\n    for x in s_vals:\n        z = (x - m) / (s * math.sqrt(2.0))\n        p = 0.5 * (1.0 + math.erf(z))\n        cdfs.append(max(1e-12, min(1.0 - 1e-12, p)))\n    s_sum = 0.0\n    for i in range(n):\n        w = float(2 * i + 1)\n        term = math.log(cdfs[i]) + math.log(1.0 - cdfs[n - 1 - i])\n        s_sum += w * term\n    a2 = -float(n) - (s_sum / float(n))\n    return float(max(0.0, a2))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "mann_whitney_u_statistic",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Mann-Whitney U non-parametric rank-sum statistic with fractional tie handling.",
+    "pseudocode": "1. Pool and sort elements from both samples, tracking origin.\\n2. Assign average fractional ranks to tied values.\\n3. Sum ranks for first sample: R1.\\n4. Compute U1 = R1 - n1*(n1+1)/2 and return min(U1, n1*n2 - U1).",
+    "invariants": [
+      "Mann-Whitney U is bounded within [0, n1 * n2].",
+      "U1 + U2 equals exactly n1 * n2."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "rank = idx + 1",
+        "failure_mechanism": "Assigning sequential integer ranks to tied values introduces artificial order bias.",
+        "counterexample_input": "sample1=[2.0, 2.0], sample2=[2.0, 2.0]",
+        "verified_fix": "Compute average rank for all identical values in the pooled sorted list."
+      }
+    ],
+    "source_code": "def mann_whitney_u_statistic(sample1: list[float], sample2: list[float]) -> float:\n    n1 = len(sample1)\n    n2 = len(sample2)\n    if n1 == 0 or n2 == 0:\n        return 0.0\n    pooled = []\n    for x in sample1:\n        pooled.append((float(x), 1))\n    for x in sample2:\n        pooled.append((float(x), 2))\n    pooled.sort(key=lambda item: item[0])\n    total_n = n1 + n2\n    r1_sum = 0.0\n    i = 0\n    while i < total_n:\n        j = i\n        while j < total_n and pooled[j][0] == pooled[i][0]:\n            j += 1\n        avg_rank = 1.0 + float(i + j - 1) / 2.0\n        for k in range(i, j):\n            if pooled[k][1] == 1:\n                r1_sum += avg_rank\n        i = j\n    u1 = r1_sum - float(n1 * (n1 + 1)) / 2.0\n    return float(max(0.0, u1))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "wilcoxon_signed_rank_stat",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes Wilcoxon signed-rank test statistics (W+, W-) for paired difference observations.",
+    "pseudocode": "1. Discard zero differences.\\n2. Sort non-zero differences by absolute magnitude.\\n3. Assign fractional ranks to tied magnitudes.\\n4. Sum positive ranks W+ and negative ranks W-.\\n5. Return (W+, W-).",
+    "invariants": [
+      "Rank sum W+ + W- equals n*(n+1)/2 for n non-zero differences.",
+      "Both W+ and W- are non-negative."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "non_zero = diffs",
+        "failure_mechanism": "Failing to discard zero differences skews the test distribution.",
+        "counterexample_input": "diffs=[0.0, 0.0, 1.5, -2.0]",
+        "verified_fix": "Filter out differences with |d| < 1e-12 before ranking."
+      }
+    ],
+    "source_code": "def wilcoxon_signed_rank_stat(diffs: list[float]) -> tuple[float, float]:\n    non_zero = [float(d) for d in diffs if abs(float(d)) > 1e-12]\n    n = len(non_zero)\n    if n == 0:\n        return (0.0, 0.0)\n    items = [(abs(non_zero[i]), non_zero[i] > 0.0) for i in range(n)]\n    items.sort(key=lambda t: t[0])\n    w_pos = 0.0\n    w_neg = 0.0\n    i = 0\n    while i < n:\n        j = i\n        while j < n and items[j][0] == items[i][0]:\n            j += 1\n        avg_rank = 1.0 + float(i + j - 1) / 2.0\n        for k in range(i, j):\n            if items[k][1]:\n                w_pos += avg_rank\n            else:\n                w_neg += avg_rank\n        i = j\n    return (float(w_pos), float(w_neg))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "kruskal_wallis_h_stat",
+    "param_types": [
+      "list[list[float]]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Kruskal-Wallis non-parametric one-way ANOVA H statistic across k groups.",
+    "pseudocode": "1. Pool and sort all observations with group tags.\\n2. Compute average fractional ranks with tie handling.\\n3. Sum ranks per group R_j.\\n4. Evaluate H = [12 / (N*(N+1))] * sum(R_j^2 / n_j) - 3*(N+1).",
+    "invariants": [
+      "H statistic is non-negative.",
+      "Asymptotically chi-square distributed with k - 1 degrees of freedom."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "if len(groups) < 2",
+        "failure_mechanism": "Applying test with single group or empty groups causes invalid division.",
+        "counterexample_input": "groups=[[1.0, 2.0]]",
+        "verified_fix": "Validate that at least 2 non-empty groups exist."
+      }
+    ],
+    "source_code": "def kruskal_wallis_h_stat(groups: list[list[float]]) -> float:\n    valid_groups = [[float(x) for x in g] for g in groups if len(g) > 0]\n    k = len(valid_groups)\n    if k < 2:\n        return 0.0\n    pooled = []\n    for g_idx, g in enumerate(valid_groups):\n        for val in g:\n            pooled.append((val, g_idx))\n    pooled.sort(key=lambda t: t[0])\n    n_total = len(pooled)\n    rank_sums = [0.0] * k\n    i = 0\n    while i < n_total:\n        j = i\n        while j < n_total and pooled[j][0] == pooled[i][0]:\n            j += 1\n        avg_r = 1.0 + float(i + j - 1) / 2.0\n        for m in range(i, j):\n            rank_sums[pooled[m][1]] += avg_r\n        i = j\n    nt = float(n_total)\n    s = sum((rank_sums[g_idx] ** 2) / float(len(valid_groups[g_idx])) for g_idx in range(k))\n    h = (12.0 / (nt * (nt + 1.0))) * s - 3.0 * (nt + 1.0)\n    return float(max(0.0, h))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "spearman_rank_correlation",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Spearman's rank correlation coefficient rho between two variables with tie handling.",
+    "pseudocode": "1. Convert x and y to fractional rank vectors.\\n2. Compute mean of ranks for x and y.\\n3. Evaluate sample Pearson correlation on rank vectors.\\n4. Clamp output in [-1.0, 1.0].",
+    "invariants": [
+      "Correlation coefficient rho is bounded in [-1.0, 1.0].",
+      "Rho equals 1.0 for strictly monotonic increasing relationships."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "rho = 1.0 - 6.0 * sum(d**2) / (n * (n**2 - 1))",
+        "failure_mechanism": "Standard simplified formula is biased in the presence of tied ranks.",
+        "counterexample_input": "x=[1.0, 1.0, 2.0], y=[1.0, 2.0, 2.0]",
+        "verified_fix": "Compute Pearson correlation directly on average fractional ranks."
+      }
+    ],
+    "source_code": "def spearman_rank_correlation(x: list[float], y: list[float]) -> float:\n    n = min(len(x), len(y))\n    if n < 2:\n        return 0.0\n    def rank_arr(arr):\n        pts = sorted([(float(arr[i]), i) for i in range(n)])\n        res = [0.0] * n\n        i = 0\n        while i < n:\n            j = i\n            while j < n and pts[j][0] == pts[i][0]:\n                j += 1\n            avg_r = 1.0 + float(i + j - 1) / 2.0\n            for k in range(i, j):\n                res[pts[k][1]] = avg_r\n            i = j\n        return res\n    rx = rank_arr(x)\n    ry = rank_arr(y)\n    mx = sum(rx) / float(n)\n    my = sum(ry) / float(n)\n    cov = sum((rx[i] - mx) * (ry[i] - my) for i in range(n))\n    vx = sum((rx[i] - mx) ** 2 for i in range(n))\n    vy = sum((ry[i] - my) ** 2 for i in range(n))\n    denom = math.sqrt(vx * vy)\n    if denom <= 1e-12:\n        return 0.0\n    rho = cov / denom\n    return float(max(-1.0, min(1.0, rho)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "kendall_tau_b_correlation",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Kendall's tau-b rank correlation coefficient with explicit tie corrections.",
+    "pseudocode": "1. Pair elements (x_i, y_i) for i in 0..n-1.\\n2. Count concordant and discordant pairs.\\n3. Count ties in x and ties in y.\\n4. Return (P - Q) / sqrt((P + Q + Tx) * (P + Q + Ty)).",
+    "invariants": [
+      "Tau-b is strictly bounded within [-1.0, 1.0].",
+      "Symmetric with respect to permutation of variable order."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "tau = (concordant - discordant) / (0.5 * n * (n - 1))",
+        "failure_mechanism": "Using tau-a denominator underestimates correlation in the presence of tied pairs.",
+        "counterexample_input": "x=[1, 1, 2, 2], y=[1, 1, 2, 2]",
+        "verified_fix": "Use tau-b formula dividing by geometric mean of non-tied pair counts."
+      }
+    ],
+    "source_code": "def kendall_tau_b_correlation(x: list[float], y: list[float]) -> float:\n    n = min(len(x), len(y))\n    if n < 2:\n        return 0.0\n    concordant = 0\n    discordant = 0\n    ties_x = 0\n    ties_y = 0\n    for i in range(n):\n        for j in range(i + 1, n):\n            dx = float(x[i]) - float(x[j])\n            dy = float(y[i]) - float(y[j])\n            if dx == 0.0 and dy == 0.0:\n                continue\n            elif dx == 0.0:\n                ties_x += 1\n            elif dy == 0.0:\n                ties_y += 1\n            elif (dx > 0.0 and dy > 0.0) or (dx < 0.0 and dy < 0.0):\n                concordant += 1\n            else:\n                discordant += 1\n    denom = math.sqrt(float(concordant + discordant + ties_x) * float(concordant + discordant + ties_y))\n    if denom <= 1e-12:\n        return 0.0\n    tau = float(concordant - discordant) / denom\n    return float(max(-1.0, min(1.0, tau)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "pearson_correlation_two_pass",
+    "param_types": [
+      "list[float]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes numerically stabilized two-pass Pearson sample correlation coefficient.",
+    "pseudocode": "1. Pass 1: Compute sample means of x and y.\\n2. Pass 2: Compute mean-centered sums of products and squared deviations.\\n3. Normalize covariance by product of standard deviations.\\n4. Clamp result within [-1.0, 1.0].",
+    "invariants": [
+      "Correlation r is bounded in [-1.0, 1.0].",
+      "Invariant to affine shifts and positive scaling."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "cov = sum(x[i]*y[i]) - sum(x)*sum(y)/n",
+        "failure_mechanism": "Catastrophic cancellation occurs in single-pass formula on large offsets.",
+        "counterexample_input": "x=[1e9+1, 1e9+2], y=[1e9+1, 1e9+2]",
+        "verified_fix": "Use two-pass algorithm computing means first, then mean-centered sums."
+      }
+    ],
+    "source_code": "def pearson_correlation_two_pass(x: list[float], y: list[float]) -> float:\n    n = min(len(x), len(y))\n    if n < 2:\n        return 0.0\n    mx = sum(float(v) for v in x[:n]) / float(n)\n    my = sum(float(v) for v in y[:n]) / float(n)\n    s_xy = 0.0\n    s_xx = 0.0\n    s_yy = 0.0\n    for i in range(n):\n        dx = float(x[i]) - mx\n        dy = float(y[i]) - my\n        s_xy += dx * dy\n        s_xx += dx * dx\n        s_yy += dy * dy\n    denom = math.sqrt(s_xx * s_yy)\n    if denom <= 1e-12:\n        return 0.0\n    r = s_xy / denom\n    return float(max(-1.0, min(1.0, r)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "median_absolute_deviation_mad",
+    "param_types": [
+      "list[float]",
+      "bool"
+    ],
+    "return_type": "float",
+    "summary": "Computes Median Absolute Deviation robust scale estimator with normal consistency factor.",
+    "pseudocode": "1. Compute sample median of sorted elements.\\n2. Calculate absolute deviations |x_i - median|.\\n3. Compute median of absolute deviations.\\n4. If scale_normal is True, multiply by 1.4826 normal consistency factor.",
+    "invariants": [
+      "MAD is non-negative.",
+      "Has a high breakdown point of 50% against arbitrary outliers."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "return mad",
+        "failure_mechanism": "Unscaled MAD underestimates standard deviation of normal data by ~32.5%.",
+        "counterexample_input": "samples drawn from N(0, 1)",
+        "verified_fix": "Multiply by 1.4826 (1 / Phi^-1(3/4)) when estimating normal standard deviation."
+      }
+    ],
+    "source_code": "def median_absolute_deviation_mad(samples: list[float], scale_normal: bool) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    s = sorted([float(x) for x in samples])\n    mid = n // 2\n    med = s[mid] if (n % 2 == 1) else 0.5 * (s[mid - 1] + s[mid])\n    devs = sorted([abs(x - med) for x in s])\n    mad_val = devs[mid] if (n % 2 == 1) else 0.5 * (devs[mid - 1] + devs[mid])\n    if scale_normal:\n        mad_val *= 1.482602218505602\n    return float(mad_val)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "huber_m_estimator_location",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes Huber robust M-estimator of location using iteratively reweighted iterations.",
+    "pseudocode": "1. Initialize location mu to sample median.\\n2. Compute scale using MAD.\\n3. Iterate: apply Huber psi function winsorization to residuals.\\n4. Update mu until change is below tolerance.",
+    "invariants": [
+      "Resistant to heavy-tailed outliers.",
+      "Converges monotonically for convex Huber objective."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "scale = std(samples)",
+        "failure_mechanism": "Using standard deviation as scale estimate breaks down under heavy outliers.",
+        "counterexample_input": "samples=[1, 2, 1, 2, 1000000]",
+        "verified_fix": "Use Median Absolute Deviation (MAD) as initial robust scale parameter."
+      }
+    ],
+    "source_code": "def huber_m_estimator_location(samples: list[float], c_tuning: float, tol: float) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    s = sorted([float(x) for x in samples])\n    mid = n // 2\n    mu = s[mid] if (n % 2 == 1) else 0.5 * (s[mid - 1] + s[mid])\n    devs = sorted([abs(x - mu) for x in s])\n    mad = devs[mid] if (n % 2 == 1) else 0.5 * (devs[mid - 1] + devs[mid])\n    scale = max(1e-6, mad * 1.4826)\n    c = max(0.5, float(c_tuning)) * scale\n    eps = max(1e-9, float(tol))\n    for _ in range(50):\n        delta_sum = 0.0\n        for x in s:\n            diff = x - mu\n            clipped = max(-c, min(c, diff))\n            delta_sum += clipped\n        step = delta_sum / float(n)\n        mu += step\n        if abs(step) < eps:\n            break\n    return float(mu)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "trimmed_mean_symmetric",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes symmetrically trimmed sample mean with proportion alpha removed from each tail.",
+    "pseudocode": "1. Clamp alpha inside [0.0, 0.49].\\n2. Sort sample values.\\n3. Discard floor(alpha * n) elements from both ends.\\n4. Return arithmetic mean of remaining central slice.",
+    "invariants": [
+      "Trimmed mean lies between minimum and maximum observed values.",
+      "Equals standard arithmetic mean when alpha equals 0."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "k = int(alpha * n)",
+        "failure_mechanism": "If alpha >= 0.5, all elements are trimmed away leaving an empty slice.",
+        "counterexample_input": "alpha=0.5, len(samples)=10",
+        "verified_fix": "Clamp alpha strictly below 0.5 (e.g. max 0.499)."
+      }
+    ],
+    "source_code": "def trimmed_mean_symmetric(samples: list[float], alpha_trim: float) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    a = max(0.0, min(0.49, float(alpha_trim)))\n    s = sorted([float(x) for x in samples])\n    k = int(a * float(n))\n    remaining = s[k : n - k] if (n - k > k) else s\n    return float(sum(remaining) / float(len(remaining)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "winsorized_variance_estimate",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Calculates Winsorized sample variance by replacing extreme tail values with boundary percentiles.",
+    "pseudocode": "1. Clamp trimming proportion alpha in [0.0, 0.49].\\n2. Sort sample array.\\n3. Replace lowest k values with s[k] and highest k values with s[n - 1 - k].\\n4. Return unbiased sample variance of modified array.",
+    "invariants": [
+      "Winsorized variance is non-negative.",
+      "Less sensitive to extreme outlier spikes than sample variance."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "s = s[k:n-k]",
+        "failure_mechanism": "Trimming elements instead of replacing them produces trimmed variance rather than Winsorized variance.",
+        "counterexample_input": "samples=[1, 2, 3, 100], alpha=0.25",
+        "verified_fix": "Replace tail observations in-place with nearest central boundary values."
+      }
+    ],
+    "source_code": "def winsorized_variance_estimate(samples: list[float], alpha_trim: float) -> float:\n    n = len(samples)\n    if n < 2:\n        return 0.0\n    a = max(0.0, min(0.49, float(alpha_trim)))\n    s = sorted([float(x) for x in samples])\n    k = int(a * float(n))\n    low_val = s[k]\n    high_val = s[n - 1 - k]\n    w_vals = []\n    for x in s:\n        if x < low_val:\n            w_vals.append(low_val)\n        elif x > high_val:\n            w_vals.append(high_val)\n        else:\n            w_vals.append(x)\n    mean = sum(w_vals) / float(n)\n    var = sum((v - mean) ** 2 for v in w_vals) / float(n - 1)\n    return float(max(0.0, var))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "hodges_lehmann_location_estimate",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Hodges-Lehmann pseudo-median robust location estimator from pairwise Walsh averages.",
+    "pseudocode": "1. Generate pairwise averages (x_i + x_j) / 2 for all i <= j.\\n2. Sort Walsh averages.\\n3. Return median of pairwise averages array.",
+    "invariants": [
+      "Has high asymptotic relative efficiency of 95.5% for normal distributions.",
+      "Robust against symmetric outliers with breakdown point ~29%."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "for j in range(i+1, n)",
+        "failure_mechanism": "Omitting self-pairs i == j alters the estimator definition.",
+        "counterexample_input": "samples=[1.0, 3.0]",
+        "verified_fix": "Include diagonal terms j >= i in pairwise average construction."
+      }
+    ],
+    "source_code": "def hodges_lehmann_location_estimate(samples: list[float]) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    sub = [float(x) for x in samples[:50]]\n    m = len(sub)\n    walsh = []\n    for i in range(m):\n        for j in range(i, m):\n            walsh.append(0.5 * (sub[i] + sub[j]))\n    walsh.sort()\n    nw = len(walsh)\n    mid = nw // 2\n    res = walsh[mid] if (nw % 2 == 1) else 0.5 * (walsh[mid - 1] + walsh[mid])\n    return float(res)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "biweight_midvariance_scale",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates Mosteller-Tukey biweight midvariance robust scale estimator.",
+    "pseudocode": "1. Compute sample median and MAD.\\n2. Standardize residuals by c * MAD.\\n3. Weight observations by (1 - u^2)^2 for |u| < 1, zero otherwise.\\n4. Evaluate Tukey biweight formula.",
+    "invariants": [
+      "Scale is non-negative.",
+      "Completely rejects gross outliers beyond c * MAD."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "denom = sum((1.0 - u**2) * (1.0 - 5.0 * u**2))",
+        "failure_mechanism": "Denominator can become negative if weights are improperly summed.",
+        "counterexample_input": "c_tuning=1.0 on skewed distribution",
+        "verified_fix": "Take absolute value of denominator sum and clamp strictly positive."
+      }
+    ],
+    "source_code": "def biweight_midvariance_scale(samples: list[float], c_tuning: float) -> float:\n    n = len(samples)\n    if n < 2:\n        return 0.0\n    s = sorted([float(x) for x in samples])\n    mid = n // 2\n    med = s[mid] if (n % 2 == 1) else 0.5 * (s[mid - 1] + s[mid])\n    devs = sorted([abs(x - med) for x in s])\n    mad = devs[mid] if (n % 2 == 1) else 0.5 * (devs[mid - 1] + devs[mid])\n    if mad <= 1e-12:\n        return 0.0\n    c = max(1.0, float(c_tuning))\n    c_mad = c * mad\n    top = 0.0\n    bottom = 0.0\n    for x in s:\n        u = (x - med) / c_mad\n        if abs(u) < 1.0:\n            u2 = u * u\n            w = 1.0 - u2\n            top += (x - med) * (x - med) * (w ** 4)\n            bottom += w * (1.0 - 5.0 * u2)\n    if abs(bottom) <= 1e-12:\n        return 0.0\n    scale = float(n) * top / (bottom * bottom)\n    return float(max(0.0, scale))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "kernel_density_gaussian_1d",
+    "param_types": [
+      "list[float]",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates 1D Gaussian kernel density estimate at query point x_eval.",
+    "pseudocode": "1. Check non-empty sample and positive bandwidth.\\n2. Standardize distances (x_eval - x_i) / h.\\n3. Sum Gaussian standard normal densities exp(-0.5 * u^2) / sqrt(2*pi).\\n4. Divide by n * h and return density.",
+    "invariants": [
+      "Estimated density is non-negative.",
+      "Integrates to 1.0 across full real line."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "u = (x_eval - x) / h",
+        "failure_mechanism": "Division by zero if bandwidth h <= 0.",
+        "counterexample_input": "bandwidth=0.0",
+        "verified_fix": "Enforce bandwidth = max(1e-6, abs(bandwidth))."
+      }
+    ],
+    "source_code": "def kernel_density_gaussian_1d(samples: list[float], x_eval: float, bandwidth: float) -> float:\n    n = len(samples)\n    if n == 0:\n        return 0.0\n    h = max(1e-6, abs(float(bandwidth)))\n    inv_sqrt_2pi = 1.0 / math.sqrt(2.0 * math.pi)\n    dens_sum = 0.0\n    q = float(x_eval)\n    for x in samples:\n        u = (q - float(x)) / h\n        if abs(u) < 8.0:\n            dens_sum += math.exp(-0.5 * u * u)\n    density = (dens_sum * inv_sqrt_2pi) / (float(n) * h)\n    return float(max(0.0, density))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "silverman_bandwidth_rule",
+    "param_types": [
+      "int",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Computes Silverman's rule of thumb optimal KDE bandwidth 0.9 * min(std, IQR / 1.34) * n^(-1/5).",
+    "pseudocode": "1. Verify sample count n >= 2.\\n2. Compute robust spread = min(std, IQR / 1.34).\\n3. If spread <= 0, fallback to positive std.\\n4. Evaluate 0.9 * spread * n^(-0.2).",
+    "invariants": [
+      "Bandwidth is strictly positive for non-degenerate data.",
+      "Scales inversely with sample size n^(1/5)."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "spread = min(std, iqr / 1.34)",
+        "failure_mechanism": "If data is discrete with duplicate quartiles, IQR is zero resulting in zero bandwidth.",
+        "counterexample_input": "iqr=0.0, std=1.5",
+        "verified_fix": "Fallback to std if IQR is non-positive or zero."
+      }
+    ],
+    "source_code": "def silverman_bandwidth_rule(n_samples: int, std_dev: float, iqr: float) -> float:\n    n = max(2, int(n_samples))\n    s = abs(float(std_dev))\n    q = abs(float(iqr))\n    spread = min(s, q / 1.34) if (q > 1e-6 and s > 1e-6) else max(s, q / 1.34)\n    spread = max(1e-6, spread)\n    bw = 0.9 * spread * (float(n) ** (-0.2))\n    return float(bw)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "benjamini_hochberg_fdr_step",
+    "param_types": [
+      "list[float]",
+      "float"
+    ],
+    "return_type": "list[bool]",
+    "summary": "Applies Benjamini-Hochberg False Discovery Rate procedure controlling FDR at rate q.",
+    "pseudocode": "1. Sort p-values ascending with original indices.\\n2. Compare p_(i) against critical threshold (i / m) * q.\\n3. Find largest index satisfying inequality.\\n4. Mark all hypothesis tests up to that rank as significant.",
+    "invariants": [
+      "Controls expected False Discovery Rate <= q under independence.",
+      "More statistically powerful than Family-Wise Error Rate Bonferroni control."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "rejected[i] = p_values[i] <= (i / m) * q",
+        "failure_mechanism": "Checking unsorted p-values against local index violates the step-up procedure.",
+        "counterexample_input": "p_values=[0.04, 0.01, 0.03]",
+        "verified_fix": "Sort p-values first, find maximum passing rank k, and reject all p <= p_(k)."
+      }
+    ],
+    "source_code": "def benjamini_hochberg_fdr_step(p_values: list[float], fdr_q: float) -> list[bool]:\n    m = len(p_values)\n    if m == 0:\n        return []\n    q = max(1e-6, min(1.0, float(fdr_q)))\n    indexed = sorted([(float(p_values[i]), i) for i in range(m)])\n    max_k = -1\n    for rank_idx, (p_val, orig_idx) in enumerate(indexed):\n        rank = rank_idx + 1\n        threshold = (float(rank) / float(m)) * q\n        if p_val <= threshold:\n            max_k = rank_idx\n    rejected = [False] * m\n    if max_k >= 0:\n        for r in range(max_k + 1):\n            orig = indexed[r][1]\n            rejected[orig] = True\n    return rejected\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "bonferroni_adjusted_p_values",
+    "param_types": [
+      "list[float]"
+    ],
+    "return_type": "list[float]",
+    "summary": "Computes Bonferroni conservative FWER adjusted p-values min(1.0, p * m).",
+    "pseudocode": "1. Count total number of hypotheses m.\\n2. Multiply each p-value by m.\\n3. Clamp each adjusted p-value to upper limit of 1.0.\\n4. Return adjusted p-values list.",
+    "invariants": [
+      "Guarantees Family-Wise Error Rate <= alpha.",
+      "Adjusted p-values are bounded in [0.0, 1.0]."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "adj = p * m",
+        "failure_mechanism": "Multiplying large p-values by m exceeds valid probability range [0, 1].",
+        "counterexample_input": "p=0.5, m=10",
+        "verified_fix": "Clamp adjusted values with min(1.0, p * m)."
+      }
+    ],
+    "source_code": "def bonferroni_adjusted_p_values(p_values: list[float]) -> list[float]:\n    m = float(len(p_values))\n    if m == 0.0:\n        return []\n    adjusted = []\n    for p in p_values:\n        adj = float(p) * m\n        clamped = max(0.0, min(1.0, adj))\n        adjusted.append(clamped)\n    return adjusted\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "cohen_d_effect_size",
+    "param_types": [
+      "float",
+      "float",
+      "int",
+      "float",
+      "float",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Computes Cohen's d standardized effect size using pooled sample variance.",
+    "pseudocode": "1. Compute pooled standard deviation from sample variances and degrees of freedom.\\n2. Evaluate difference of means (mean1 - mean2).\\n3. Divide mean difference by pooled standard deviation.\\n4. Return standardized effect size.",
+    "invariants": [
+      "Dimensionless scale-invariant measure of difference.",
+      "Sign reflects direction of difference between group 1 and group 2."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "s_pooled = (std1 + std2) / 2.0",
+        "failure_mechanism": "Arithmetic mean of standard deviations fails to weight by sample sample degrees of freedom.",
+        "counterexample_input": "n1=100, std1=1.0, n2=10, std2=5.0",
+        "verified_fix": "Pool variances using weights (n1 - 1) and (n2 - 1) divided by (n1 + n2 - 2)."
+      }
+    ],
+    "source_code": "def cohen_d_effect_size(mean1: float, std1: float, n1: int, mean2: float, std2: float, n2: int) -> float:\n    cnt1 = max(2, int(n1))\n    cnt2 = max(2, int(n2))\n    s1 = max(0.0, float(std1))\n    s2 = max(0.0, float(std2))\n    df = float(cnt1 + cnt2 - 2)\n    pooled_var = (float(cnt1 - 1) * s1 * s1 + float(cnt2 - 1) * s2 * s2) / df\n    s_pooled = math.sqrt(max(1e-12, pooled_var))\n    d = (float(mean1) - float(mean2)) / s_pooled\n    return float(d)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "cramers_v_association",
+    "param_types": [
+      "float",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates Cramer's V categorical association metric from chi-square test statistic.",
+    "pseudocode": "1. Determine minimum dimension k = min(n_rows - 1, n_cols - 1).\\n2. If k <= 0, return 0.0.\\n3. Evaluate V = sqrt(chi2 / (n_total * k)).\\n4. Clamp within [0.0, 1.0].",
+    "invariants": [
+      "Cramer's V is bounded in [0.0, 1.0].",
+      "Equals 0.0 for independent variables and 1.0 for perfect association."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "v = math.sqrt(chi2 / n_total)",
+        "failure_mechanism": "Omitting min(rows - 1, cols - 1) scaling produces values exceeding 1.0 for large tables.",
+        "counterexample_input": "chi2=500.0, n=200, rows=4, cols=4",
+        "verified_fix": "Divide chi2 by n_total * min(n_rows - 1, n_cols - 1)."
+      }
+    ],
+    "source_code": "def cramers_v_association(chi2_stat: float, n_total: int, n_rows: int, n_cols: int) -> float:\n    chi2 = max(0.0, float(chi2_stat))\n    n = max(1, int(n_total))\n    r = max(1, int(n_rows))\n    c = max(1, int(n_cols))\n    k = min(r - 1, c - 1)\n    if k <= 0:\n        return 0.0\n    v = math.sqrt(chi2 / (float(n) * float(k)))\n    return float(max(0.0, min(1.0, v)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "fisher_exact_hypergeometric_prob",
+    "param_types": [
+      "int",
+      "int",
+      "int",
+      "int"
+    ],
+    "return_type": "float",
+    "summary": "Evaluates exact Fisher hypergeometric cell probability for a 2x2 contingency table.",
+    "pseudocode": "1. Extract margins: row1 = a+b, row2 = c+d, col1 = a+c, col2 = b+d, total = a+b+c+d.\\n2. Compute log factorial combinations using lgamma.\\n3. Exponentiate log probability.\\n4. Clamp probability within [0.0, 1.0].",
+    "invariants": [
+      "Hypergeometric cell probability is bounded in [0.0, 1.0].",
+      "Symmetric under matrix transpose."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "prob = math.factorial(a+b) / ...",
+        "failure_mechanism": "Direct factorial integer multiplication overflows on tables with moderate counts.",
+        "counterexample_input": "a=500, b=500, c=500, d=500",
+        "verified_fix": "Use log-factorials via math.lgamma(n + 1)."
+      }
+    ],
+    "source_code": "def fisher_exact_hypergeometric_prob(a: int, b: int, c: int, d: int) -> float:\n    ca = max(0, int(a))\n    cb = max(0, int(b))\n    cc = max(0, int(c))\n    cd = max(0, int(d))\n    n = ca + cb + cc + cd\n    if n == 0:\n        return 1.0\n    r1 = ca + cb\n    r2 = cc + cd\n    c1 = ca + cc\n    c2 = cb + cd\n    def log_fac(val):\n        return math.lgamma(float(val + 1))\n    log_p = log_fac(r1) + log_fac(r2) + log_fac(c1) + log_fac(c2) - log_fac(n) - log_fac(ca) - log_fac(cb) - log_fac(cc) - log_fac(cd)\n    p = math.exp(log_p)\n    return float(max(0.0, min(1.0, p)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "poisson_confidence_garwood",
+    "param_types": [
+      "int",
+      "float"
+    ],
+    "return_type": "tuple[float, float]",
+    "summary": "Computes exact Garwood Poisson confidence intervals using chi-squared quantile approximation.",
+    "pseudocode": "1. Obtain event count k and alpha error rate.\\n2. Use Wilson-Hilferty transformation to approximate chi-square quantiles.\\n3. Lower limit = 0.5 * chi2(2*k, alpha/2) (0.0 if k=0).\\n4. Upper limit = 0.5 * chi2(2*k+2, 1 - alpha/2).\\n5. Return (lower, upper).",
+    "invariants": [
+      "Upper confidence limit is strictly greater than lower confidence limit.",
+      "Lower limit is exactly 0.0 when observed event count is zero."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "lower = k - 1.96 * math.sqrt(k)",
+        "failure_mechanism": "Wald normal approximation yields negative lower bounds for small event counts k.",
+        "counterexample_input": "k_events=1, alpha=0.05",
+        "verified_fix": "Use exact Garwood relationship with chi-squared distribution."
+      }
+    ],
+    "source_code": "def poisson_confidence_garwood(k_events: int, alpha: float) -> tuple[float, float]:\n    k = max(0, int(k_events))\n    a = max(1e-4, min(0.5, float(alpha)))\n    def approx_chi2_quantile(df, p):\n        v = float(df)\n        z = math.sqrt(2.0) * math.erf(-1.0 + 2.0 * p) if p < 0.5 else -math.sqrt(2.0) * math.erf(1.0 - 2.0 * p)\n        term = 1.0 - 2.0 / (9.0 * v) + z * math.sqrt(2.0 / (9.0 * v))\n        return v * (max(0.0, term) ** 3)\n    if k == 0:\n        lower = 0.0\n        upper = -math.log(a)\n    else:\n        lower = 0.5 * approx_chi2_quantile(2 * k, a / 2.0)\n        upper = 0.5 * approx_chi2_quantile(2 * k + 2, 1.0 - a / 2.0)\n    return (float(max(0.0, lower)), float(max(lower + 1e-6, upper)))\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "dirichlet_multinomial_log_marginal",
+    "param_types": [
+      "list[int]",
+      "list[float]"
+    ],
+    "return_type": "float",
+    "summary": "Computes Dirichlet-Multinomial compound log marginal likelihood for count overdispersion.",
+    "pseudocode": "1. Sum counts N and prior alphas A0.\\n2. Accumulate log Gamma(alpha_k + n_k) - log Gamma(alpha_k).\\n3. Add log Gamma(A0) - log Gamma(A0 + N).\\n4. Return log marginal likelihood.",
+    "invariants": [
+      "Log marginal likelihood is finite for positive prior parameters.",
+      "Reduces to multinomial likelihood as sum of alphas approaches infinity."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "log_p = math.lgamma(n + alpha) / math.lgamma(alpha)",
+        "failure_mechanism": "Dividing log gamma values instead of subtracting them in log-space.",
+        "counterexample_input": "counts=[5, 5], alphas=[1.0, 1.0]",
+        "verified_fix": "Subtract log-gamma terms: lgamma(alpha + n) - lgamma(alpha)."
+      }
+    ],
+    "source_code": "def dirichlet_multinomial_log_marginal(counts: list[int], alphas: list[float]) -> float:\n    k = min(len(counts), len(alphas))\n    if k == 0:\n        return 0.0\n    c_list = [max(0, int(c)) for c in counts[:k]]\n    a_list = [max(1e-6, float(a)) for a in alphas[:k]]\n    n_total = sum(c_list)\n    a_total = sum(a_list)\n    log_lik = math.lgamma(a_total) - math.lgamma(a_total + float(n_total))\n    for i in range(k):\n        log_lik += math.lgamma(a_list[i] + float(c_list[i])) - math.lgamma(a_list[i])\n    return float(log_lik)\n",
+    "domain": "statistics_and_information"
+  },
+  {
+    "name": "gibbs_sampling_transition_step",
+    "param_types": [
+      "float",
+      "float",
+      "float",
+      "float"
+    ],
+    "return_type": "float",
+    "summary": "Executes 1D Metropolis-Hastings transition step with numerical log-ratio acceptance.",
+    "pseudocode": "1. Check log acceptance ratio.\\n2. If log_ratio >= 0, accept proposed value unconditionally.\\n3. Otherwise compare uniform rand_u against exp(log_ratio).\\n4. Return proposed value if accepted, else current value.",
+    "invariants": [
+      "Satisfies detailed balance condition for target stationary distribution.",
+      "Unconditionally accepts proposals with non-negative log ratio."
+    ],
+    "pitfalls": [
+      {
+        "naive_pattern": "p_acc = math.exp(log_ratio)",
+        "failure_mechanism": "Exp of large positive log ratio overflows to infinity.",
+        "counterexample_input": "log_ratio=800.0",
+        "verified_fix": "Accept immediately if log_ratio >= 0.0 without calling exp."
+      }
+    ],
+    "source_code": "def gibbs_sampling_transition_step(current_val: float, proposed_val: float, log_ratio: float, rand_u: float) -> float:\n    lr = float(log_ratio)\n    u = max(0.0, min(1.0, float(rand_u)))\n    curr = float(current_val)\n    prop = float(proposed_val)\n    if lr >= 0.0:\n        return prop\n    if lr < -50.0:\n        return curr\n    accept_prob = math.exp(lr)\n    if u < accept_prob:\n        return prop\n    return curr\n",
+    "domain": "statistics_and_information"
+  }
+]
