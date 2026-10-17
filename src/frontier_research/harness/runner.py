@@ -10,7 +10,7 @@ import time
 from typing import Callable
 
 from frontier_research.harness.prereg import ExperimentSpec, VerdictType
-from frontier_research.harness.stats import CIResult, ConfoundAuditResult
+from frontier_research.harness.stats import CIResult, ConfoundAuditResult, holm_bonferroni
 
 
 @dataclass(frozen=True)
@@ -79,15 +79,20 @@ class ResearchHarness:
         confound_flags = {name: audit.is_confounded for name, audit in confound_audits.items()}
 
         outcomes: list[HypothesisOutcome] = []
+        raw_pvals: list[float] = []
         for h in spec.hypotheses:
             if h.metric_name not in metrics:
                 raise KeyError(
                     f"Pre-registered hypothesis '{h.id}' requires metric '{h.metric_name}', "
                     f"which was not returned by execute_fn."
                 )
+            raw_pvals.append(float(p_values.get(h.metric_name, 1.0)))
+
+        adj_pvals = holm_bonferroni(raw_pvals)
+
+        for h, raw_pval, adj_pval in zip(spec.hypotheses, raw_pvals, adj_pvals):
             obs = float(metrics[h.metric_name])
-            pval = float(p_values.get(h.metric_name, 0.0))
-            verdict = h.evaluate(obs, p_value=pval, confound_flags=confound_flags)
+            verdict = h.evaluate(obs, p_value=adj_pval, confound_flags=confound_flags)
             outcomes.append(
                 HypothesisOutcome(
                     hypothesis_id=h.id,
@@ -96,7 +101,7 @@ class ResearchHarness:
                     observed_value=obs,
                     op=h.op,
                     threshold=h.threshold,
-                    p_value=pval,
+                    p_value=raw_pval,
                     verdict=verdict,
                 )
             )

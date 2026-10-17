@@ -357,8 +357,8 @@ class OpenCommonsStore:
             exec(compile(block.source_code, f"<{block.block_id}>", "exec"), ns)  # noqa: S102
             if block.name in ns and callable(ns[block.name]):
                 self._compiled_cache[block.block_id] = ns[block.name]
-        except Exception:  # noqa: BLE001
-            pass
+        except (SyntaxError, TypeError, ValueError, NameError, RuntimeError):
+            self._compiled_cache.pop(block.block_id, None)
 
         self.cid_by_fp.setdefault(block.fp, block.cid)
 

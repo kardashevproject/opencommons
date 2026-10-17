@@ -506,8 +506,8 @@ def save_store_atomic(
                         if diff_blocks:
                             merged, _, _ = crdt_merge_blocks(on_disk, diff_blocks)
                             store_data = merged
-                except Exception:
-                    pass
+                except (OSError, json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
+                    sys.stderr.write(f"Warning: skipping concurrent CRDT merge for {store_path}: {exc}\n")
 
             serialized = json.dumps(store_data, indent=2, sort_keys=True) + "\n"
             fd, tmp_name = tempfile.mkstemp(

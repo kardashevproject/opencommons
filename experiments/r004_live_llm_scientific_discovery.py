@@ -1,30 +1,32 @@
 """R-004: Live LLM Scientific & Algorithmic Discovery Across Concept-Serving Modalities.
 
 Pre-registered experiment evaluating live open-weights language model generation
-(Qwen3.5-2B-Base via Transformers 5.14.1 / PyTorch 2.13.0) across a 24-task
+(Qwen3.5-2B-Base via Transformers / PyTorch) across a 30-task
 Scientific & Algorithmic Discovery Suite spanning 4 domains:
-  - S1: Numerical & Physical Simulation (symplectic Verlet, Kahan compensated sum,
-        LogSumExp stability, RK4 step, Thomas tridiagonal solver, Richardson extrapolation)
-  - S2: Information Theory & Cryptography (GF(2^8) multiplication, CRC-8 polynomial,
-        RLE with escape framing, Elias gamma bit-length, FNV-1a 32-bit, SipHash round)
-  - S3: Quantitative Biology & Chemometrics (Hill-Langmuir isotherm, Michaelis-Menten
-        competitive inhibition, Shannon-Wiener diversity with zero-count guard,
-        Needleman-Wunsch linear gap score, Jukes-Cantor distance with saturation guard,
-        Hardy-Weinberg chi-square with zero-allele guard)
-  - S4: Compositional Multi-Step Adaptation (tasks where the target function adapts
-        or composes a base concept—e.g. Weighted Kahan Sum, Damped Symplectic Leapfrog,
-        Windowed LogSumExp Softmax, Cooperative Competitive Hill-Michaelis Flux,
-        Framed CRC-8 Packet Verifier, Regularized Thomas Solver)
+  - S1: Numerical & Physical Simulation (6 tasks: Kahan compensated sum, symplectic
+        Euler step, max-shifted LogSumExp, Richardson extrapolation derivative,
+        Welford online sample variance, overflow-safe hypotenuse)
+  - S2: Information Theory & Cryptography (6 tasks: GF(2^8) Rijndael multiplication,
+        CRC-8-CCITT MSB-first, 32-bit FNV-1a, Elias gamma bit-length,
+        guarded binary Shannon entropy, Protocol Buffers ZigZag encoding)
+  - S3: Quantitative Biology & Chemometrics (6 tasks: Hill-Langmuir isotherm,
+        Michaelis-Menten competitive inhibition, Shannon-Wiener diversity with
+        zero-count guard, Jukes-Cantor distance with saturation guard,
+        Hardy-Weinberg chi-square with monomorphic guard, Beer-Lambert transmittance)
+  - S4: Compositional Multi-Step Adaptation (12 tasks where the target function adapts
+        or composes a base concept—e.g. Weighted Kahan Sum, Damped Symplectic Euler,
+        Normalized Softmax via LogSumExp, Welford Z-Score, GF(2^8) Horner Polynomial,
+        Framed CRC-8 Packet Verifier)
 
 Compares 5 Concept-Serving Modalities:
   1. `isolated_zero_shot`: No commons access (task docstring + signature only)
-  2. `distractor_bm25`: Standard lexical BM25 retrieval from a 500-concept pool
-     containing near-miss distractors (e.g., Euler vs Verlet, naive sum vs Kahan)
+  2. `distractor_bm25`: Lexical distractor baseline serving near-miss concepts
+     without live I/O probe filtering (e.g., explicit Euler vs symplectic Euler)
   3. `pseudocode_building_block`: Serves OpenCommons compact algorithmic pseudocode +
-     mathematical invariants only (~52 tokens)
-  4. `raw_code_block`: Serves OpenCommons raw reference implementation only (~165 tokens)
+     mathematical invariants only (~123 tokens)
+  4. `raw_code_block`: Serves OpenCommons raw reference implementation only (~72 tokens)
   5. `opencommons_dual_card`: Serves OpenCommons Dual Concept Card (pseudocode +
-     invariants + refuted pitfalls from async peer review + reference code),
+     invariants + refuted pitfalls from async peer review + reference code, ~253 tokens),
      verified by live <5ms I/O probes.
 
 All generated programs are evaluated in a sandboxed execution harness against hidden
@@ -35,14 +37,21 @@ from __future__ import annotations
 
 import ast
 import math
+import os
+import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple, cast
 
 import numpy as np
-import torch
-import transformers
+
+try:
+    import torch
+    import transformers
+except ImportError:  # only required when regenerating uncached LLM completions
+    torch = cast("Any", None)
+    transformers = cast("Any", None)
 
 from frontier_research.commons.store import OpenCommonsStore, PitfallWarning
 from frontier_research.harness.prereg import ExperimentSpec, HypothesisSpec
@@ -50,10 +59,19 @@ from frontier_research.harness.runner import ResearchHarness
 from frontier_research.harness.stats import audit_confound, bootstrap_ci, compare_arms, holm_bonferroni
 
 
-MODEL_PATH = os.environ.get(
-    "MODEL_PATH",
-    str(Path.home() / ".cache/huggingface/hub/models--Qwen--Qwen3.5-2B-Base/snapshots/b1485b2fa6dfa1287294f269f5fb618e03d52d7c"),
-)
+def _default_model_path() -> str:
+    env_path = os.environ.get("MODEL_PATH")
+    if env_path:
+        return env_path
+    snap_root = Path.home() / ".cache" / "huggingface" / "hub" / "models--Qwen--Qwen3.5-2B-Base" / "snapshots"
+    if snap_root.is_dir():
+        snaps = sorted(p for p in snap_root.iterdir() if p.is_dir())
+        if snaps:
+            return str(snaps[-1])
+    return "Qwen/Qwen3.5-2B-Base"
+
+
+MODEL_PATH = _default_model_path()
 
 
 @dataclass
@@ -733,7 +751,6 @@ def extract_and_evaluate_completion(
         return False
 
 
-@torch.no_grad()
 def compute_logprob_margins_batched(
     model: Any,
     tokenizer: Any,
@@ -744,6 +761,7 @@ def compute_logprob_margins_batched(
     import torch.nn.functional as F
     device = next(model.parameters()).device
 
+    @torch.no_grad()
     def score_bodies(texts: List[str], prompt_lens: List[int]) -> List[float]:
         scores: List[float] = []
         for start in range(0, len(texts), batch_size):
@@ -786,8 +804,8 @@ def compute_logprob_margins_batched(
 
 
 def run_r004_workload(spec: ExperimentSpec) -> Any:
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cpu":
+    device = "cuda" if (torch is not None and torch.cuda.is_available()) else "cpu"
+    if device == "cpu" and torch is not None:
         torch.set_num_threads(20)
     tasks = build_scientific_suite()
     store = populate_commons_for_r004(tasks)
@@ -990,11 +1008,13 @@ def run_r004_workload(spec: ExperimentSpec) -> Any:
         "raw_code_pass_at_1": bootstrap_ci(mod_pass_arrays["raw_code_block"], seed=42),
         "isolated_pass_at_1": bootstrap_ci(mod_pass_arrays["isolated_zero_shot"], seed=42),
         "dual_card_gain_over_isolated": bootstrap_ci(mod_pass_arrays["opencommons_dual_card"] - mod_pass_arrays["isolated_zero_shot"], seed=42),
+        "dual_card_gain_over_raw_code": bootstrap_ci(mod_pass_arrays["opencommons_dual_card"] - mod_pass_arrays["raw_code_block"], seed=42),
         "s4_dual_gain_over_raw_code": bootstrap_ci(mod_s4_arrays["opencommons_dual_card"] - mod_s4_arrays["raw_code_block"], seed=42),
     }
     p_values = {
         "dual_card_gain_over_isolated": float(dual_vs_iso.p_value),
-        "s4_dual_gain_over_raw_code": float(dual_vs_raw.p_value),
+        "dual_card_gain_over_raw_code": float(dual_vs_raw.p_value),
+        "s4_dual_gain_over_raw_code": float(dual_vs_raw_s4.p_value),
         "dual_card_logprob_margin_gain": float(margin_comp.p_value),
     }
     confound_audits = {

@@ -24,7 +24,7 @@ class HypothesisSpec:
     def evaluate(
         self,
         observed_value: float,
-        p_value: float = 0.0,
+        p_value: float = 1.0,
         confound_flags: dict[str, bool] | None = None,
     ) -> VerdictType:
         """Evaluate whether the observed metric passes the pre-registered bar."""

@@ -1,39 +1,47 @@
 {
-  "artifacts_sha256": "78e0141c0b3e55807a28d64ff66909d4e36f041a1ef582aa19e3d4f8ae979a20",
+  "artifacts_sha256": "9f32307151d21a84429f565094ba50ef41c93cc072ca058d207bebd52944b9a9",
   "ci_metrics": {
     "convention_cost_to_pass_ratio": {
-      "ci_high": 0.46125019772879916,
-      "ci_low": 0.3780961539367904,
+      "ci_high": 0.883045366625606,
+      "ci_low": 0.20790273967975792,
       "confidence": 0.95,
-      "estimate": 0.419,
+      "estimate": 0.4187958556225969,
       "n": 9,
-      "std_err": 0.021458596814466564
+      "std_err": 0.17648645388413262
     },
     "minimal_mcp_empty_token_ratio": {
-      "ci_high": 0.954960435599884,
-      "ci_low": 0.8589516182356486,
+      "ci_high": 1.1228023331965689,
+      "ci_low": 0.6324112838010176,
       "confidence": 0.95,
-      "estimate": 0.9070000000000001,
+      "estimate": 0.9074592616803103,
       "n": 27,
-      "std_err": 0.024959238207243644
+      "std_err": 0.1193477969379369
     },
     "wave5_cost_reduction_vs_coral": {
-      "ci_high": 7.513832186225776,
-      "ci_low": 6.377108448722525,
+      "ci_high": 7.3716146814126455,
+      "ci_low": 5.622522561433074,
       "confidence": 0.95,
-      "estimate": 6.940336227563576,
+      "estimate": 6.397016637980493,
       "n": 200,
-      "std_err": 0.28683430928440284
+      "std_err": 0.45034473033132594
+    },
+    "wave5_cost_reduction_vs_isolated": {
+      "ci_high": 16.050335409036403,
+      "ci_low": 10.374667638534653,
+      "confidence": 0.95,
+      "estimate": 12.668100975329892,
+      "n": 200,
+      "std_err": 1.4539908595297442
     }
   },
-  "completed_at": "2026-10-14T23:02:28-0400",
+  "completed_at": "2026-10-16T15:49:44-0400",
   "confound_audits": {},
-  "elapsed_sec": 0.05,
+  "elapsed_sec": 1.2162,
   "exp_id": "R-005",
   "metrics": {
-    "convention_cost_to_pass_ratio": 0.419,
-    "legacy_18tool_empty_token_ratio": 1.3990000000000005,
-    "minimal_mcp_empty_token_ratio": 0.9070000000000001,
+    "convention_cost_to_pass_ratio": 0.4188,
+    "legacy_18tool_empty_token_ratio": 1.3986,
+    "minimal_mcp_empty_token_ratio": 0.9075,
     "wave5_cost_reduction_vs_coral": 6.397016637980493,
     "wave5_cost_reduction_vs_isolated": 12.668100975329892,
     "wave5_pass_rate_coral": 0.565,
@@ -45,9 +53,9 @@
     {
       "hypothesis_id": "H1",
       "metric_name": "minimal_mcp_empty_token_ratio",
-      "observed_value": 0.9070000000000001,
+      "observed_value": 0.9075,
       "op": "<=",
-      "p_value": 0.001,
+      "p_value": 0.0026997300269973002,
       "statement": "Minimal MCP profile empty-library session token ratio E/A <= 1.00x (zero carrying tax)",
       "threshold": 1.0,
       "verdict": "SUPPORTED"
@@ -55,20 +63,20 @@
     {
       "hypothesis_id": "H2",
       "metric_name": "convention_cost_to_pass_ratio",
-      "observed_value": 0.419,
+      "observed_value": 0.4188,
       "op": "<=",
-      "p_value": 9.999000099990002e-05,
+      "p_value": 0.09879012098790121,
       "statement": "Seeded OpenCommons reduces cross-project convention cost-to-pass tokens to <= 0.50x (>= 2x speedup)",
       "threshold": 0.5,
-      "verdict": "SUPPORTED"
+      "verdict": "REFUTED"
     },
     {
       "hypothesis_id": "H3a",
       "metric_name": "wave5_cost_reduction_vs_coral",
       "observed_value": 6.397016637980493,
       "op": ">=",
-      "p_value": 0.0001,
-      "statement": "Wave-5 compositional discovery cost reduction vs. CORAL flat-file skills >= 3.0x",
+      "p_value": 9.999000099990002e-05,
+      "statement": "Simulated Wave-5 compositional discovery cost reduction vs. CORAL flat-file skills >= 3.0x",
       "threshold": 3.0,
       "verdict": "SUPPORTED"
     },
@@ -77,19 +85,19 @@
       "metric_name": "wave5_cost_reduction_vs_isolated",
       "observed_value": 12.668100975329892,
       "op": ">=",
-      "p_value": 0.0001,
-      "statement": "Wave-5 compositional discovery cost reduction vs. isolated stateless agents >= 5.0x",
+      "p_value": 9.999000099990002e-05,
+      "statement": "Simulated Wave-5 compositional discovery cost reduction vs. isolated stateless agents >= 5.0x",
       "threshold": 5.0,
       "verdict": "SUPPORTED"
     }
   ],
   "p_values": {
-    "convention_cost_to_pass_ratio": 9.999000099990002e-05,
-    "minimal_mcp_empty_token_ratio": 0.001,
-    "wave5_cost_reduction_vs_coral": 0.0001,
-    "wave5_cost_reduction_vs_isolated": 0.0001
+    "convention_cost_to_pass_ratio": 0.09879012098790121,
+    "minimal_mcp_empty_token_ratio": 0.0026997300269973002,
+    "wave5_cost_reduction_vs_coral": 9.999000099990002e-05,
+    "wave5_cost_reduction_vs_isolated": 9.999000099990002e-05
   },
-  "started_at": "2026-10-14T23:02:28-0400",
-  "title": "Multi-Wave Compositional Scientific Horizon (Waves 1-5) & 234-Session Agent Meta-Analysis",
+  "started_at": "2026-10-16T15:49:43-0400",
+  "title": "Multi-Wave Compositional Scientific Horizon (Waves 1-5 Parametric Simulation) & Real Coding-Agent Session Meta-Analysis",
   "track": "concept_commons"
 }

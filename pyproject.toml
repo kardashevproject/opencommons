@@ -1,7 +1,7 @@
 [project]
 name = "frontier-research"
 version = "1.0.0"
-description = "OpenCommons: Distributed Meaning-Indexed Concept Commons, 2-Tool MCP Server, and Minimal 2-Tool MCP Server"
+description = "OpenCommons: Distributed Meaning-Indexed Concept Commons and Minimal 2-Tool MCP Server"
 readme = "README.md"
 license = { text = "Apache-2.0 AND CC-BY-4.0" }
 authors = [
@@ -13,6 +13,12 @@ dependencies = [
     "scipy>=1.13.0",
     "matplotlib>=3.9.0",
     "pytest>=8.2.0",
+    "jsonschema>=4.18.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "kardashev_cli",
 ]
 
 [project.urls]

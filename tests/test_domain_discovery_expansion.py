@@ -40,6 +40,11 @@ def _setup_kardashev_shim() -> Path:
     """Locate kardashev-cli reference and establish pure-python module shim."""
     repo_root = Path(__file__).resolve().parent.parent
     cli_dir = (repo_root.parent / "kardashev-cli").resolve()
+    for parent in repo_root.parents:
+        cand = parent / "kardashev-cli"
+        if (cand / "src" / "kardashev_cli").is_dir():
+            cli_dir = cand.resolve()
+            break
     src_dir = cli_dir / "src" / "kardashev_cli"
     if src_dir.is_dir() and "kardashev_cli" not in sys.modules:
         cli_mod = types.ModuleType("kardashev_cli")
@@ -191,8 +196,8 @@ def _load_available_expansion_concepts() -> list[dict[str, Any]]:
                 return data
             elif isinstance(data, dict):
                 return data.get("blocks", data.get("concepts", []))
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError):
+            data = None
 
     domain_files = sorted(glob.glob(str(DOMAINS_DIR / "*.json")))
     if domain_files:
@@ -202,8 +207,8 @@ def _load_available_expansion_concepts() -> list[dict[str, Any]]:
                 data = json.loads(Path(df).read_text(encoding="utf-8"))
                 items = data if isinstance(data, list) else data.get("blocks", data.get("concepts", []))
                 concepts.extend(items)
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError):
+                continue
         return concepts
 
     return []
@@ -216,6 +221,8 @@ def _load_available_expansion_concepts() -> list[dict[str, Any]]:
 def test_schema_validates_valid_proposal(validator_v1, sample_valid_concept):
     """Verify that a compliant concept passes Draft 2020-12 schema validation."""
     validator_v1.validate(sample_valid_concept)
+    assert validator_v1.is_valid(sample_valid_concept) is True
+    assert list(validator_v1.iter_errors(sample_valid_concept)) == []
 
 
 def test_schema_rejects_missing_required_fields(validator_v1, sample_valid_concept):
