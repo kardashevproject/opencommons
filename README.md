@@ -77,9 +77,10 @@ PYTHONPATH=src pytest -v
 
 # 2. Run the 6 reproducible empirical benchmarks (R-001 through R-006)
 PYTHONPATH=src python3 experiments/r001_ingestion_and_equivalence.py
-PYTHONPATH=src python3 experiments/r002_retrieval_and_modalities.py
-PYTHONPATH=src python3 experiments/r003_peer_review_and_crdt.py
-PYTHONPATH=src python3 experiments/r005_multi_wave_discovery.py
+PYTHONPATH=src python3 experiments/r002_retrieval_scaling_and_modalities.py
+PYTHONPATH=src python3 experiments/r003_async_peer_review_and_crdt.py
+PYTHONPATH=src python3 experiments/r004_live_llm_scientific_discovery.py
+PYTHONPATH=src python3 experiments/r005_multi_wave_and_agent_ablation.py
 PYTHONPATH=src python3 experiments/r006_stress_test_falsification.py
 
 # 3. Compile paper/main.pdf and run the 6/6 automated paper integrity gate

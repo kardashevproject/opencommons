@@ -862,3 +862,29 @@ def test_crdt_dedup_hits_no_runaway_inflation():
         d2 = load_store(store_p)
         assert d2["sid_dedup_hits"] == 0, f"Runaway inflation: expected 0 hits, got {d2['sid_dedup_hits']}"
 
+
+def test_save_store_atomic_survives_malformed_on_disk_store():
+    """Malformed on-disk store data must not crash save_store_atomic.
+
+    A concurrent writer racing the lock can leave valid JSON of the wrong
+    shape (e.g. a top-level array). The merge/skip path must degrade to a
+    warning and still persist the incoming store.
+    """
+    import json as _json
+
+    from experiments.domain_discovery.sync_to_opencommons import (
+        save_store_atomic,
+        load_store,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        store_p = Path(tmp_dir) / "store.json"
+        store_p.write_text(_json.dumps(["not", "a", "store"]), encoding="utf-8")
+
+        incoming = {"blocks": [{"block_id": "x@1", "sid": "sid:x", "trust_tier": "unverified"}]}
+        # Must not raise; the malformed merge is skipped with a warning.
+        save_store_atomic(incoming, store_p, incoming_blocks=None)
+
+        d = load_store(store_p)
+        assert any(b["sid"] == "sid:x" for b in d.get("blocks", []))
+

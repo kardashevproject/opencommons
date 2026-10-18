@@ -1,5 +1,5 @@
 {
-  "artifacts_sha256": "1560c1f6a914c12cdac0010ab10c8fa8fd410c8c7156b8c9bf64e7c6c1556f04",
+  "artifacts_sha256": "27ccc4ef9bb323e7d8c4cc35e5d89e32d0f83a22ae74ad4f12f5a666ee555292",
   "ci_metrics": {
     "blind_spot_ratcheted_failure_rate": {
       "ci_high": 0.06,
@@ -34,12 +34,12 @@
       "std_err": 0.0
     }
   },
-  "completed_at": "2026-10-17T15:33:17-0400",
+  "completed_at": "2026-10-17T16:47:36-0400",
   "confound_audits": {},
-  "elapsed_sec": 7.421,
+  "elapsed_sec": 7.4709,
   "exp_id": "R-006",
   "metrics": {
-    "ast_seed_extraction_latency_ms": 0.0806,
+    "ast_seed_extraction_latency_ms": 0.0811,
     "ast_seeded_threshold_collision_rate": 0.0,
     "ast_vs_blackbox_discordant_pairs": 20.0,
     "black_box_threshold_collision_rate": 1.0,
@@ -79,8 +79,8 @@
     "probe_k2_collision_rate": 0.56,
     "probe_k4_collision_rate": 0.18,
     "probe_k8_collision_rate": 0.04,
-    "swarm_1000_peer_review_total_ms": 104.54,
-    "swarm_amortized_ms_per_submission": 0.1045,
+    "swarm_1000_peer_review_total_ms": 105.51,
+    "swarm_amortized_ms_per_submission": 0.1055,
     "swarm_sid_dedup_reduction_factor": 20.0,
     "swarm_submissions_above_0p5ms": 2.0,
     "swarm_submissions_below_0p5ms": 998.0,
@@ -92,9 +92,10 @@
     "ulp_equiv_recall_kappa_1e5": 0.6,
     "ulp_equiv_recall_kappa_1e7": 0.3,
     "ulp_equiv_recall_kappa_1e9": 0.0,
+    "ulp_nonzero_recall_boundary_log10_kappa": 7.0,
     "ulp_pooled_equiv_matches_within_claim": 60.0,
     "ulp_pooled_equiv_trials_within_claim": 60.0,
-    "ulp_stability_boundary_log10_kappa": 7.0
+    "ulp_stability_boundary_log10_kappa": 3.0
   },
   "outcomes": [
     {
@@ -110,7 +111,7 @@
     {
       "hypothesis_id": "H2",
       "metric_name": "ulp_stability_boundary_log10_kappa",
-      "observed_value": 7.0,
+      "observed_value": 3.0,
       "op": ">=",
       "p_value": 8.673617379884035e-19,
       "statement": "7-digit canonicalization preserves equivalence at every trial up to condition number log10(kappa) >= 3.0",
@@ -170,7 +171,7 @@
     {
       "hypothesis_id": "H8",
       "metric_name": "swarm_amortized_ms_per_submission",
-      "observed_value": 0.1045,
+      "observed_value": 0.1055,
       "op": "<",
       "p_value": 4.6709937432447955e-296,
       "statement": "O(1) sid deduplication keeps amortized swarm peer-review carrying tax < 0.5 ms/submission",
@@ -199,7 +200,7 @@
     "teleological_intent_card_preservation": 0.000244140625,
     "ulp_stability_boundary_log10_kappa": 8.673617379884035e-19
   },
-  "started_at": "2026-10-17T15:33:10-0400",
+  "started_at": "2026-10-17T16:47:28-0400",
   "title": "Adversarial Claim Stress-Testing, Falsification Boundaries & Mechanistic Interpretation",
   "track": "stress_testing_and_mechanisms"
 }

@@ -93,3 +93,21 @@ def test_execute_r006_pvalues_unique_per_metric(r006) -> None:
     vals = [p_values[m] for m in h_metrics]
     assert len(set(vals)) == len(vals)
     assert all(0.0 < v <= 1.0 for v in vals)
+
+
+def test_ulp_boundary_metric_matches_perfect_claim(r006) -> None:
+    """ulp_stability_boundary must be the PERFECT-equivalence decade, not last-nonzero.
+
+    Gate-flagged regression: the metric used max(recall > 0) = 7.0 while H2
+    and the paper claim a perfect-equivalence boundary of 3.0.
+    """
+    m2 = r006.run_ulp_drift_stress_test()
+    boundary = m2["ulp_stability_boundary_log10_kappa"]
+    # Every decade at or below the reported boundary must have 100% recall.
+    recalls = {k: v for k, v in m2.items() if k.startswith("ulp_equiv_recall_kappa_1e")}
+    for key, recall in recalls.items():
+        exp_int = int(key.split("1e")[1])
+        if exp_int <= boundary:
+            assert recall == 1.0, f"kappa 1e{exp_int} recall {recall} contradicts boundary {boundary}"
+    # The nonzero-recall narrative boundary may exceed the perfect one.
+    assert m2["ulp_nonzero_recall_boundary_log10_kappa"] >= boundary
